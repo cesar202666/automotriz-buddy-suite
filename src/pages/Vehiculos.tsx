@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, FileText } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, FileText, Table } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
+import * as XLSX from "xlsx";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO";
 
