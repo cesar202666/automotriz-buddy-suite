@@ -208,16 +208,26 @@ export default function Vehiculos() {
       const dataUrl = ev.target?.result as string;
       setFotoSlots(prev => prev.map((s, idx) => idx === i ? { ...s, file, preview: dataUrl } : s));
 
-      // Auto-apply AI background on the FIRST photo slot when uploaded
-      if (i === 0 && dataUrl && hasAiConfig()) {
+      // Auto-apply AI background on the FIRST photo slot — always attempt
+      if (i === 0 && dataUrl) {
         setAiError(null);
+
+        if (!hasAiConfig()) {
+          setAiError("No hay API Key configurada. Ve a Configuración → ingresa tu clave de Gemini o OpenAI y presiona 'Guardar Configuración'.");
+          return;
+        }
+
         setProcessingAI(0);
         applyVehicleBackground(dataUrl, bgPrompt).then(result => {
           if (result.ok && result.dataUrl) {
             setFotoSlots(prev => prev.map((s, idx) => idx === 0 ? { ...s, preview: result.dataUrl! } : s));
+            setAiError(null);
           } else {
             setAiError(result.error ?? "La IA no pudo procesar la imagen.");
           }
+          setProcessingAI(null);
+        }).catch(err => {
+          setAiError(`Error inesperado: ${err?.message ?? "desconocido"}`);
           setProcessingAI(null);
         });
       }

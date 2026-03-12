@@ -86,8 +86,9 @@ async function processWithGemini(
 ): Promise<AiImageResult> {
   const { base64, mimeType } = parseDataUrl(dataUrl);
 
-  // Gemini 2.0 Flash Experimental supports image output
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+  // gemini-2.0-flash-preview-image-generation is the correct model for image editing
+  // responseModalities MUST be uppercase: "IMAGE" / "TEXT"
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
 
   const payload = {
     contents: [
@@ -99,7 +100,7 @@ async function processWithGemini(
       },
     ],
     generationConfig: {
-      responseModalities: ["image", "text"],
+      responseModalities: ["IMAGE", "TEXT"],
     },
   };
 
@@ -111,16 +112,19 @@ async function processWithGemini(
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    return { ok: false, error: `Gemini API error ${res.status}: ${body.slice(0, 200)}` };
+    console.error("[aiImageService] Gemini error body:", body);
+    return { ok: false, error: `Gemini API error ${res.status}: ${body.slice(0, 300)}` };
   }
 
   const data = await res.json();
+  console.log("[aiImageService] Gemini response candidates:", JSON.stringify(data?.candidates?.[0]?.content?.parts?.map((p: Record<string, unknown>) => Object.keys(p))));
+
   const parts: Array<{ inlineData?: { data: string; mimeType: string } }> =
     data?.candidates?.[0]?.content?.parts ?? [];
 
   const imgPart = parts.find(p => p.inlineData);
   if (!imgPart?.inlineData) {
-    return { ok: false, error: "Gemini no devolvió una imagen. Intenta con otro modelo o prompt." };
+    return { ok: false, error: "Gemini no devolvió imagen. Verifica que tu API Key tenga acceso a gemini-2.0-flash-preview-image-generation." };
   }
 
   return {
