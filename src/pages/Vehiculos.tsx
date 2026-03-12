@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, FileText, Table } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Wand2, Table, Trash2, Edit2, Loader2 } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 
@@ -18,6 +18,10 @@ const TRANSMISIONES = [
 ];
 const TRACCIONES = ["Tracción Delantera", "Tracción Trasera", "Tracción 4x4", "Tracción Integral"];
 
+const MASTER_PASS = "123cuatro";
+
+const DEFAULT_BG_PROMPT = "Cambia el fondo del vehículo: piso de baldosas grises lisas, pared blanca limpia, iluminación suave de estudio fotográfico, pequeña sombra debajo del vehículo, fondo profesional de concesionaria, realista, alta calidad";
+
 const emptyVehiculo = (): Partial<Vehiculo> => ({
   folio: "", patente: "", tipo: "AUTOMOVIL", marca: "", modelo: "", anio: "2026",
   estado: "DISPONIBLE", precioVenta: 0, precioCosto: 0, sucursal: "", usuarioAsignado: "",
@@ -35,6 +39,33 @@ const statusBadge = (estado: string) => {
   return <span className="badge-muted">{estado}</span>;
 };
 
+// --- Delete password modal ---
+function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState(false);
+  const submit = () => {
+    if (pass === MASTER_PASS) { onConfirm(); }
+    else { setErr(true); setPass(""); }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+      <div className="bg-card rounded-xl shadow-2xl p-7 w-80 animate-fade-in" style={{ border: "1px solid hsl(var(--border))" }}>
+        <h3 className="font-bold text-sm mb-1" style={{ color: "hsl(var(--destructive))" }}>Eliminar Vehículo</h3>
+        <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa la clave de Administrador Master para confirmar.</p>
+        <input type="password" className={`w-full border rounded px-3 py-2 text-sm bg-background mb-2 ${err ? "border-destructive" : ""}`}
+          style={{ borderColor: err ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
+          placeholder="Clave master" value={pass} onChange={e => { setPass(e.target.value); setErr(false); }}
+          onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
+        {err && <p className="text-xs mb-2" style={{ color: "hsl(var(--destructive))" }}>Clave incorrecta</p>}
+        <div className="flex gap-2 justify-end mt-3">
+          <button onClick={onCancel} className="px-3 py-1.5 rounded border text-sm hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
+          <button onClick={submit} className="px-3 py-1.5 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--destructive))" }}>Eliminar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Vehiculos() {
   const { vehiculos, setVehiculos } = useApp();
   const [search, setSearch] = useState("");
@@ -47,6 +78,11 @@ export default function Vehiculos() {
   const [nuevoEquipamiento, setNuevoEquipamiento] = useState("");
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
   const excelImportRef = useRef<HTMLInputElement>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // AI bg state
+  const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
+  const [processingAI, setProcessingAI] = useState<number | null>(null);
 
   const exportExcel = () => {
     const data = vehiculos.map(v => ({
@@ -127,6 +163,112 @@ export default function Vehiculos() {
     setShowModal(false);
   };
 
+  const confirmDelete = (id: string) => setDeleteId(id);
+
+  const doDelete = () => {
+    if (deleteId) setVehiculos(vehiculos.filter(v => v.id !== deleteId));
+    setDeleteId(null);
+    setShowModal(false);
+  };
+
+  // AI background replacement using Lovable AI gateway
+  const applyAIBackground = async (slotIndex: number) => {
+    const slot = fotoSlots[slotIndex];
+    if (!slot.preview) return;
+
+    // Get saved config
+    let apiKey = "";
+    let provider = "gemini";
+    let model = "gemini-2.5-flash";
+    try {
+      const saved = JSON.parse(localStorage.getItem("ea_api_configs") || "[]");
+      const geminiCfg = saved.find((c: { provider: string }) => c.provider === "gemini");
+      const openaiCfg = saved.find((c: { provider: string }) => c.provider === "openai");
+      if (geminiCfg?.apiKey) { apiKey = geminiCfg.apiKey; provider = "gemini"; model = geminiCfg.model || "gemini-2.5-flash"; }
+      else if (openaiCfg?.apiKey) { apiKey = openaiCfg.apiKey; provider = "openai"; model = openaiCfg.model || "gpt-4o"; }
+    } catch {}
+
+    if (!apiKey) {
+      alert("Configura una API Key en el módulo de Configuración primero.");
+      return;
+    }
+
+    setProcessingAI(slotIndex);
+
+    try {
+      let resultDataUrl: string | null = null;
+
+      if (provider === "gemini") {
+        // Use Gemini image editing
+        const base64Data = slot.preview.split(",")[1];
+        const mimeType = slot.preview.split(";")[0].split(":")[1] || "image/jpeg";
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: bgPrompt },
+                  { inline_data: { mime_type: mimeType, data: base64Data } }
+                ]
+              }],
+              generationConfig: { responseModalities: ["image", "text"] }
+            })
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const imgPart = data.candidates?.[0]?.content?.parts?.find((p: { inlineData?: { data: string; mimeType: string } }) => p.inlineData);
+          if (imgPart?.inlineData) {
+            resultDataUrl = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
+          }
+        }
+      } else {
+        // OpenAI DALL-E image edit
+        const base64Data = slot.preview.split(",")[1];
+        const byteString = atob(base64Data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: "image/png" });
+
+        const formData = new FormData();
+        formData.append("image", blob, "vehicle.png");
+        formData.append("prompt", bgPrompt);
+        formData.append("model", "dall-e-2");
+        formData.append("response_format", "b64_json");
+
+        const response = await fetch("https://api.openai.com/v1/images/edits", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: formData,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.data?.[0]?.b64_json) {
+            resultDataUrl = `data:image/png;base64,${data.data[0].b64_json}`;
+          }
+        }
+      }
+
+      if (resultDataUrl) {
+        setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: resultDataUrl! } : s));
+      } else {
+        alert("La IA no pudo procesar la imagen. Verifica tu API Key y el modelo configurado.");
+      }
+    } catch (err) {
+      console.error("AI error:", err);
+      alert("Error al conectar con la IA. Verifica tu conexión y configuración.");
+    } finally {
+      setProcessingAI(null);
+    }
+  };
+
   const handleFotoChange = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -158,6 +300,10 @@ export default function Vehiculos() {
 
   return (
     <div>
+      {deleteId && (
+        <DeleteModal onConfirm={doDelete} onCancel={() => setDeleteId(null)} />
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Vehículos</h1>
@@ -176,7 +322,6 @@ export default function Vehiculos() {
           <input ref={excelImportRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
         </div>
       </div>
-
 
       <div className="flex items-center gap-3 mb-4">
         <select className="border rounded px-3 py-2 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }}
@@ -207,23 +352,30 @@ export default function Vehiculos() {
               <th className="px-4 py-3 text-left font-semibold">Precio Venta</th>
               <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
               <th className="px-4 py-3 text-left font-semibold">Estado</th>
+              <th className="px-4 py-3 text-left font-semibold">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(v => (
-              <tr key={v.id} className="table-row-hover border-b cursor-pointer" style={{ borderColor: "hsl(var(--border))" }} onClick={() => openEdit(v)}>
-                <td className="px-4 py-3 font-medium" style={{ color: "hsl(var(--primary))" }}>{v.folio} - {v.patente}</td>
-                <td className="px-4 py-3">{v.marca}</td>
-                <td className="px-4 py-3">{v.tipo}</td>
-                <td className="px-4 py-3 font-medium" style={{ color: "hsl(var(--primary))" }}>{v.modelo}</td>
-                <td className="px-4 py-3">{v.anio}</td>
-                <td className="px-4 py-3">{fmt(v.precioVenta)}</td>
-                <td className="px-4 py-3">{v.sucursal || "—"}</td>
-                <td className="px-4 py-3">{statusBadge(v.estado)}</td>
+              <tr key={v.id} className="table-row-hover border-b" style={{ borderColor: "hsl(var(--border))" }}>
+                <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))" }} onClick={() => openEdit(v)}>{v.folio} - {v.patente}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.marca}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.tipo}</td>
+                <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))", cursor: "pointer" }} onClick={() => openEdit(v)}>{v.modelo}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.anio}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{fmt(v.precioVenta)}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.sucursal || "—"}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{statusBadge(v.estado)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => openEdit(v)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); confirmDelete(v.id); }} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
+                  </div>
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vehículos</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vehículos</td></tr>
             )}
           </tbody>
         </table>
@@ -236,7 +388,14 @@ export default function Vehiculos() {
               <span className="text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>
                 {editId ? `Editar Vehículo — ${form.patente}` : "Nuevo Vehículo"}
               </span>
-              <button onClick={() => setShowModal(false)}><X size={18} /></button>
+              <div className="flex items-center gap-2">
+                {editId && (
+                  <button onClick={() => confirmDelete(editId)} className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium" style={{ color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
+                    <Trash2 size={13} /> Eliminar
+                  </button>
+                )}
+                <button onClick={() => setShowModal(false)}><X size={18} /></button>
+              </div>
             </div>
             <div className="flex border-b px-6" style={{ borderColor: "hsl(var(--border))" }}>
               {TABS.map(t => (
@@ -335,6 +494,31 @@ export default function Vehiculos() {
                     </div>
                     <span className="text-xs font-medium px-3 py-1 rounded-full bg-muted">{fotosCount} / 9 fotos</span>
                   </div>
+
+                  {/* AI Background section */}
+                  <div className="mb-4 p-4 rounded-xl border" style={{ borderColor: "hsl(var(--primary)/0.3)", background: "hsl(var(--primary)/0.04)" }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Wand2 size={16} style={{ color: "hsl(var(--primary))" }} />
+                      <span className="text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>IA — Cambio de Fondo</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted ml-auto">Requiere API Key en Configuración</span>
+                    </div>
+                    <p className="text-xs mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Al subir una foto, usa la IA para reemplazar el fondo por un ambiente profesional de concesionaria. Haz clic en el ícono ✨ sobre cada foto para aplicar.
+                    </p>
+                    <label className="block text-xs font-medium mb-1">Prompt Fondo de Vehículo</label>
+                    <textarea
+                      rows={3}
+                      className="w-full border rounded px-3 py-2 text-sm bg-background resize-none"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                      value={bgPrompt}
+                      onChange={e => setBgPrompt(e.target.value)}
+                      placeholder="Describe el fondo que deseas para el vehículo..."
+                    />
+                    <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Puedes modificar este prompt para cambiar el piso, la pared u otros elementos del fondo.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-3 gap-3">
                     {fotoSlots.map((slot, i) => (
                       <div key={i} className="relative group">
@@ -344,6 +528,14 @@ export default function Vehiculos() {
                           {slot.preview ? (
                             <>
                               <img src={slot.preview} alt={slot.label} className="w-full h-full object-cover absolute inset-0 rounded-lg" />
+                              {processingAI === i && (
+                                <div className="absolute inset-0 flex items-center justify-center rounded-lg" style={{ background: "rgba(0,0,0,0.6)" }}>
+                                  <div className="text-center">
+                                    <Loader2 size={24} className="animate-spin text-white mx-auto mb-1" />
+                                    <p className="text-white text-xs font-semibold">Procesando IA...</p>
+                                  </div>
+                                </div>
+                              )}
                               <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1">
                                 <span className="text-white text-xs font-semibold">{slot.label}</span>
                               </div>
@@ -356,11 +548,20 @@ export default function Vehiculos() {
                             </>
                           )}
                         </div>
-                        {slot.preview && (
-                          <button onClick={() => downloadFoto(slot.preview!, slot.label)}
-                            className="absolute top-2 right-2 p-1 rounded bg-black/60 hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Download size={12} className="text-white" />
-                          </button>
+                        {slot.preview && processingAI !== i && (
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); applyAIBackground(i); }}
+                              className="p-1.5 rounded-lg text-white font-bold text-xs flex items-center gap-1"
+                              style={{ background: "hsl(var(--primary))" }}
+                              title="Aplicar IA al fondo">
+                              <Wand2 size={11} /> IA
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); downloadFoto(slot.preview!, slot.label); }}
+                              className="p-1.5 rounded-lg bg-black/70 hover:bg-black/90">
+                              <Download size={11} className="text-white" />
+                            </button>
+                          </div>
                         )}
                         <input ref={el => { fotoRefs.current[i] = el; }} type="file" accept="image/*" className="hidden" onChange={e => handleFotoChange(i, e)} />
                       </div>

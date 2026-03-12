@@ -228,6 +228,34 @@ function generateContratoPDF(c: Consignatario) {
   doc.save(`Contrato_Consignacion_${c.apellidos}_${c.patente}.pdf`);
 }
 
+const MASTER_PASS = "123cuatro";
+
+function DeleteConsigModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState(false);
+  const submit = () => {
+    if (pass === MASTER_PASS) onConfirm();
+    else { setErr(true); setPass(""); }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+      <div className="bg-card rounded-xl shadow-2xl p-7 w-80 animate-fade-in" style={{ border: "1px solid hsl(var(--border))" }}>
+        <h3 className="font-bold text-sm mb-1" style={{ color: "hsl(var(--destructive))" }}>Eliminar Consignatario</h3>
+        <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa la clave de Administrador Master para confirmar.</p>
+        <input type="password" className={`w-full border rounded px-3 py-2 text-sm bg-background mb-2 ${err ? "border-destructive" : ""}`}
+          style={{ borderColor: err ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
+          placeholder="Clave master" value={pass} onChange={e => { setPass(e.target.value); setErr(false); }}
+          onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
+        {err && <p className="text-xs mb-2" style={{ color: "hsl(var(--destructive))" }}>Clave incorrecta</p>}
+        <div className="flex gap-2 justify-end mt-3">
+          <button onClick={onCancel} className="px-3 py-1.5 rounded border text-sm hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
+          <button onClick={submit} className="px-3 py-1.5 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--destructive))" }}>Eliminar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Consignatarios() {
   const [consignatarios, setConsignatarios] = useState<Consignatario[]>(initialConsignatarios);
   const [search, setSearch] = useState("");
@@ -237,6 +265,7 @@ export default function Consignatarios() {
   const [form, setForm] = useState<Partial<Consignatario>>(emptyForm());
   const [activeSection, setActiveSection] = useState<"datos" | "vehiculo" | "docs" | "estado" | "valores">("datos");
   const excelImportRef = useRef<HTMLInputElement>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const exportExcel = () => {
     const data = consignatarios.map(c => ({
@@ -318,6 +347,12 @@ export default function Consignatarios() {
     setShowModal(false);
   };
 
+  const doDelete = () => {
+    if (deleteId) setConsignatarios(consignatarios.filter(c => c.id !== deleteId));
+    setDeleteId(null);
+    setShowModal(false);
+  };
+
   const handleGenerarContrato = (c: Consignatario) => {
     generateContratoPDF(c);
   };
@@ -352,6 +387,8 @@ export default function Consignatarios() {
 
   return (
     <div>
+      {deleteId && <DeleteConsigModal onConfirm={doDelete} onCancel={() => setDeleteId(null)} />}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Consignatarios</h1>
@@ -427,7 +464,7 @@ export default function Consignatarios() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={11} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay consignatarios</td></tr>
+              <tr><td colSpan={12} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay consignatarios</td></tr>
             )}
           </tbody>
         </table>
@@ -441,7 +478,16 @@ export default function Consignatarios() {
               <h2 className="text-base font-bold" style={{ color: "hsl(var(--primary))" }}>
                 {editId ? "Editar Consignatario" : "Nuevo Consignatario"}
               </h2>
-              <button onClick={() => setShowModal(false)}><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              <div className="flex items-center gap-2">
+                {editId && (
+                  <button onClick={() => { setShowModal(false); setDeleteId(editId); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium"
+                    style={{ color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
+                    🗑 Eliminar
+                  </button>
+                )}
+                <button onClick={() => setShowModal(false)}><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
             </div>
 
             {/* Section nav */}
