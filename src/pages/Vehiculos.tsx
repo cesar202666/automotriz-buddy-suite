@@ -426,75 +426,122 @@ export default function Vehiculos() {
                     <span className="text-xs font-medium px-3 py-1 rounded-full bg-muted">{fotosCount} / 9 fotos</span>
                   </div>
 
-                  {/* AI Background section */}
-                  <div className="mb-4 p-4 rounded-xl border" style={{ borderColor: "hsl(var(--primary)/0.3)", background: "hsl(var(--primary)/0.04)" }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Wand2 size={16} style={{ color: "hsl(var(--primary))" }} />
-                      <span className="text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>IA — Cambio de Fondo</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted ml-auto">Requiere API Key en Configuración</span>
+                  {/* ── AI Background panel ─────────────────────────────── */}
+                  <div className="mb-4 rounded-xl border overflow-hidden" style={{ borderColor: "hsl(var(--primary)/0.25)" }}>
+                    {/* Header */}
+                    <div className="flex items-center gap-2 px-4 py-3" style={{ background: "hsl(var(--primary)/0.06)" }}>
+                      <Sparkles size={15} style={{ color: "hsl(var(--primary))" }} />
+                      <span className="text-sm font-bold" style={{ color: "hsl(var(--primary))" }}>Editor de Fondo con IA</span>
+                      <span className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium"
+                        style={{ background: hasAiConfig() ? "#dcfce7" : "hsl(var(--muted))", color: hasAiConfig() ? "#16a34a" : "hsl(var(--muted-foreground))" }}>
+                        {hasAiConfig() ? "✓ API conectada" : "Requiere API Key en Configuración"}
+                      </span>
                     </div>
-                    <p className="text-xs mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>
-                      Al subir una foto, usa la IA para reemplazar el fondo por un ambiente profesional de concesionaria. Haz clic en el ícono ✨ sobre cada foto para aplicar.
-                    </p>
-                    <label className="block text-xs font-medium mb-1">Prompt Fondo de Vehículo</label>
-                    <textarea
-                      rows={3}
-                      className="w-full border rounded px-3 py-2 text-sm bg-background resize-none"
-                      style={{ borderColor: "hsl(var(--border))" }}
-                      value={bgPrompt}
-                      onChange={e => setBgPrompt(e.target.value)}
-                      placeholder="Describe el fondo que deseas para el vehículo..."
-                    />
-                    <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
-                      Puedes modificar este prompt para cambiar el piso, la pared u otros elementos del fondo.
-                    </p>
+
+                    {/* Body */}
+                    <div className="px-4 pb-4 pt-3">
+                      <p className="text-xs mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Sube una foto, pasa el cursor sobre ella y haz clic en <strong>✨ IA</strong> para reemplazar el fondo automáticamente por un estudio profesional.
+                      </p>
+
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: "hsl(var(--foreground))" }}>
+                        Prompt Fondo de Vehículo
+                      </label>
+                      <textarea
+                        rows={3}
+                        className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-1"
+                        style={{ borderColor: "hsl(var(--border))", lineHeight: 1.5 }}
+                        value={bgPrompt}
+                        onChange={e => { setBgPrompt(e.target.value); setAiError(null); }}
+                        placeholder="Describe el fondo que deseas para el vehículo..."
+                      />
+                      <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Edita este prompt para personalizar el piso, paredes, iluminación, etc.
+                      </p>
+
+                      {/* Error message */}
+                      {aiError && (
+                        <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg text-xs font-medium"
+                          style={{ background: "hsl(var(--destructive)/0.08)", color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.2)" }}>
+                          <X size={13} className="mt-0.5 shrink-0" />
+                          <span>{aiError}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
+                  {/* ── Photo grid ──────────────────────────────────────── */}
                   <div className="grid grid-cols-3 gap-3">
                     {fotoSlots.map((slot, i) => (
                       <div key={i} className="relative group">
-                        <div onClick={() => fotoRefs.current[i]?.click()}
-                          className="border-2 border-dashed rounded-lg aspect-square flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors relative overflow-hidden"
-                          style={{ borderColor: slot.preview ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
+                        <div
+                          onClick={() => processingAI !== i && fotoRefs.current[i]?.click()}
+                          className="border-2 border-dashed rounded-xl aspect-square flex flex-col items-center justify-center transition-colors relative overflow-hidden"
+                          style={{
+                            borderColor: slot.preview ? "hsl(var(--primary))" : "hsl(var(--border))",
+                            cursor: processingAI === i ? "default" : "pointer",
+                          }}>
+
                           {slot.preview ? (
                             <>
-                              <img src={slot.preview} alt={slot.label} className="w-full h-full object-cover absolute inset-0 rounded-lg" />
+                              <img src={slot.preview} alt={slot.label} className="w-full h-full object-cover absolute inset-0 rounded-xl" />
+
+                              {/* ── Processing overlay ─────────────── */}
                               {processingAI === i && (
-                                <div className="absolute inset-0 flex items-center justify-center rounded-lg" style={{ background: "rgba(0,0,0,0.6)" }}>
-                                  <div className="text-center">
-                                    <Loader2 size={24} className="animate-spin text-white mx-auto mb-1" />
-                                    <p className="text-white text-xs font-semibold">Procesando IA...</p>
+                                <div className="absolute inset-0 rounded-xl flex flex-col items-center justify-center gap-3"
+                                  style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}>
+                                  {/* Animated ring */}
+                                  <div className="relative w-12 h-12">
+                                    <div className="absolute inset-0 rounded-full border-4 border-white/20" />
+                                    <div className="absolute inset-0 rounded-full border-4 border-t-white animate-spin" />
+                                    <Sparkles size={18} className="absolute inset-0 m-auto text-white" />
+                                  </div>
+                                  <div className="text-center px-3">
+                                    <p className="text-white text-xs font-bold">Procesando con IA</p>
+                                    <p className="text-white/70 text-xs mt-0.5">Cambiando el fondo…</p>
                                   </div>
                                 </div>
                               )}
-                              <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1">
+
+                              {/* Label bar */}
+                              <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5" style={{ background: "rgba(0,0,0,0.55)" }}>
                                 <span className="text-white text-xs font-semibold">{slot.label}</span>
                               </div>
                             </>
                           ) : (
-                            <>
+                            <div className="flex flex-col items-center gap-1 hover:opacity-70 transition-opacity">
                               <Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
-                              <span className="text-xs font-semibold mt-2 text-center px-2">{slot.label}</span>
-                              <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Hacer clic para subir</span>
-                            </>
+                              <span className="text-xs font-semibold text-center px-2">{slot.label}</span>
+                              <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Clic para subir</span>
+                            </div>
                           )}
                         </div>
+
+                        {/* Hover action buttons */}
                         {slot.preview && processingAI !== i && (
-                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                             <button
-                              onClick={(e) => { e.stopPropagation(); applyAIBackground(i); }}
-                              className="p-1.5 rounded-lg text-white font-bold text-xs flex items-center gap-1"
+                              onClick={e => { e.stopPropagation(); applyAIBackground(i); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
                               style={{ background: "hsl(var(--primary))" }}
-                              title="Aplicar IA al fondo">
-                              <Wand2 size={11} /> IA
+                              title="Aplicar IA — cambiar fondo">
+                              <Sparkles size={11} /> IA
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); downloadFoto(slot.preview!, slot.label); }}
-                              className="p-1.5 rounded-lg bg-black/70 hover:bg-black/90">
+                            <button
+                              onClick={e => { e.stopPropagation(); downloadFoto(slot.preview!, slot.label); }}
+                              className="p-1.5 rounded-lg shadow-lg"
+                              style={{ background: "rgba(0,0,0,0.7)" }}
+                              title="Descargar foto">
                               <Download size={11} className="text-white" />
                             </button>
                           </div>
                         )}
-                        <input ref={el => { fotoRefs.current[i] = el; }} type="file" accept="image/*" className="hidden" onChange={e => handleFotoChange(i, e)} />
+
+                        <input
+                          ref={el => { fotoRefs.current[i] = el; }}
+                          type="file" accept="image/*" className="hidden"
+                          onChange={e => handleFotoChange(i, e)}
+                        />
                       </div>
                     ))}
                   </div>
