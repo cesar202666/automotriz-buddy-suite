@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Plus, Search, FileText, Eye } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Search, FileText, Eye, Upload, Download, Table } from "lucide-react";
 import { jsPDF } from "jspdf";
+import * as XLSX from "xlsx";
 
 interface Consignatario {
   id: string;
@@ -51,19 +52,8 @@ interface Consignatario {
   fecha: string;
 }
 
-const initialConsignatarios: Consignatario[] = [
-  {
-    id: "1", folio: "00001", nombre: "Carlos", apellidos: "Reyes Soto", rut: "12.345.678-9",
-    telefono: "+56 9 1111 2222", email: "carlos@demo.cl", direccion: "Providencia 100", ciudad: "Santiago",
-    vehiculo: "00002 - ABC123", marca: "Toyota", modelo: "Corolla", patente: "ABC123", anio: "2026", color: "Blanco", kilometraje: "0",
-    valorPactado: 10000000, valorConsig: 100000, disponibilidad: "DISPONIBLE",
-    permisoCirulacion: false, seguroObligatorio: false, revisionTecnica: false, padron: false, certMultas: false,
-    carroceria: "Bueno", pintura: "Bueno", neumaticos: "Bueno", vidrios: "Bueno", focos: "Bueno", tapiz: "Bueno",
-    gata: false, llaveRueda: false, radio: false, encendedor: false, extintor: false, manibela: false,
-    repuesto: false, cenicero: false, tresLuz: false, triangulos: false, observaciones: "",
-    automotrizRut: "77.728.698-6", automotrizNombre: "Egaña Automotriz", lugar: "Puerto Montt", fecha: new Date().toLocaleDateString("es-CL")
-  }
-];
+const initialConsignatarios: Consignatario[] = [];
+
 
 const emptyForm = (): Partial<Consignatario> => ({
   folio: "", nombre: "", apellidos: "", rut: "", telefono: "", email: "", direccion: "", ciudad: "",
@@ -246,6 +236,60 @@ export default function Consignatarios() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Partial<Consignatario>>(emptyForm());
   const [activeSection, setActiveSection] = useState<"datos" | "vehiculo" | "docs" | "estado" | "valores">("datos");
+  const excelImportRef = useRef<HTMLInputElement>(null);
+
+  const exportExcel = () => {
+    const data = consignatarios.map(c => ({
+      Folio: c.folio, Nombre: c.nombre, Apellidos: c.apellidos, RUT: c.rut,
+      Telefono: c.telefono, Email: c.email, Direccion: c.direccion,
+      Vehiculo: c.vehiculo, Marca: c.marca, Modelo: c.modelo, Patente: c.patente,
+      Año: c.anio, "Valor Pactado": c.valorPactado, Estado: c.disponibilidad,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Consignatarios");
+    XLSX.writeFile(wb, "consignatarios.xlsx");
+  };
+
+  const importExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target?.result, { type: "binary" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(ws);
+      const nuevos: Consignatario[] = rows.map((r, i) => ({
+        id: String(Date.now() + i),
+        folio: String(r["Folio"] || ""),
+        nombre: String(r["Nombre"] || ""),
+        apellidos: String(r["Apellidos"] || ""),
+        rut: String(r["RUT"] || ""),
+        telefono: String(r["Telefono"] || ""),
+        email: String(r["Email"] || ""),
+        direccion: String(r["Direccion"] || ""),
+        ciudad: "", vehiculo: String(r["Vehiculo"] || ""),
+        marca: String(r["Marca"] || ""),
+        modelo: String(r["Modelo"] || ""),
+        patente: String(r["Patente"] || ""),
+        anio: String(r["Año"] || r["Anio"] || ""),
+        color: "", kilometraje: "",
+        valorPactado: Number(r["Valor Pactado"] || 0),
+        valorConsig: 0, disponibilidad: String(r["Estado"] || "DISPONIBLE"),
+        permisoCirulacion: false, seguroObligatorio: false, revisionTecnica: false,
+        padron: false, certMultas: false, carroceria: "", pintura: "", neumaticos: "",
+        vidrios: "", focos: "", tapiz: "", gata: false, llaveRueda: false,
+        radio: false, encendedor: false, extintor: false, manibela: false,
+        repuesto: false, cenicero: false, tresLuz: false, triangulos: false,
+        observaciones: "", automotrizRut: "", automotrizNombre: "",
+        lugar: "", fecha: "", contrato: null, contratoName: null,
+      } as Consignatario));
+      setConsignatarios(prev => [...prev, ...nuevos]);
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = "";
+  };
+
 
   const filtered = consignatarios.filter(c => {
     const matchFiltro = filtro === "Todos" || c.disponibilidad === filtro;
@@ -313,10 +357,20 @@ export default function Consignatarios() {
           <h1 className="page-title">Consignatarios</h1>
           <p className="page-subtitle">{consignatarios.length} consignatarios registrados</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
-          <Plus size={16} /> Crear Consignatario
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => excelImportRef.current?.click()} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
+            <Upload size={15} /> Importar Excel
+          </button>
+          <button onClick={exportExcel} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
+            <Download size={15} /> Exportar Excel
+          </button>
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
+            <Plus size={16} /> Crear Consignatario
+          </button>
+          <input ref={excelImportRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
+        </div>
       </div>
+
 
       <div className="flex items-center gap-3 mb-4">
         <select className="border rounded px-3 py-2 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }}

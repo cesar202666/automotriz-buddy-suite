@@ -31,7 +31,7 @@ const emptyVenta = (): Omit<Venta, "id"> => ({
 });
 
 export default function Ventas() {
-  const { ventas, setVentas, clientes, vehiculos, cuentasPagar, setCuentasPagar, cuentasCobrar, setCuentasCobrar } = useApp();
+  const { ventas, setVentas, clientes, vehiculos, cuentasCobrar, setCuentasCobrar } = useApp();
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -124,11 +124,9 @@ export default function Ventas() {
     }
   };
 
+  // Save without any mandatory-doc blocking — user can save anytime
   const handleSave = (solicitar = false) => {
     if (!form.patente || !form.ejecutiva) return alert("Ejecutiva y Patente son requeridos.");
-    if (form.prepago === "SI" && !prepagoDoc.dataUrl) return alert("Debe subir documento de prepago.");
-    if (!infTecDoc.dataUrl) return alert("El Informe Técnico es requerido.");
-    if (form.creditoFirmado === "SI" && !creditoFirmDoc.dataUrl) return alert("Debe subir documento de crédito firmado.");
 
     const saved: Venta = {
       ...form,
@@ -148,7 +146,6 @@ export default function Ventas() {
       setVentas(ventas.map(v => v.id === editId ? saved : v));
     } else {
       setVentas([...ventas, saved]);
-      // Auto-crear cuentas por cobrar
       setCuentasCobrar([...cuentasCobrar, {
         id: String(Date.now()), idVenta: saved.id, patente: saved.patente,
         fechaVenta: saved.fechaVenta, idComprador: saved.clienteId,
@@ -189,7 +186,7 @@ export default function Ventas() {
       {pendientes > 0 && (
         <div className="mb-4 flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-400 bg-yellow-50 text-yellow-800 text-sm font-medium dark:bg-yellow-900/20 dark:text-yellow-300">
           <AlertTriangle size={16} />
-          {pendientes} venta(s) pendiente(s) de validación
+          {pendientes} venta(s) pendiente(s) de validación — haga clic en "Validar" en la columna Verificación
         </div>
       )}
 
@@ -204,8 +201,8 @@ export default function Ventas() {
         <label className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>HASTA</label>
         <input type="date" className="border rounded px-2 py-1.5 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }} value={hasta} onChange={e => setHasta(e.target.value)} />
         <div className="ml-auto flex gap-2">
-          {["TODOS","VALIDADAS","PENDIENTE_VALIDACION"].map(f => (
-            <button key={f} onClick={() => setFiltro(f as typeof filtro)}
+          {(["TODOS","VALIDADAS","PENDIENTE_VALIDACION"] as const).map(f => (
+            <button key={f} onClick={() => setFiltro(f)}
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filtro === f ? "bg-primary text-white border-primary" : "border-border hover:bg-muted"}`}>
               {f === "TODOS" ? "Todos" : f === "VALIDADAS" ? "Validadas" : "Pendiente Validación"}
             </button>
@@ -223,7 +220,7 @@ export default function Ventas() {
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Fecha Vta</th>
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Ejecutiva</th>
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Sucursal</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Cliente ID</th>
+              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Cliente</th>
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Inf. Tec.</th>
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Patente</th>
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Marca</th>
@@ -244,22 +241,24 @@ export default function Ventas() {
             {filtered.map((v) => (
               <tr key={v.id} className={`border-b table-row-hover cursor-pointer ${rowBg(v)}`}
                 style={{ borderColor: "hsl(var(--border))" }} onClick={() => openEdit(v)}>
-                <td className="px-3 py-2 font-semibold" style={{ color: "hsl(var(--primary))" }}>#{v.id}</td>
+                <td className="px-3 py-2 font-semibold" style={{ color: "hsl(var(--primary))" }}>#{v.id.slice(-6)}</td>
                 <td className="px-3 py-2 capitalize">{v.tipoVenta?.replace(/_/g, " ").toLowerCase()}</td>
                 <td className="px-3 py-2">
                   {v.prepago === "SI" ? (
-                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Sí (Falta Doc)</span>
+                    v.prepagoDoc
+                      ? <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Sí ✓</span>
+                      : <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Sí (Falta Doc)</span>
                   ) : <span style={{ color: "hsl(var(--muted-foreground))" }}>—</span>}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">{v.fechaVenta}</td>
                 <td className="px-3 py-2 font-medium">{v.ejecutiva}</td>
                 <td className="px-3 py-2">{v.sucursal}</td>
-                <td className="px-3 py-2" style={{ color: "hsl(var(--primary))" }}>{v.clienteId || "—"}</td>
+                <td className="px-3 py-2" style={{ color: "hsl(var(--primary))" }}>{v.clienteNombre || v.clienteId || "—"}</td>
                 <td className="px-3 py-2">
                   {v.informeTecnico ? (
                     <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">✓ Ok</span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Falta Doc</span>
+                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Pendiente</span>
                   )}
                 </td>
                 <td className="px-3 py-2 font-semibold">{v.patente}</td>
@@ -274,20 +273,20 @@ export default function Ventas() {
                 <td className="px-3 py-2 font-semibold">{fmt(v.precioVtaFinal)}</td>
                 <td className="px-3 py-2">
                   {v.creditoFirmado === "SI" ? (
-                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Sí</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${v.creditoFirmadoDoc ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"}`}>
+                      {v.creditoFirmadoDoc ? "Sí ✓" : "Sí (Falta)"}
+                    </span>
                   ) : <span style={{ color: "hsl(var(--muted-foreground))" }}>NO</span>}
                 </td>
                 <td className="px-3 py-2">{fmt(v.montoPieCaja)}</td>
                 <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                   {v.estado === "VALIDADA" ? (
                     <span className="text-green-600 font-bold text-base">✓</span>
-                  ) : v.estado === "PENDIENTE_VALIDACION" ? (
-                    <button onClick={() => iniciarValidacion(v.id)}
-                      className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 flex items-center gap-1">
-                      <Lock size={10} /> Validar
-                    </button>
                   ) : (
-                    <span className="text-red-500 font-bold">✗</span>
+                    <button onClick={() => iniciarValidacion(v.id)}
+                      className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${v.estado === "PENDIENTE_VALIDACION" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                      <Lock size={10} /> {v.estado === "PENDIENTE_VALIDACION" ? "Validar" : "Validar"}
+                    </button>
                   )}
                 </td>
               </tr>
@@ -318,7 +317,7 @@ export default function Ventas() {
                   <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>IDENTIFICACIÓN DE VENTA Y CLIENTE</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium mb-1">Ejecutiva</label>
+                      <label className="block text-xs font-medium mb-1">Ejecutiva *</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.ejecutiva} onChange={e => setForm(f => ({ ...f, ejecutiva: e.target.value }))} />
                     </div>
@@ -337,7 +336,7 @@ export default function Ventas() {
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.clienteId} onChange={e => selectCliente(e.target.value)}>
                         <option value="">-- Seleccionar --</option>
-                        {clientes.map(c => <option key={c.id} value={c.id}>{c.id} - {c.nombres} {c.apellidos}</option>)}
+                        {clientes.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos}</option>)}
                       </select>
                     </div>
                   </div>
@@ -345,10 +344,12 @@ export default function Ventas() {
 
                 {/* Vehículo */}
                 <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
-                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>ESPECIFICACIONES DE VEHÍCULO Y TÉCNICAS</div>
+                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>ESPECIFICACIONES DE VEHÍCULO</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium mb-1 text-red-500">Informe Técnico *</label>
+                      <label className={`block text-xs font-medium mb-1 ${!infTecDoc.dataUrl ? "text-red-500" : ""}`}>
+                        Informe Técnico {!infTecDoc.dataUrl && "(Pendiente)"}
+                      </label>
                       <div className="flex gap-2">
                         <div onClick={() => infTecRef.current?.click()}
                           className={`flex-1 border-2 border-dashed rounded-lg flex items-center justify-center py-2 cursor-pointer hover:bg-muted/30 transition-colors ${!infTecDoc.dataUrl ? "border-red-400 bg-red-50/50" : "border-primary"}`}>
@@ -390,12 +391,12 @@ export default function Ventas() {
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio Retoma</label>
                       <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioRetoma} onChange={e => updatePrecio("precioRetoma", Number(e.target.value))} />
+                        value={form.precioRetoma || ""} onChange={e => updatePrecio("precioRetoma", Number(e.target.value))} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1 text-red-500">Precio Venta *</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background border-red-300" style={{ borderColor: form.precioVenta ? "hsl(var(--border))" : "#fca5a5" }}
-                        value={form.precioVenta} onChange={e => updatePrecio("precioVenta", Number(e.target.value))} />
+                      <label className="block text-xs font-medium mb-1">Precio Venta *</label>
+                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.precioVenta || ""} onChange={e => updatePrecio("precioVenta", Number(e.target.value))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Margen Bruto (auto)</label>
@@ -405,7 +406,7 @@ export default function Ventas() {
                     <div>
                       <label className="block text-xs font-medium mb-1">Monto Pie Caja</label>
                       <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.montoPieCaja} onChange={e => setForm(f => ({ ...f, montoPieCaja: Number(e.target.value) }))} />
+                        value={form.montoPieCaja || ""} onChange={e => setForm(f => ({ ...f, montoPieCaja: Number(e.target.value) }))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">N° Crédito</label>
@@ -415,7 +416,7 @@ export default function Ventas() {
                     <div>
                       <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
                       <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.gastosAdmin} onChange={e => updatePrecio("gastosAdmin", Number(e.target.value))} />
+                        value={form.gastosAdmin || ""} onChange={e => updatePrecio("gastosAdmin", Number(e.target.value))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$80k)</label>
@@ -437,8 +438,9 @@ export default function Ventas() {
                         </select>
                         {form.creditoFirmado === "SI" && (
                           <div className="flex gap-1">
-                            <button onClick={() => creditoFirmRef.current?.click()} className={`px-2 py-1 rounded border text-xs ${!creditoFirmDoc.dataUrl ? "border-red-400 text-red-600 bg-red-50" : "border-primary text-primary"}`}>
-                              {creditoFirmDoc.dataUrl ? <FileText size={14} /> : <Upload size={14} />}
+                            <button onClick={() => creditoFirmRef.current?.click()}
+                              className={`px-2 py-1 rounded border text-xs flex items-center gap-1 ${!creditoFirmDoc.dataUrl ? "border-red-400 text-red-600 bg-red-50" : "border-primary text-primary"}`}>
+                              {creditoFirmDoc.dataUrl ? <><FileText size={12} />Doc</> : <><Upload size={12} />Subir</>}
                             </button>
                             {creditoFirmDoc.dataUrl && <button onClick={() => download(creditoFirmDoc.dataUrl!, creditoFirmDoc.name!)} className="px-2 py-1 rounded border hover:bg-muted"><Download size={14} /></button>}
                           </div>
@@ -447,7 +449,7 @@ export default function Ventas() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Prepago *</label>
+                      <label className="block text-xs font-medium mb-1">Prepago</label>
                       <div className="flex gap-2 items-center">
                         <select className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                           value={form.prepago} onChange={e => setForm(f => ({ ...f, prepago: e.target.value }))}>
@@ -456,8 +458,9 @@ export default function Ventas() {
                         </select>
                         {form.prepago === "SI" && (
                           <div className="flex gap-1">
-                            <button onClick={() => prepagoRef.current?.click()} className={`px-2 py-1 rounded border text-xs ${!prepagoDoc.dataUrl ? "border-red-400 text-red-600 bg-red-50" : "border-primary text-primary"}`}>
-                              {prepagoDoc.dataUrl ? <FileText size={14} /> : <Upload size={14} />}
+                            <button onClick={() => prepagoRef.current?.click()}
+                              className={`px-2 py-1 rounded border text-xs flex items-center gap-1 ${!prepagoDoc.dataUrl ? "border-red-400 text-red-600 bg-red-50" : "border-primary text-primary"}`}>
+                              {prepagoDoc.dataUrl ? <><FileText size={12} />Doc</> : <><Upload size={12} />Subir</>}
                             </button>
                             {prepagoDoc.dataUrl && <button onClick={() => download(prepagoDoc.dataUrl!, prepagoDoc.name!)} className="px-2 py-1 rounded border hover:bg-muted"><Download size={14} /></button>}
                           </div>
@@ -472,7 +475,7 @@ export default function Ventas() {
               {/* Right column */}
               <div className="w-64 space-y-4">
                 <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
-                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>1. SELECCIONE TIPO DE VENTA *</div>
+                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>TIPO DE VENTA *</div>
                   <div className="grid grid-cols-2 gap-2">
                     {TIPO_VENTA_OPTIONS.map(opt => (
                       <button key={opt.value} onClick={() => setForm(f => ({ ...f, tipoVenta: opt.value }))}
@@ -483,9 +486,9 @@ export default function Ventas() {
                   </div>
                 </div>
                 <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
-                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>2. DOCUMENTACIÓN VENTA</div>
+                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>DOCUMENTACIÓN VENTA</div>
                   <div onClick={() => docVentaRef.current?.click()}
-                    className={`border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-6 cursor-pointer hover:bg-muted/30 transition-colors ${!docVentaDoc.dataUrl ? "border-dashed" : ""}`}
+                    className="border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-6 cursor-pointer hover:bg-muted/30 transition-colors"
                     style={{ borderColor: docVentaDoc.dataUrl ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
                     {docVentaDoc.dataUrl ? (
                       <>
@@ -496,7 +499,7 @@ export default function Ventas() {
                       <>
                         <Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
                         <span className="text-xs mt-1 font-medium" style={{ color: "hsl(var(--primary))" }}>Subir Documentos</span>
-                        <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Factura y anexos al cliente</span>
+                        <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Factura y anexos</span>
                       </>
                     )}
                   </div>
@@ -507,17 +510,27 @@ export default function Ventas() {
                   )}
                   <input ref={docVentaRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setDocVentaDoc)} />
                 </div>
+
+                {/* Estado visible */}
+                <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
+                  <div className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>ESTADO ACTUAL</div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${form.estado === "VALIDADA" ? "bg-green-100 text-green-700" : form.estado === "PENDIENTE_VALIDACION" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-600"}`}>
+                    {form.estado === "VALIDADA" ? "✓ Validada" : form.estado === "PENDIENTE_VALIDACION" ? "⏳ Pendiente Validación" : "Borrador"}
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
               <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
               <button onClick={() => handleSave(false)} className="px-4 py-2 rounded text-sm font-medium text-white bg-slate-700 hover:bg-slate-800">
-                Guardar Ficha (Borrador)
+                Guardar (Borrador)
               </button>
-              <button onClick={() => handleSave(true)} className="px-4 py-2 rounded text-sm font-medium text-white flex items-center gap-2" style={{ background: "hsl(var(--primary))" }}>
-                <Check size={15} /> Solicitar Verificación
-              </button>
+              {form.estado !== "VALIDADA" && (
+                <button onClick={() => handleSave(true)} className="px-4 py-2 rounded text-sm font-medium text-white flex items-center gap-2" style={{ background: "hsl(var(--primary))" }}>
+                  <Check size={15} /> Solicitar Verificación
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -537,7 +550,7 @@ export default function Ventas() {
             <input type="password" className="w-full border rounded px-3 py-2 text-sm bg-background mb-1"
               style={{ borderColor: claveError ? "#ef4444" : "hsl(var(--border))" }}
               placeholder="Clave de validación" value={claveValidar} onChange={e => { setClaveValidar(e.target.value); setClaveError(""); }}
-              onKeyDown={e => e.key === "Enter" && confirmarValidacion()} />
+              onKeyDown={e => e.key === "Enter" && confirmarValidacion()} autoFocus />
             {claveError && <p className="text-xs text-red-500 mb-3">{claveError}</p>}
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={() => setShowValidarModal(false)} className="px-4 py-2 rounded text-sm border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
