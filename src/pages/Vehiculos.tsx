@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Wand2, Table, Trash2, Edit2, Sparkles } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
