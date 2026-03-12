@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Wand2, Table, Trash2, Edit2, Loader2 } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Wand2, Table, Trash2, Edit2, Sparkles } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
+import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO";
 
