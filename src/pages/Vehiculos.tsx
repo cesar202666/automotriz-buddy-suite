@@ -173,102 +173,31 @@ export default function Vehiculos() {
     setShowModal(false);
   };
 
-  // AI background replacement using Lovable AI gateway
+  // ── AI background replacement ────────────────────────────────────
+  // Uses the centralised aiImageService — no AI logic lives here.
   const applyAIBackground = async (slotIndex: number) => {
     const slot = fotoSlots[slotIndex];
     if (!slot.preview) return;
 
-    // Get saved config
-    let apiKey = "";
-    let provider = "gemini";
-    let model = "gemini-2.5-flash";
-    try {
-      const saved = JSON.parse(localStorage.getItem("ea_api_configs") || "[]");
-      const geminiCfg = saved.find((c: { provider: string }) => c.provider === "gemini");
-      const openaiCfg = saved.find((c: { provider: string }) => c.provider === "openai");
-      if (geminiCfg?.apiKey) { apiKey = geminiCfg.apiKey; provider = "gemini"; model = geminiCfg.model || "gemini-2.5-flash"; }
-      else if (openaiCfg?.apiKey) { apiKey = openaiCfg.apiKey; provider = "openai"; model = openaiCfg.model || "gpt-4o"; }
-    } catch {}
-
-    if (!apiKey) {
-      alert("Configura una API Key en el módulo de Configuración primero.");
+    if (!hasAiConfig()) {
+      setAiError("No hay API Key configurada. Ve a Configuración primero.");
       return;
     }
 
+    setAiError(null);
     setProcessingAI(slotIndex);
 
-    try {
-      let resultDataUrl: string | null = null;
+    const result = await applyVehicleBackground(slot.preview, bgPrompt);
 
-      if (provider === "gemini") {
-        // Use Gemini image editing
-        const base64Data = slot.preview.split(",")[1];
-        const mimeType = slot.preview.split(";")[0].split(":")[1] || "image/jpeg";
-
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: bgPrompt },
-                  { inline_data: { mime_type: mimeType, data: base64Data } }
-                ]
-              }],
-              generationConfig: { responseModalities: ["image", "text"] }
-            })
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          const imgPart = data.candidates?.[0]?.content?.parts?.find((p: { inlineData?: { data: string; mimeType: string } }) => p.inlineData);
-          if (imgPart?.inlineData) {
-            resultDataUrl = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
-          }
-        }
-      } else {
-        // OpenAI DALL-E image edit
-        const base64Data = slot.preview.split(",")[1];
-        const byteString = atob(base64Data);
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-        const blob = new Blob([ab], { type: "image/png" });
-
-        const formData = new FormData();
-        formData.append("image", blob, "vehicle.png");
-        formData.append("prompt", bgPrompt);
-        formData.append("model", "dall-e-2");
-        formData.append("response_format", "b64_json");
-
-        const response = await fetch("https://api.openai.com/v1/images/edits", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` },
-          body: formData,
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.data?.[0]?.b64_json) {
-            resultDataUrl = `data:image/png;base64,${data.data[0].b64_json}`;
-          }
-        }
-      }
-
-      if (resultDataUrl) {
-        setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: resultDataUrl! } : s));
-      } else {
-        alert("La IA no pudo procesar la imagen. Verifica tu API Key y el modelo configurado.");
-      }
-    } catch (err) {
-      console.error("AI error:", err);
-      alert("Error al conectar con la IA. Verifica tu conexión y configuración.");
-    } finally {
-      setProcessingAI(null);
+    if (result.ok && result.dataUrl) {
+      setFotoSlots(prev =>
+        prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s)
+      );
+    } else {
+      setAiError(result.error ?? "La IA no pudo procesar la imagen.");
     }
+
+    setProcessingAI(null);
   };
 
   const handleFotoChange = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
