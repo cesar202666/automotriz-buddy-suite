@@ -53,18 +53,7 @@ interface Consignatario {
 }
 
 const initialConsignatarios: Consignatario[] = [];
-  {
-    id: "1", folio: "00001", nombre: "Carlos", apellidos: "Reyes Soto", rut: "12.345.678-9",
-    telefono: "+56 9 1111 2222", email: "carlos@demo.cl", direccion: "Providencia 100", ciudad: "Santiago",
-    vehiculo: "00002 - ABC123", marca: "Toyota", modelo: "Corolla", patente: "ABC123", anio: "2026", color: "Blanco", kilometraje: "0",
-    valorPactado: 10000000, valorConsig: 100000, disponibilidad: "DISPONIBLE",
-    permisoCirulacion: false, seguroObligatorio: false, revisionTecnica: false, padron: false, certMultas: false,
-    carroceria: "Bueno", pintura: "Bueno", neumaticos: "Bueno", vidrios: "Bueno", focos: "Bueno", tapiz: "Bueno",
-    gata: false, llaveRueda: false, radio: false, encendedor: false, extintor: false, manibela: false,
-    repuesto: false, cenicero: false, tresLuz: false, triangulos: false, observaciones: "",
-    automotrizRut: "77.728.698-6", automotrizNombre: "Egaña Automotriz", lugar: "Puerto Montt", fecha: new Date().toLocaleDateString("es-CL")
-  }
-];
+
 
 const emptyForm = (): Partial<Consignatario> => ({
   folio: "", nombre: "", apellidos: "", rut: "", telefono: "", email: "", direccion: "", ciudad: "",
