@@ -46,6 +46,55 @@ export default function Vehiculos() {
   const [fotoSlots, setFotoSlots] = useState<FotoSlot[]>(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
   const [nuevoEquipamiento, setNuevoEquipamiento] = useState("");
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const excelImportRef = useRef<HTMLInputElement>(null);
+
+  const exportExcel = () => {
+    const data = vehiculos.map(v => ({
+      ID: v.id, Folio: v.folio, Patente: v.patente, Tipo: v.tipo,
+      Marca: v.marca, Modelo: v.modelo, "Año": v.anio, Estado: v.estado,
+      "Precio Venta": v.precioVenta, "Precio Costo": v.precioCosto,
+      Sucursal: v.sucursal, Kilometraje: v.kilometraje, Color: v.color,
+      Combustible: v.combustible, Transmision: v.transmision, Traccion: v.traccion,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Vehiculos");
+    XLSX.writeFile(wb, "vehiculos.xlsx");
+  };
+
+  const importExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target?.result, { type: "binary" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(ws);
+      const nuevos: Vehiculo[] = rows.map((r, i) => ({
+        id: String(r["ID"] || Date.now() + i),
+        folio: String(r["Folio"] || ""),
+        patente: String(r["Patente"] || ""),
+        tipo: String(r["Tipo"] || "AUTOMOVIL"),
+        marca: String(r["Marca"] || ""),
+        modelo: String(r["Modelo"] || ""),
+        anio: String(r["Año"] || r["Anio"] || ""),
+        estado: (String(r["Estado"] || "DISPONIBLE")) as Vehiculo["estado"],
+        precioVenta: Number(r["Precio Venta"] || 0),
+        precioCosto: Number(r["Precio Costo"] || 0),
+        sucursal: String(r["Sucursal"] || ""),
+        usuarioAsignado: "", combustible: String(r["Combustible"] || "Bencina"),
+        nMotor: "", vin: "", color: String(r["Color"] || ""),
+        kilometraje: Number(r["Kilometraje"] || 0),
+        ubicacion: "", comentarios: "",
+        transmision: String(r["Transmision"] || ""),
+        traccion: String(r["Traccion"] || ""),
+        aireAcondicionado: false, equipamientoExtra: [], fotos: [],
+      }));
+      setVehiculos([...vehiculos, ...nuevos]);
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = "";
+  };
 
   const filtered = vehiculos.filter(v => {
     const matchEstado = filtroEstado === "TODOS" || v.estado === filtroEstado;
