@@ -68,7 +68,7 @@ function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel:
 }
 
 export default function Vehiculos() {
-  const { vehiculos, setVehiculos } = useApp();
+  const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo } = useApp();
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("DISPONIBLE");
   const [showModal, setShowModal] = useState(false);
@@ -80,6 +80,7 @@ export default function Vehiculos() {
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
   const excelImportRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // AI bg state
   const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
@@ -104,12 +105,12 @@ export default function Vehiculos() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const wb = XLSX.read(ev.target?.result, { type: "binary" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(ws);
       const nuevos: Vehiculo[] = rows.map((r, i) => ({
-        id: String(r["ID"] || Date.now() + i),
+        id: String(r["ID"] || crypto.randomUUID()),
         folio: String(r["Folio"] || ""),
         patente: String(r["Patente"] || ""),
         tipo: String(r["Tipo"] || "AUTOMOVIL"),
@@ -128,7 +129,7 @@ export default function Vehiculos() {
         traccion: String(r["Traccion"] || ""),
         aireAcondicionado: false, equipamientoExtra: [], fotos: [],
       }));
-      setVehiculos([...vehiculos, ...nuevos]);
+      for (const v of nuevos) await addVehiculo(v);
     };
     reader.readAsBinaryString(file);
     e.target.value = "";
@@ -152,23 +153,25 @@ export default function Vehiculos() {
     setEditId(v.id); setTab("general"); setShowModal(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.patente?.trim() || !form.marca?.trim()) return alert("Patente y Marca son requeridos.");
     const fotos = fotoSlots.map(s => s.preview || "");
     const nextFolio = String(vehiculos.length + 1).padStart(5, "0");
+    setSaving(true);
     if (editId) {
-      setVehiculos(vehiculos.map(v => v.id === editId ? { ...v, ...form, fotos } as Vehiculo : v));
+      await updateVehiculo({ ...form, fotos, id: editId } as Vehiculo);
     } else {
-      const newV: Vehiculo = { id: String(Date.now()), folio: nextFolio, ...(form as Vehiculo), fotos };
-      setVehiculos([...vehiculos, newV]);
+      const newV: Vehiculo = { id: crypto.randomUUID(), folio: nextFolio, ...(form as Vehiculo), fotos };
+      await addVehiculo(newV);
     }
+    setSaving(false);
     setShowModal(false);
   };
 
   const confirmDelete = (id: string) => setDeleteId(id);
 
-  const doDelete = () => {
-    if (deleteId) setVehiculos(vehiculos.filter(v => v.id !== deleteId));
+  const doDelete = async () => {
+    if (deleteId) await deleteVehiculo(deleteId);
     setDeleteId(null);
     setShowModal(false);
   };
@@ -249,7 +252,7 @@ export default function Vehiculos() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Vehículos</h1>
-          <p className="page-subtitle">{vehiculos.length} vehículos en inventario</p>
+          <p className="page-subtitle">{vehiculosLoading ? "Cargando..." : `${vehiculos.length} vehículos en inventario`}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => excelImportRef.current?.click()} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
@@ -625,7 +628,9 @@ export default function Vehiculos() {
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
               <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
-              <button onClick={handleSave} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Guardar</button>
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
             </div>
           </div>
         </div>

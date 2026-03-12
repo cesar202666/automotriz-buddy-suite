@@ -14,7 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      vehiculos: {
+        Row: {
+          aire_acondicionado: boolean
+          anio: string
+          color: string
+          combustible: string
+          comentarios: string
+          created_at: string
+          equipamiento_extra: string[]
+          estado: string
+          folio: string
+          fotos: string[]
+          id: string
+          kilometraje: number
+          marca: string
+          modelo: string
+          n_motor: string
+          patente: string
+          precio_costo: number
+          precio_venta: number
+          sucursal: string
+          tipo: string
+          traccion: string
+          transmision: string
+          ubicacion: string
+          updated_at: string
+          usuario_asignado: string
+          vin: string
+        }
+        Insert: {
+          aire_acondicionado?: boolean
+          anio?: string
+          color?: string
+          combustible?: string
+          comentarios?: string
+          created_at?: string
+          equipamiento_extra?: string[]
+          estado?: string
+          folio?: string
+          fotos?: string[]
+          id?: string
+          kilometraje?: number
+          marca?: string
+          modelo?: string
+          n_motor?: string
+          patente?: string
+          precio_costo?: number
+          precio_venta?: number
+          sucursal?: string
+          tipo?: string
+          traccion?: string
+          transmision?: string
+          ubicacion?: string
+          updated_at?: string
+          usuario_asignado?: string
+          vin?: string
+        }
+        Update: {
+          aire_acondicionado?: boolean
+          anio?: string
+          color?: string
+          combustible?: string
+          comentarios?: string
+          created_at?: string
+          equipamiento_extra?: string[]
+          estado?: string
+          folio?: string
+          fotos?: string[]
+          id?: string
+          kilometraje?: number
+          marca?: string
+          modelo?: string
+          n_motor?: string
+          patente?: string
+          precio_costo?: number
+          precio_venta?: number
+          sucursal?: string
+          tipo?: string
+          traccion?: string
+          transmision?: string
+          ubicacion?: string
+          updated_at?: string
+          usuario_asignado?: string
+          vin?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
