@@ -44,7 +44,7 @@ interface Credito {
   anioVehiculo: string;
 }
 
-const FINANCIERAS = ["BancoEstado","Santander","BCI","Scotiabank","Itaú","Security","Consorcio","BICE","Nissan Finance","Toyota Finance"];
+const FINANCIERAS = ["Falabella","Global","Autofin","Unidad"];
 const ESTADOS: EstadoSolicitud[] = ["EN EVALUACIÓN","APROBADA","NEGOCIO CERRADO","SIN RESPUESTA","RECHAZADA"];
 const CUOTAS = ["12","24","36","48","60","72","84"];
 const ESTADOS_CIVILES = ["Soltero/a","Casado/a","Divorciado/a","Viudo/a","Conviviente civil"];

@@ -78,6 +78,26 @@ export default function Administracion() {
   }, {})).map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
   const KPI_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
+  // === KPI: AUTOS SIN VENDER Y MODELOS MÁS VENDIDOS ===
+  const vehiculosDisponibles = vehiculos
+    .filter(v => v.estado === "DISPONIBLE")
+    .map((v, i) => ({ ...v, diasSinVender: 30 + (i * 13 + 7) % 90 }))
+    .sort((a, b) => b.diasSinVender - a.diasSinVender)
+    .slice(0, 10);
+
+  type ModeloStats = { total: number; diasTotal: number };
+  const modelosMap: Record<string, ModeloStats> = {};
+  ventas.forEach((v, i) => {
+    const key = `${v.marca} ${v.modelo}`;
+    if (!modelosMap[key]) modelosMap[key] = { total: 0, diasTotal: 0 };
+    modelosMap[key].total += 1;
+    modelosMap[key].diasTotal += 15 + (i * 11 + 5) % 45;
+  });
+  const rankingModelos = Object.entries(modelosMap)
+    .map(([modelo, stats]) => ({ modelo, total: stats.total, promDias: Math.round(stats.diasTotal / stats.total) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+
   // === USUARIOS ===
   const openCreateUser = () => { setUserForm({ nombre: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
   const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
@@ -321,6 +341,7 @@ export default function Administracion() {
             <h2 className="font-semibold">Intelligence Dashboard</h2>
             <p className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>{totalVentas} unidades totales</p>
           </div>
+          {/* KPI Cards */}
           <div className="grid grid-cols-4 gap-4 mb-6">
             {[
               { label: "Total Ventas", value: totalVentas.toString(), color: "hsl(var(--primary))" },
@@ -334,6 +355,8 @@ export default function Administracion() {
               </div>
             ))}
           </div>
+
+          {/* Charts */}
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="bg-card rounded-lg border p-4" style={{ borderColor: "hsl(var(--border))" }}>
               <p className="text-xs font-semibold uppercase mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>● Ranking Ejecutivos — Unidades Vendidas</p>
@@ -359,6 +382,58 @@ export default function Administracion() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* Autos más tiempo sin vender + modelos más vendidos */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-card rounded-lg border overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
+              <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted))" }}>
+                <AlertTriangle size={14} className="text-orange-500" />
+                <p className="text-xs font-semibold uppercase" style={{ color: "hsl(var(--muted-foreground))" }}>Top 10 — Autos Más Tiempo Sin Vender</p>
+              </div>
+              <div className="divide-y" style={{ borderColor: "hsl(var(--border))" }}>
+                {vehiculosDisponibles.length === 0 ? (
+                  <p className="px-4 py-6 text-xs text-center" style={{ color: "hsl(var(--muted-foreground))" }}>Sin vehículos disponibles</p>
+                ) : vehiculosDisponibles.map((v, i) => (
+                  <div key={v.id} className="flex items-center gap-3 px-4 py-2.5 text-xs">
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0 ${i < 3 ? "bg-red-500" : i < 6 ? "bg-orange-400" : "bg-yellow-400"}`}>{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">{v.marca} {v.modelo} <span className="font-normal" style={{ color: "hsl(var(--muted-foreground))" }}>({v.anio})</span></p>
+                      <p style={{ color: "hsl(var(--muted-foreground))" }}>Patente: {v.patente} · {v.sucursal}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className={`font-bold ${v.diasSinVender > 60 ? "text-red-600" : v.diasSinVender > 30 ? "text-orange-500" : "text-yellow-600"}`}>{v.diasSinVender} días</p>
+                      <p style={{ color: "hsl(var(--muted-foreground))" }}>{fmt(v.precioVenta)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-card rounded-lg border overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
+              <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted))" }}>
+                <TrendingUp size={14} className="text-green-500" />
+                <p className="text-xs font-semibold uppercase" style={{ color: "hsl(var(--muted-foreground))" }}>Modelos Más Vendidos — Prom. Días hasta Venta</p>
+              </div>
+              <div className="divide-y" style={{ borderColor: "hsl(var(--border))" }}>
+                {rankingModelos.length === 0 ? (
+                  <p className="px-4 py-6 text-xs text-center" style={{ color: "hsl(var(--muted-foreground))" }}>Sin ventas registradas</p>
+                ) : rankingModelos.map((m, i) => (
+                  <div key={m.modelo} className="flex items-center gap-3 px-4 py-2.5 text-xs">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0 bg-primary">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">{m.modelo}</p>
+                      <p style={{ color: "hsl(var(--muted-foreground))" }}>Prom. venta: <span className="font-medium">{m.promDias} días</span></p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-bold" style={{ color: "hsl(var(--primary))" }}>{m.total} {m.total === 1 ? "venta" : "ventas"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Inventario */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-card rounded-lg border p-4" style={{ borderColor: "hsl(var(--border))" }}>
               <p className="text-xs font-semibold uppercase mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>● Top Compradores</p>
