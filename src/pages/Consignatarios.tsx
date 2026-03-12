@@ -93,16 +93,33 @@ function generateContratoPDF(c: Consignatario) {
     doc.setFont("helvetica", style);
   };
 
-  // Header
-  doc.setFillColor(240, 240, 240);
-  doc.rect(margin, y, 50, 14, "F");
+  // Header con logo EA (negro con texto amarillo simulado)
+  // Fondo negro del logo
+  doc.setFillColor(10, 10, 10);
+  doc.roundedRect(margin, y, 22, 22, 3, 3, "F");
+  // Círculo amarillo
+  doc.setDrawColor(234, 179, 8);
+  doc.setLineWidth(1.5);
+  doc.circle(margin + 11, y + 11, 9, "S");
+  // Letras EA en amarillo
+  doc.setTextColor(234, 179, 8);
+  setFont(11, "bold");
+  doc.text("EA", margin + 7, y + 13.5);
+  // Texto empresa en negro
+  doc.setTextColor(0, 0, 0);
   setFont(12, "bold");
-  doc.text("Egaña", margin + 3, y + 6);
-  setFont(7);
-  doc.text("AUTOMOTRIZ", margin + 3, y + 11);
-  setFont(9);
-  doc.text(`En ${c.lugar}, ${c.fecha}`, pageW - margin - 55, y + 8);
-  y += 20;
+  doc.text("EGAÑA AUTOMOTRIZ", margin + 26, y + 8);
+  setFont(8);
+  doc.setTextColor(80, 80, 80);
+  doc.text("RUT: " + c.automotrizRut, margin + 26, y + 14);
+  setFont(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`En ${c.lugar}, ${c.fecha}`, pageW - margin - 55, y + 11);
+  // línea separadora
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y + 25, pageW - margin, y + 25);
+  y += 32;
 
   setFont(13, "bold");
   doc.text("CONTRATO DE CONSIGNACIÓN DE VEHÍCULO", pageW / 2, y, { align: "center" });
