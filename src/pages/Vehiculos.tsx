@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Wand2, Table, Trash2, Edit2, Sparkles } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
@@ -174,30 +174,35 @@ export default function Vehiculos() {
   };
 
   // ── AI background replacement ────────────────────────────────────
-  // Uses the centralised aiImageService — no AI logic lives here.
-  const applyAIBackground = async (slotIndex: number) => {
-    const slot = fotoSlots[slotIndex];
-    if (!slot.preview) return;
-
+  const runAI = useCallback(async (dataUrl: string, slotIndex: number, prompt: string) => {
+    console.log("[Vehiculos] runAI llamado, slot:", slotIndex, "hasConfig:", hasAiConfig());
     if (!hasAiConfig()) {
-      setAiError("No hay API Key configurada. Ve a Configuración primero.");
+      setAiError("❌ No hay API Key guardada. Ve a Configuración → ingresa tu clave de Gemini o OpenAI → presiona 'Guardar Configuración'.");
+      setProcessingAI(null);
       return;
     }
-
     setAiError(null);
     setProcessingAI(slotIndex);
-
-    const result = await applyVehicleBackground(slot.preview, bgPrompt);
-
-    if (result.ok && result.dataUrl) {
-      setFotoSlots(prev =>
-        prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s)
-      );
-    } else {
-      setAiError(result.error ?? "La IA no pudo procesar la imagen.");
+    try {
+      const result = await applyVehicleBackground(dataUrl, prompt);
+      console.log("[Vehiculos] resultado IA:", result.ok, result.error);
+      if (result.ok && result.dataUrl) {
+        setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s));
+        setAiError(null);
+      } else {
+        setAiError(`⚠️ ${result.error ?? "La IA no pudo procesar la imagen."}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAiError(`⚠️ Error inesperado: ${msg}`);
+    } finally {
+      setProcessingAI(null);
     }
+  }, []);
 
-    setProcessingAI(null);
+  const applyAIBackground = (slotIndex: number) => {
+    const slot = fotoSlots[slotIndex];
+    if (slot?.preview) runAI(slot.preview, slotIndex, bgPrompt);
   };
 
   const handleFotoChange = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,33 +212,14 @@ export default function Vehiculos() {
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
       setFotoSlots(prev => prev.map((s, idx) => idx === i ? { ...s, file, preview: dataUrl } : s));
-
-      // Auto-apply AI background on the FIRST photo slot — always attempt
+      // Auto-apply IA only on first slot
       if (i === 0 && dataUrl) {
-        setAiError(null);
-
-        if (!hasAiConfig()) {
-          setAiError("No hay API Key configurada. Ve a Configuración → ingresa tu clave de Gemini o OpenAI y presiona 'Guardar Configuración'.");
-          return;
-        }
-
-        setProcessingAI(0);
-        applyVehicleBackground(dataUrl, bgPrompt).then(result => {
-          if (result.ok && result.dataUrl) {
-            setFotoSlots(prev => prev.map((s, idx) => idx === 0 ? { ...s, preview: result.dataUrl! } : s));
-            setAiError(null);
-          } else {
-            setAiError(result.error ?? "La IA no pudo procesar la imagen.");
-          }
-          setProcessingAI(null);
-        }).catch(err => {
-          setAiError(`Error inesperado: ${err?.message ?? "desconocido"}`);
-          setProcessingAI(null);
-        });
+        runAI(dataUrl, 0, bgPrompt);
       }
     };
     reader.readAsDataURL(file);
   };
+
 
   const downloadFoto = (dataUrl: string, label: string) => {
     const a = document.createElement("a"); a.href = dataUrl; a.download = label + ".jpg"; a.click();
@@ -486,9 +472,9 @@ export default function Vehiculos() {
 
                       {/* Error message */}
                       {aiError && (
-                        <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg text-xs font-medium"
-                          style={{ background: "hsl(var(--destructive)/0.08)", color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.2)" }}>
-                          <X size={13} className="mt-0.5 shrink-0" />
+                        <div className="mt-3 flex items-start gap-2 px-3 py-3 rounded-lg text-xs font-semibold"
+                          style={{ background: "#fef2f2", color: "#b91c1c", border: "1.5px solid #fca5a5" }}>
+                          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                           <span>{aiError}</span>
                         </div>
                       )}
