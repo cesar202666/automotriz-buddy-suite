@@ -21,9 +21,19 @@ export default function Configuracion() {
   const [passError, setPassError] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
-  const [configs, setConfigs] = useState<ApiConfig[]>(
-    PROVIDERS.map(p => ({ provider: p.id, apiKey: "", model: p.models[0], connected: null }))
-  );
+  const [configs, setConfigs] = useState<ApiConfig[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ea_api_configs") || "[]") as ApiConfig[];
+      return PROVIDERS.map(p => {
+        const found = saved.find(c => c.provider === p.id);
+        return found
+          ? { ...found, connected: null } // reset connected status on load
+          : { provider: p.id, apiKey: "", model: p.models[0], connected: null };
+      });
+    } catch {
+      return PROVIDERS.map(p => ({ provider: p.id, apiKey: "", model: p.models[0], connected: null }));
+    }
+  });
   const [testing, setTesting] = useState<string | null>(null);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
 
