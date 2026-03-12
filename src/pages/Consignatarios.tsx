@@ -464,7 +464,7 @@ export default function Consignatarios() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={11} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay consignatarios</td></tr>
+              <tr><td colSpan={12} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay consignatarios</td></tr>
             )}
           </tbody>
         </table>
@@ -478,7 +478,16 @@ export default function Consignatarios() {
               <h2 className="text-base font-bold" style={{ color: "hsl(var(--primary))" }}>
                 {editId ? "Editar Consignatario" : "Nuevo Consignatario"}
               </h2>
-              <button onClick={() => setShowModal(false)}><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              <div className="flex items-center gap-2">
+                {editId && (
+                  <button onClick={() => { setShowModal(false); setDeleteId(editId); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium"
+                    style={{ color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
+                    🗑 Eliminar
+                  </button>
+                )}
+                <button onClick={() => setShowModal(false)}><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
             </div>
 
             {/* Section nav */}
