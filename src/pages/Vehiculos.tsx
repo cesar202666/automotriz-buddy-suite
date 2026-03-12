@@ -472,9 +472,9 @@ export default function Vehiculos() {
 
                       {/* Error message */}
                       {aiError && (
-                        <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg text-xs font-medium"
-                          style={{ background: "hsl(var(--destructive)/0.08)", color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.2)" }}>
-                          <X size={13} className="mt-0.5 shrink-0" />
+                        <div className="mt-3 flex items-start gap-2 px-3 py-3 rounded-lg text-xs font-semibold"
+                          style={{ background: "#fef2f2", color: "#b91c1c", border: "1.5px solid #fca5a5" }}>
+                          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                           <span>{aiError}</span>
                         </div>
                       )}
