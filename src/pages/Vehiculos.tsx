@@ -252,7 +252,7 @@ export default function Vehiculos() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Vehículos</h1>
-          <p className="page-subtitle">{vehiculos.length} vehículos en inventario</p>
+          <p className="page-subtitle">{vehiculosLoading ? "Cargando..." : `${vehiculos.length} vehículos en inventario`}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => excelImportRef.current?.click()} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
