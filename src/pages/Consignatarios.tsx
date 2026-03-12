@@ -347,6 +347,12 @@ export default function Consignatarios() {
     setShowModal(false);
   };
 
+  const doDelete = () => {
+    if (deleteId) setConsignatarios(consignatarios.filter(c => c.id !== deleteId));
+    setDeleteId(null);
+    setShowModal(false);
+  };
+
   const handleGenerarContrato = (c: Consignatario) => {
     generateContratoPDF(c);
   };
