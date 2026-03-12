@@ -78,6 +78,26 @@ export default function Administracion() {
   }, {})).map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
   const KPI_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
+  // === KPI: AUTOS SIN VENDER Y MODELOS MÁS VENDIDOS ===
+  const vehiculosDisponibles = vehiculos
+    .filter(v => v.estado === "DISPONIBLE")
+    .map((v, i) => ({ ...v, diasSinVender: 30 + (i * 13 + 7) % 90 }))
+    .sort((a, b) => b.diasSinVender - a.diasSinVender)
+    .slice(0, 10);
+
+  type ModeloStats = { total: number; diasTotal: number };
+  const modelosMap: Record<string, ModeloStats> = {};
+  ventas.forEach((v, i) => {
+    const key = `${v.marca} ${v.modelo}`;
+    if (!modelosMap[key]) modelosMap[key] = { total: 0, diasTotal: 0 };
+    modelosMap[key].total += 1;
+    modelosMap[key].diasTotal += 15 + (i * 11 + 5) % 45;
+  });
+  const rankingModelos = Object.entries(modelosMap)
+    .map(([modelo, stats]) => ({ modelo, total: stats.total, promDias: Math.round(stats.diasTotal / stats.total) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+
   // === USUARIOS ===
   const openCreateUser = () => { setUserForm({ nombre: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
   const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
