@@ -84,6 +84,7 @@ export default function Vehiculos() {
   // AI bg state
   const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
   const [processingAI, setProcessingAI] = useState<number | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const exportExcel = () => {
     const data = vehiculos.map(v => ({
