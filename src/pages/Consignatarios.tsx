@@ -228,6 +228,34 @@ function generateContratoPDF(c: Consignatario) {
   doc.save(`Contrato_Consignacion_${c.apellidos}_${c.patente}.pdf`);
 }
 
+const MASTER_PASS = "123cuatro";
+
+function DeleteConsigModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState(false);
+  const submit = () => {
+    if (pass === MASTER_PASS) onConfirm();
+    else { setErr(true); setPass(""); }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+      <div className="bg-card rounded-xl shadow-2xl p-7 w-80 animate-fade-in" style={{ border: "1px solid hsl(var(--border))" }}>
+        <h3 className="font-bold text-sm mb-1" style={{ color: "hsl(var(--destructive))" }}>Eliminar Consignatario</h3>
+        <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa la clave de Administrador Master para confirmar.</p>
+        <input type="password" className={`w-full border rounded px-3 py-2 text-sm bg-background mb-2 ${err ? "border-destructive" : ""}`}
+          style={{ borderColor: err ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
+          placeholder="Clave master" value={pass} onChange={e => { setPass(e.target.value); setErr(false); }}
+          onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
+        {err && <p className="text-xs mb-2" style={{ color: "hsl(var(--destructive))" }}>Clave incorrecta</p>}
+        <div className="flex gap-2 justify-end mt-3">
+          <button onClick={onCancel} className="px-3 py-1.5 rounded border text-sm hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
+          <button onClick={submit} className="px-3 py-1.5 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--destructive))" }}>Eliminar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Consignatarios() {
   const [consignatarios, setConsignatarios] = useState<Consignatario[]>(initialConsignatarios);
   const [search, setSearch] = useState("");
@@ -237,6 +265,7 @@ export default function Consignatarios() {
   const [form, setForm] = useState<Partial<Consignatario>>(emptyForm());
   const [activeSection, setActiveSection] = useState<"datos" | "vehiculo" | "docs" | "estado" | "valores">("datos");
   const excelImportRef = useRef<HTMLInputElement>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const exportExcel = () => {
     const data = consignatarios.map(c => ({
