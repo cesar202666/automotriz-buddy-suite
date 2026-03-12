@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Plus, Search, FileText, Eye } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Search, FileText, Eye, Upload, Download, Table } from "lucide-react";
 import { jsPDF } from "jspdf";
+import * as XLSX from "xlsx";
 
 interface Consignatario {
   id: string;
