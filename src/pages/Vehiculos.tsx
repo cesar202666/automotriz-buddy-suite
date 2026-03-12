@@ -1,66 +1,21 @@
 import { useState, useRef } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, FileText } from "lucide-react";
+import { useApp, Vehiculo } from "@/context/AppContext";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO";
 
-interface FotoSlot {
-  label: string;
-  file: File | null;
-  preview: string | null;
-}
+interface FotoSlot { label: string; file: File | null; preview: string | null; }
 
 const FOTO_SLOTS = [
   "FRONTAL 3/4 IZQUIERDA", "FRONTAL", "TRASERA 3/4 DERECHA",
   "TRASERA", "ASIENTOS DELANTEROS", "ASIENTOS TRASEROS",
   "MALETERO / CAJA CARGA", "INTERIOR FRONTAL", "FOTOS ESPECIALES"
 ];
-
 const TRANSMISIONES = [
   "Transmisión Manual", "Transmisión Automática", "Transmisión CVT",
   "Transmisión Automática de Doble Embrague", "Transmisión Secuencial"
 ];
-
-const TRACCIONES = [
-  "Tracción Delantera", "Tracción Trasera", "Tracción 4x4", "Tracción Integral"
-];
-
-interface Vehiculo {
-  id: string;
-  folio: string;
-  patente: string;
-  tipo: string;
-  marca: string;
-  modelo: string;
-  anio: string;
-  estado: VehiculoEstado;
-  precioVenta: number;
-  precioCosto: number;
-  sucursal: string;
-  usuarioAsignado: string;
-  combustible: string;
-  nMotor: string;
-  vin: string;
-  color: string;
-  kilometraje: number;
-  ubicacion: string;
-  comentarios: string;
-  transmision: string;
-  traccion: string;
-  aireAcondicionado: boolean;
-  equipamientoExtra: string[];
-  fotos: string[];
-}
-
-const initialVehiculos: Vehiculo[] = [
-  {
-    id: "1", folio: "00002", patente: "ABC123", tipo: "SUV", marca: "Toyota",
-    modelo: "Corolla", anio: "2026", estado: "DISPONIBLE", precioVenta: 12000000,
-    precioCosto: 10000000, sucursal: "Egaña", usuarioAsignado: "", combustible: "Bencina",
-    nMotor: "", vin: "", color: "Blanco", kilometraje: 0, ubicacion: "", comentarios: "",
-    transmision: "Transmisión Automática", traccion: "Tracción Delantera", aireAcondicionado: true,
-    equipamientoExtra: [], fotos: []
-  }
-];
+const TRACCIONES = ["Tracción Delantera", "Tracción Trasera", "Tracción 4x4", "Tracción Integral"];
 
 const emptyVehiculo = (): Partial<Vehiculo> => ({
   folio: "", patente: "", tipo: "AUTOMOVIL", marca: "", modelo: "", anio: "2026",
@@ -80,7 +35,7 @@ const statusBadge = (estado: string) => {
 };
 
 export default function Vehiculos() {
-  const [vehiculos, setVehiculos] = useState<Vehiculo[]>(initialVehiculos);
+  const { vehiculos, setVehiculos } = useApp();
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("DISPONIBLE");
   const [showModal, setShowModal] = useState(false);
@@ -105,21 +60,18 @@ export default function Vehiculos() {
 
   const openEdit = (v: Vehiculo) => {
     setForm({ ...v });
-    setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
+    setFotoSlots(FOTO_SLOTS.map((label, i) => ({ label, file: null, preview: v.fotos[i] || null })));
     setEditId(v.id); setTab("general"); setShowModal(true);
   };
 
   const handleSave = () => {
     if (!form.patente?.trim() || !form.marca?.trim()) return alert("Patente y Marca son requeridos.");
-    const fotos = fotoSlots.filter(s => s.preview).map(s => s.preview as string);
+    const fotos = fotoSlots.map(s => s.preview || "");
     const nextFolio = String(vehiculos.length + 1).padStart(5, "0");
     if (editId) {
       setVehiculos(vehiculos.map(v => v.id === editId ? { ...v, ...form, fotos } as Vehiculo : v));
     } else {
-      const newV: Vehiculo = {
-        id: String(Date.now()), folio: nextFolio,
-        ...(form as Vehiculo), fotos
-      };
+      const newV: Vehiculo = { id: String(Date.now()), folio: nextFolio, ...(form as Vehiculo), fotos };
       setVehiculos([...vehiculos, newV]);
     }
     setShowModal(false);
@@ -135,13 +87,15 @@ export default function Vehiculos() {
     reader.readAsDataURL(file);
   };
 
-  const fotosCount = fotoSlots.filter(s => s.preview).length;
+  const downloadFoto = (dataUrl: string, label: string) => {
+    const a = document.createElement("a"); a.href = dataUrl; a.download = label + ".jpg"; a.click();
+  };
 
+  const fotosCount = fotoSlots.filter(s => s.preview).length;
   const toggleEquipExtra = (item: string) => {
     const list = form.equipamientoExtra || [];
     setForm({ ...form, equipamientoExtra: list.includes(item) ? list.filter(x => x !== item) : [...list, item] });
   };
-
   const addEquipamiento = () => {
     if (!nuevoEquipamiento.trim()) return;
     const list = form.equipamientoExtra || [];
@@ -164,7 +118,6 @@ export default function Vehiculos() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 mb-4">
         <select className="border rounded px-3 py-2 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }}
           value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
@@ -182,7 +135,6 @@ export default function Vehiculos() {
         <span className="ml-auto text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>{filtered.length} / {vehiculos.length}</span>
       </div>
 
-      {/* Table */}
       <div className="bg-card rounded-lg border overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
         <table className="w-full text-sm">
           <thead>
@@ -217,16 +169,15 @@ export default function Vehiculos() {
         </table>
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 pb-4 overflow-y-auto" style={{ background: "rgba(0,0,0,0.55)" }}>
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-3xl mx-4 animate-fade-in">
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "hsl(var(--border))" }}>
-              <span className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Vehículos &rsaquo; {editId ? "editar" : "crear"}</span>
+              <span className="text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>
+                {editId ? `Editar Vehículo — ${form.patente}` : "Nuevo Vehículo"}
+              </span>
               <button onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
-            {/* Tabs */}
             <div className="flex border-b px-6" style={{ borderColor: "hsl(var(--border))" }}>
               {TABS.map(t => (
                 <button key={t} onClick={() => setTab(t)}
@@ -238,108 +189,74 @@ export default function Vehiculos() {
             </div>
 
             <div className="px-6 py-5 max-h-[60vh] overflow-y-auto">
-              {/* === GENERAL TAB === */}
               {tab === "general" && (
                 <div>
                   <div className="section-divider mb-4">DATOS PRINCIPALES</div>
                   <div className="grid grid-cols-4 gap-3 mb-4">
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Patente/STK *</label>
+                    <div><label className="block text-xs font-medium mb-1">Patente/STK *</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="ABC123" value={form.patente || ""} onChange={e => setForm({ ...form, patente: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Tipo *</label>
+                        value={form.patente || ""} onChange={e => setForm({ ...form, patente: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Tipo</label>
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.tipo || ""} onChange={e => setForm({ ...form, tipo: e.target.value })}>
                         {["AUTOMOVIL","SUV","PICKUP","FURGON","CAMION","MOTO"].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Año *</label>
+                      </select></div>
+                    <div><label className="block text-xs font-medium mb-1">Año</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.anio || ""} onChange={e => setForm({ ...form, anio: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Estado</label>
+                        value={form.anio || ""} onChange={e => setForm({ ...form, anio: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Estado</label>
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.estado || "DISPONIBLE"} onChange={e => setForm({ ...form, estado: e.target.value as VehiculoEstado })}>
                         {["DISPONIBLE","VENDIDO","RESERVADO","EN PROCESO"].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </div>
+                      </select></div>
                   </div>
                   <div className="grid grid-cols-4 gap-3 mb-4">
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Marca *</label>
+                    <div><label className="block text-xs font-medium mb-1">Marca *</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="Toyota" value={form.marca || ""} onChange={e => setForm({ ...form, marca: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Modelo *</label>
+                        value={form.marca || ""} onChange={e => setForm({ ...form, marca: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Modelo *</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="Corolla" value={form.modelo || ""} onChange={e => setForm({ ...form, modelo: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">N° Motor</label>
+                        value={form.modelo || ""} onChange={e => setForm({ ...form, modelo: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">N° Motor</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.nMotor || ""} onChange={e => setForm({ ...form, nMotor: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Combustible</label>
+                        value={form.nMotor || ""} onChange={e => setForm({ ...form, nMotor: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Combustible</label>
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.combustible || "Bencina"} onChange={e => setForm({ ...form, combustible: e.target.value })}>
                         {["Bencina","Diesel","Eléctrico","Híbrido","Gas"].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </div>
+                      </select></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div>
-                      <label className="block text-xs font-medium mb-1">VIN/Chasis</label>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div><label className="block text-xs font-medium mb-1">VIN/Chasis</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.vin || ""} onChange={e => setForm({ ...form, vin: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Color</label>
+                        value={form.vin || ""} onChange={e => setForm({ ...form, vin: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Color</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.color || ""} onChange={e => setForm({ ...form, color: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Kilometraje</label>
+                        value={form.color || ""} onChange={e => setForm({ ...form, color: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Kilometraje</label>
                       <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.kilometraje || 0} onChange={e => setForm({ ...form, kilometraje: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Ubicación</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.ubicacion || ""} onChange={e => setForm({ ...form, ubicacion: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Precio Venta</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioVenta || 0} onChange={e => setForm({ ...form, precioVenta: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Precio Costo</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioCosto || 0} onChange={e => setForm({ ...form, precioCosto: Number(e.target.value) })} />
-                    </div>
+                        value={form.kilometraje || 0} onChange={e => setForm({ ...form, kilometraje: Number(e.target.value) })} /></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Sucursal</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><label className="block text-xs font-medium mb-1">Precio Venta</label>
+                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.precioVenta || 0} onChange={e => setForm({ ...form, precioVenta: Number(e.target.value) })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Precio Costo</label>
+                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.precioCosto || 0} onChange={e => setForm({ ...form, precioCosto: Number(e.target.value) })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Sucursal</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="Seleccionar" value={form.sucursal || ""} onChange={e => setForm({ ...form, sucursal: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Usuario Asignado *</label>
+                        value={form.sucursal || ""} onChange={e => setForm({ ...form, sucursal: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Usuario Asignado</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="Nombre" value={form.usuarioAsignado || ""} onChange={e => setForm({ ...form, usuarioAsignado: e.target.value })} />
-                    </div>
+                        value={form.usuarioAsignado || ""} onChange={e => setForm({ ...form, usuarioAsignado: e.target.value })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Ubicación</label>
+                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.ubicacion || ""} onChange={e => setForm({ ...form, ubicacion: e.target.value })} /></div>
                   </div>
                 </div>
               )}
 
-              {/* === DATOS ADICIONALES TAB === */}
               {tab === "datos_adicionales" && (
                 <div>
                   <label className="block text-xs font-medium mb-2">Comentarios / Notas del Vehículo</label>
@@ -349,34 +266,41 @@ export default function Vehiculos() {
                 </div>
               )}
 
-              {/* === GALERÍA TAB === */}
               {tab === "galeria" && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <h3 className="text-sm font-bold flex items-center gap-2"><span style={{ color: "hsl(var(--primary))" }}>📷</span> Registro Fotográfico Requerido</h3>
-                      <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Haz clic en cada cuadrante para cargar la vista correspondiente del vehículo.</p>
+                      <h3 className="text-sm font-bold">📷 Registro Fotográfico Requerido</h3>
+                      <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Haz clic en cada cuadrante para cargar la vista correspondiente.</p>
                     </div>
                     <span className="text-xs font-medium px-3 py-1 rounded-full bg-muted">{fotosCount} / 9 fotos</span>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     {fotoSlots.map((slot, i) => (
-                      <div key={i} onClick={() => fotoRefs.current[i]?.click()}
-                        className="border-2 border-dashed rounded-lg aspect-square flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors relative overflow-hidden"
-                        style={{ borderColor: slot.preview ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
-                        {slot.preview ? (
-                          <img src={slot.preview} alt={slot.label} className="w-full h-full object-cover absolute inset-0 rounded-lg" />
-                        ) : (
-                          <>
-                            <Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
-                            <span className="text-xs font-semibold mt-2 text-center px-2" style={{ color: "hsl(var(--foreground))" }}>{slot.label}</span>
-                            <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Hacer clic para subir</span>
-                          </>
-                        )}
+                      <div key={i} className="relative group">
+                        <div onClick={() => fotoRefs.current[i]?.click()}
+                          className="border-2 border-dashed rounded-lg aspect-square flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors relative overflow-hidden"
+                          style={{ borderColor: slot.preview ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
+                          {slot.preview ? (
+                            <>
+                              <img src={slot.preview} alt={slot.label} className="w-full h-full object-cover absolute inset-0 rounded-lg" />
+                              <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1">
+                                <span className="text-white text-xs font-semibold">{slot.label}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
+                              <span className="text-xs font-semibold mt-2 text-center px-2">{slot.label}</span>
+                              <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Hacer clic para subir</span>
+                            </>
+                          )}
+                        </div>
                         {slot.preview && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1">
-                            <span className="text-white text-xs font-semibold">{slot.label}</span>
-                          </div>
+                          <button onClick={() => downloadFoto(slot.preview!, slot.label)}
+                            className="absolute top-2 right-2 p-1 rounded bg-black/60 hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Download size={12} className="text-white" />
+                          </button>
                         )}
                         <input ref={el => { fotoRefs.current[i] = el; }} type="file" accept="image/*" className="hidden" onChange={e => handleFotoChange(i, e)} />
                       </div>
@@ -385,7 +309,6 @@ export default function Vehiculos() {
                 </div>
               )}
 
-              {/* === EQUIPAMIENTO TAB === */}
               {tab === "equipamiento" && (
                 <div className="space-y-5">
                   <div>
@@ -447,7 +370,6 @@ export default function Vehiculos() {
               )}
             </div>
 
-            {/* Footer */}
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
               <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
               <button onClick={handleSave} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Guardar</button>

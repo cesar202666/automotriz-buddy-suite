@@ -1,50 +1,34 @@
 import { useState, useRef } from "react";
-import { Plus, Search, Edit2, Trash2, Phone, Mail, Upload, X, FileText } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Phone, Mail, FileText, Download, Upload, X } from "lucide-react";
+import { useApp, Cliente } from "@/context/AppContext";
 
-interface Cliente {
-  id: string;
-  nombres: string;
-  apellidos: string;
-  direccion: string;
-  telefono: string;
-  email: string;
-  docCedula: string | null;
-}
-
-const initialClientes: Cliente[] = [
-  { id: "101", nombres: "Juan", apellidos: "Perez", direccion: "Las Condes 102", telefono: "+56 9 1234 5678", email: "juan@demo.cl", docCedula: "cedula.pdf" },
-  { id: "102", nombres: "Maria", apellidos: "Gonzalez", direccion: "Providencia 45", telefono: "+56 9 8765 4321", email: "maria@demo.cl", docCedula: null },
-  { id: "103", nombres: "Renttmontt", apellidos: "SPA", direccion: "Santiago Centro 90", telefono: "+56 2 2233 4455", email: "contacto@renttmontt.cl", docCedula: "cedula.pdf" },
-  { id: "104", nombres: "Pedro", apellidos: "Vargas", direccion: "Ñuñoa 500", telefono: "+56 9 4444 5555", email: "pedro@demo.cl", docCedula: "cedula.pdf" },
-];
-
-const emptyForm = { id: "", nombres: "", apellidos: "", direccion: "", telefono: "", email: "", docCedula: null as string | null };
+const emptyForm = (): Omit<Cliente, "id"> => ({ nombres: "", apellidos: "", direccion: "", telefono: "", email: "", docCedula: null, docCedulaName: null });
 
 export default function Clientes() {
-  const [clientes, setClientes] = useState<Cliente[]>(initialClientes);
+  const { clientes, setClientes } = useApp();
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ ...emptyForm });
-  const [docFileName, setDocFileName] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm());
+  const [docDataUrl, setDocDataUrl] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const filtered = clientes.filter(c =>
     `${c.nombres} ${c.apellidos} ${c.id} ${c.email}`.toLowerCase().includes(search.toLowerCase())
   );
 
-  const nextId = () => String(Math.max(...clientes.map(c => parseInt(c.id) || 100)) + 1);
+  const nextId = () => String(Math.max(...clientes.map(c => parseInt(c.id) || 100), 100) + 1);
 
   const openCreate = () => {
-    setForm({ ...emptyForm, id: nextId() });
-    setDocFileName(null);
+    setForm(emptyForm());
+    setDocDataUrl(null);
     setEditId(null);
     setShowModal(true);
   };
 
   const openEdit = (c: Cliente) => {
-    setForm({ id: c.id, nombres: c.nombres, apellidos: c.apellidos, direccion: c.direccion, telefono: c.telefono, email: c.email, docCedula: c.docCedula });
-    setDocFileName(c.docCedula);
+    setForm({ nombres: c.nombres, apellidos: c.apellidos, direccion: c.direccion, telefono: c.telefono, email: c.email, docCedula: c.docCedula, docCedulaName: c.docCedulaName });
+    setDocDataUrl(c.docCedula);
     setEditId(c.id);
     setShowModal(true);
   };
@@ -56,16 +40,29 @@ export default function Clientes() {
   const handleSave = () => {
     if (!form.nombres.trim() || !form.apellidos.trim()) return alert("Nombres y Apellidos son requeridos.");
     if (editId) {
-      setClientes(clientes.map(c => c.id === editId ? { ...form, docCedula: docFileName } : c));
+      setClientes(clientes.map(c => c.id === editId ? { ...c, ...form, docCedula: docDataUrl, docCedulaName: form.docCedulaName } : c));
     } else {
-      setClientes([...clientes, { ...form, docCedula: docFileName }]);
+      setClientes([...clientes, { id: nextId(), ...form, docCedula: docDataUrl, docCedulaName: form.docCedulaName }]);
     }
     setShowModal(false);
   };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setDocFileName(file.name);
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setDocDataUrl(ev.target?.result as string);
+      setForm(f => ({ ...f, docCedulaName: file.name }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDownload = (dataUrl: string, name: string) => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = name;
+    a.click();
   };
 
   return (
@@ -80,24 +77,19 @@ export default function Clientes() {
         </button>
       </div>
 
-      {/* Search */}
       <div className="relative mb-4 max-w-xs">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "hsl(var(--muted-foreground))" }} />
-        <input
-          className="w-full pl-9 pr-3 py-2 rounded-md border text-sm bg-card"
+        <input className="w-full pl-9 pr-3 py-2 rounded-md border text-sm bg-card"
           style={{ borderColor: "hsl(var(--border))" }}
           placeholder="Buscar por nombre, ID o email..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+          value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      {/* Table */}
       <div className="bg-card rounded-lg border overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
-              <th className="px-4 py-3 text-left font-semibold w-20">ID Cliente</th>
+              <th className="px-4 py-3 text-left font-semibold w-20">ID</th>
               <th className="px-4 py-3 text-left font-semibold">Nombres y Apellidos</th>
               <th className="px-4 py-3 text-left font-semibold">Dirección</th>
               <th className="px-4 py-3 text-left font-semibold">Contacto</th>
@@ -106,7 +98,7 @@ export default function Clientes() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c, i) => (
+            {filtered.map((c) => (
               <tr key={c.id} className="table-row-hover border-b" style={{ borderColor: "hsl(var(--border))" }}>
                 <td className="px-4 py-3 font-semibold">{c.id}</td>
                 <td className="px-4 py-3">
@@ -123,9 +115,13 @@ export default function Clientes() {
                 </td>
                 <td className="px-4 py-3">
                   {c.docCedula ? (
-                    <span className="badge-success">Cargada</span>
+                    <button onClick={() => handleDownload(c.docCedula!, c.docCedulaName || "cedula")}
+                      className="flex items-center gap-1 text-xs font-medium hover:underline"
+                      style={{ color: "hsl(var(--primary))" }}>
+                      <Download size={12} /> {c.docCedulaName || "Descargar"}
+                    </button>
                   ) : (
-                    <span style={{ color: "hsl(var(--muted-foreground))" }}>—</span>
+                    <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>—</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -143,7 +139,6 @@ export default function Clientes() {
         </table>
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-xl mx-4 animate-fade-in">
@@ -155,24 +150,9 @@ export default function Clientes() {
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium mb-1">ID Cliente <span className="text-muted-foreground">(Opcional - Auto si se deja blanco)</span></label>
-                <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                  placeholder={`Ej: CLI-${form.id}`} value={form.id} onChange={e => setForm({ ...form, id: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Teléfono *</label>
-                <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                  placeholder="+56 9 1234 5678" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} />
-              </div>
-              <div>
                 <label className="block text-xs font-medium mb-1">Nombres *</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                   value={form.nombres} onChange={e => setForm({ ...form, nombres: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Email</label>
-                <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                  placeholder="correo@ejemplo.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">Apellidos *</label>
@@ -180,30 +160,47 @@ export default function Clientes() {
                   value={form.apellidos} onChange={e => setForm({ ...form, apellidos: e.target.value })} />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">Fotocopia de Cédula de Identidad</label>
-                <div
-                  onClick={() => fileRef.current?.click()}
-                  className="border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-muted/40 transition-colors"
-                  style={{ borderColor: "hsl(var(--border))" }}
-                >
-                  {docFileName ? (
-                    <div className="flex items-center gap-2" style={{ color: "hsl(var(--primary))" }}>
-                      <FileText size={16} />
-                      <span className="text-xs truncate max-w-[140px]">{docFileName}</span>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
-                      <span className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Subir Documento (Opcional)</span>
-                    </>
-                  )}
-                </div>
-                <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleFile} />
+                <label className="block text-xs font-medium mb-1">Teléfono</label>
+                <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                  placeholder="+56 9 1234 5678" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Email</label>
+                <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                  placeholder="correo@ejemplo.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium mb-1">Dirección</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                   placeholder="Calle #123, Comuna" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium mb-1">Fotocopia de Cédula de Identidad</label>
+                <div className="flex gap-2 items-start">
+                  <div onClick={() => fileRef.current?.click()}
+                    className="flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-muted/40 transition-colors"
+                    style={{ borderColor: docDataUrl ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
+                    {docDataUrl ? (
+                      <div className="flex items-center gap-2" style={{ color: "hsl(var(--primary))" }}>
+                        <FileText size={16} />
+                        <span className="text-xs truncate max-w-[160px]">{form.docCedulaName}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
+                        <span className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Subir Documento (Opcional)</span>
+                      </>
+                    )}
+                  </div>
+                  {docDataUrl && form.docCedulaName && (
+                    <button onClick={() => handleDownload(docDataUrl, form.docCedulaName!)}
+                      className="px-3 py-2 rounded text-xs font-medium border hover:bg-muted flex items-center gap-1"
+                      style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}>
+                      <Download size={13} /> Descargar
+                    </button>
+                  )}
+                </div>
+                <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleFile} />
               </div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>

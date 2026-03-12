@@ -1,9 +1,9 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
-  ShoppingCart, Settings2, TrendingUp, BarChart3, Wrench, MessageSquare,
-  Zap
+  ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare,
 } from "lucide-react";
+import logoEa from "@/assets/logo-ea.jpg";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -14,9 +14,7 @@ const navItems = [
   { label: "Ventas", icon: ShoppingCart, path: "/ventas" },
   { label: "Administración", icon: Settings2, path: "/administracion" },
   { label: "Gerencia", icon: TrendingUp, path: "/gerencia" },
-  { label: "Embudo", icon: Zap, path: "/embudo" },
   { label: "Conversaciones", icon: MessageSquare, path: "/conversaciones" },
-  { label: "Métricas", icon: BarChart3, path: "/metricas" },
   { label: "Configuración", icon: Wrench, path: "/configuracion" },
 ];
 
@@ -30,12 +28,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Logo */}
         <div className="px-3 py-4 border-b" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "hsl(var(--primary))" }}>
-              <Zap size={16} className="text-white" />
-            </div>
+            <img src={logoEa} alt="Egaña Automotriz" className="w-9 h-9 rounded-md object-cover" />
             <div>
               <div className="text-sm font-bold leading-tight text-white">Egaña</div>
-              <div className="text-xs leading-tight" style={{ color: "hsl(var(--sidebar-foreground))" }}>CRM + AI Agents</div>
+              <div className="text-xs leading-tight" style={{ color: "hsl(var(--sidebar-foreground))" }}>Automotriz</div>
             </div>
           </div>
         </div>
@@ -57,7 +53,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Footer */}
         <div className="px-3 py-3 border-t" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
           <div className="text-xs font-semibold text-white">Egaña Automotriz</div>
-          <div className="text-xs" style={{ color: "hsl(var(--sidebar-foreground))" }}>Sistema CRM IA</div>
+          <div className="text-xs" style={{ color: "hsl(var(--sidebar-foreground))" }}>Sistema ERP</div>
         </div>
       </aside>
 
