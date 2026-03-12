@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
-import { Plus, Search, Edit2, Trash2, Phone, Mail, FileText, Download, Upload, X } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Phone, Mail, FileText, Download, Upload, X, Table } from "lucide-react";
 import { useApp, Cliente } from "@/context/AppContext";
+import * as XLSX from "xlsx";
 
 const emptyForm = (): Omit<Cliente, "id"> => ({ nombres: "", apellidos: "", direccion: "", telefono: "", email: "", docCedula: null, docCedulaName: null });
 
@@ -12,6 +13,41 @@ export default function Clientes() {
   const [form, setForm] = useState(emptyForm());
   const [docDataUrl, setDocDataUrl] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const excelImportRef = useRef<HTMLInputElement>(null);
+
+  const exportExcel = () => {
+    const data = clientes.map(c => ({
+      ID: c.id, Nombres: c.nombres, Apellidos: c.apellidos,
+      Telefono: c.telefono, Email: c.email, Direccion: c.direccion,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Clientes");
+    XLSX.writeFile(wb, "clientes.xlsx");
+  };
+
+  const importExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target?.result, { type: "binary" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
+      const nuevos: Cliente[] = rows.map((r, i) => ({
+        id: r["ID"] || String(Date.now() + i),
+        nombres: r["Nombres"] || "",
+        apellidos: r["Apellidos"] || "",
+        telefono: r["Telefono"] || "",
+        email: r["Email"] || "",
+        direccion: r["Direccion"] || "",
+        docCedula: null, docCedulaName: null,
+      }));
+      setClientes([...clientes, ...nuevos]);
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = "";
+  };
 
   const filtered = clientes.filter(c =>
     `${c.nombres} ${c.apellidos} ${c.id} ${c.email}`.toLowerCase().includes(search.toLowerCase())
