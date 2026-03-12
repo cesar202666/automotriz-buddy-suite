@@ -52,7 +52,7 @@ interface Consignatario {
   fecha: string;
 }
 
-const initialConsignatarios: Consignatario[] = [
+const initialConsignatarios: Consignatario[] = [];
   {
     id: "1", folio: "00001", nombre: "Carlos", apellidos: "Reyes Soto", rut: "12.345.678-9",
     telefono: "+56 9 1111 2222", email: "carlos@demo.cl", direccion: "Providencia 100", ciudad: "Santiago",
