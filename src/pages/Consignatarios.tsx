@@ -247,6 +247,60 @@ export default function Consignatarios() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Partial<Consignatario>>(emptyForm());
   const [activeSection, setActiveSection] = useState<"datos" | "vehiculo" | "docs" | "estado" | "valores">("datos");
+  const excelImportRef = useRef<HTMLInputElement>(null);
+
+  const exportExcel = () => {
+    const data = consignatarios.map(c => ({
+      Folio: c.folio, Nombre: c.nombre, Apellidos: c.apellidos, RUT: c.rut,
+      Telefono: c.telefono, Email: c.email, Direccion: c.direccion,
+      Vehiculo: c.vehiculo, Marca: c.marca, Modelo: c.modelo, Patente: c.patente,
+      Año: c.anio, "Valor Pactado": c.valorPactado, Estado: c.disponibilidad,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Consignatarios");
+    XLSX.writeFile(wb, "consignatarios.xlsx");
+  };
+
+  const importExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target?.result, { type: "binary" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(ws);
+      const nuevos: Consignatario[] = rows.map((r, i) => ({
+        id: String(Date.now() + i),
+        folio: String(r["Folio"] || ""),
+        nombre: String(r["Nombre"] || ""),
+        apellidos: String(r["Apellidos"] || ""),
+        rut: String(r["RUT"] || ""),
+        telefono: String(r["Telefono"] || ""),
+        email: String(r["Email"] || ""),
+        direccion: String(r["Direccion"] || ""),
+        ciudad: "", vehiculo: String(r["Vehiculo"] || ""),
+        marca: String(r["Marca"] || ""),
+        modelo: String(r["Modelo"] || ""),
+        patente: String(r["Patente"] || ""),
+        anio: String(r["Año"] || r["Anio"] || ""),
+        color: "", kilometraje: "",
+        valorPactado: Number(r["Valor Pactado"] || 0),
+        valorConsig: 0, disponibilidad: String(r["Estado"] || "DISPONIBLE"),
+        permisoCirulacion: false, seguroObligatorio: false, revisionTecnica: false,
+        padron: false, certMultas: false, carroceria: "", pintura: "", neumaticos: "",
+        vidrios: "", focos: "", tapiz: "", gata: false, llaveRueda: false,
+        radio: false, encendedor: false, extintor: false, manibela: false,
+        repuesto: false, cenicero: false, tresLuz: false, triangulos: false,
+        observaciones: "", automotrizRut: "", automotrizNombre: "",
+        lugar: "", fecha: "", contrato: null, contratoName: null,
+      } as Consignatario));
+      setConsignatarios(prev => [...prev, ...nuevos]);
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = "";
+  };
+
 
   const filtered = consignatarios.filter(c => {
     const matchFiltro = filtro === "Todos" || c.disponibilidad === filtro;
