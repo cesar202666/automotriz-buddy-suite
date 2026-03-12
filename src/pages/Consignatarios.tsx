@@ -368,10 +368,20 @@ export default function Consignatarios() {
           <h1 className="page-title">Consignatarios</h1>
           <p className="page-subtitle">{consignatarios.length} consignatarios registrados</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
-          <Plus size={16} /> Crear Consignatario
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => excelImportRef.current?.click()} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
+            <Upload size={15} /> Importar Excel
+          </button>
+          <button onClick={exportExcel} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
+            <Download size={15} /> Exportar Excel
+          </button>
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
+            <Plus size={16} /> Crear Consignatario
+          </button>
+          <input ref={excelImportRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
+        </div>
       </div>
+
 
       <div className="flex items-center gap-3 mb-4">
         <select className="border rounded px-3 py-2 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }}
