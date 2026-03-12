@@ -185,7 +185,7 @@ export default function Vehiculos() {
     setProcessingAI(slotIndex);
     try {
       const result = await applyVehicleBackground(dataUrl, prompt);
-      console.log("[Vehiculos] resultado IA:", result.ok, result.error);
+      console.log("[Vehiculos] resultado IA ok:", result.ok, "| dataUrl length:", result.dataUrl?.length ?? 0, "| error:", result.error);
       if (result.ok && result.dataUrl) {
         setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s));
         setAiError(null);
