@@ -21,7 +21,7 @@ const TRACCIONES = ["Tracción Delantera", "Tracción Trasera", "Tracción 4x4",
 
 const MASTER_PASS = "123cuatro";
 
-const DEFAULT_BG_PROMPT = "Cambia el fondo del vehículo: piso de baldosas grises lisas, pared blanca limpia, iluminación suave de estudio fotográfico, pequeña sombra debajo del vehículo, fondo profesional de concesionaria, realista, alta calidad";
+const DEFAULT_BG_PROMPT = "Keep the car exactly as it is — do not modify the vehicle at all. Only replace the background. Place the car on a professional automotive studio floor: light grey polished concrete, subtle reflection under the car, clean white seamless background wall. The car should occupy about 70% of the frame centered, leaving visible floor space below and sides. Soft even studio lighting, no harsh shadows, photorealistic, high quality dealership photo.";
 
 const emptyVehiculo = (): Partial<Vehiculo> => ({
   folio: "", patente: "", tipo: "AUTOMOVIL", marca: "", modelo: "", anio: "2026",
@@ -444,8 +444,11 @@ export default function Vehiculos() {
                       <Sparkles size={15} style={{ color: "hsl(var(--primary))" }} />
                       <span className="text-sm font-bold" style={{ color: "hsl(var(--primary))" }}>Editor de Fondo con IA</span>
                       <span className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={{ background: "#dcfce7", color: "#16a34a" }}>
-                        ✓ Listo para usar
+                        style={{
+                          background: hasAiConfig() ? "#dcfce7" : "hsl(var(--muted))",
+                          color: hasAiConfig() ? "#16a34a" : "hsl(var(--muted-foreground))"
+                        }}>
+                        {hasAiConfig() ? "✓ Gemini conectado" : "Configura API Key en Configuración"}
                       </span>
                     </div>
 
