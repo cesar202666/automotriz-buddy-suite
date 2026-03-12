@@ -108,9 +108,18 @@ export default function Clientes() {
           <h1 className="page-title">Directorio de Clientes</h1>
           <p className="page-subtitle">{clientes.length} clientes registrados en sistema</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
-          <Plus size={16} /> Registrar Cliente
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => excelImportRef.current?.click()} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
+            <Upload size={15} /> Importar Excel
+          </button>
+          <button onClick={exportExcel} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
+            <Table size={15} /> Exportar Excel
+          </button>
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
+            <Plus size={16} /> Registrar Cliente
+          </button>
+          <input ref={excelImportRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
+        </div>
       </div>
 
       <div className="relative mb-4 max-w-xs">
