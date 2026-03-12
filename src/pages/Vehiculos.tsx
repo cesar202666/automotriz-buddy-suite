@@ -205,7 +205,22 @@ export default function Vehiculos() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setFotoSlots(prev => prev.map((s, idx) => idx === i ? { ...s, file, preview: ev.target?.result as string } : s));
+      const dataUrl = ev.target?.result as string;
+      setFotoSlots(prev => prev.map((s, idx) => idx === i ? { ...s, file, preview: dataUrl } : s));
+
+      // Auto-apply AI background on the FIRST photo slot when uploaded
+      if (i === 0 && dataUrl && hasAiConfig()) {
+        setAiError(null);
+        setProcessingAI(0);
+        applyVehicleBackground(dataUrl, bgPrompt).then(result => {
+          if (result.ok && result.dataUrl) {
+            setFotoSlots(prev => prev.map((s, idx) => idx === 0 ? { ...s, preview: result.dataUrl! } : s));
+          } else {
+            setAiError(result.error ?? "La IA no pudo procesar la imagen.");
+          }
+          setProcessingAI(null);
+        });
+      }
     };
     reader.readAsDataURL(file);
   };
