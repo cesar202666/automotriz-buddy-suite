@@ -444,8 +444,8 @@ export default function Vehiculos() {
                       <Sparkles size={15} style={{ color: "hsl(var(--primary))" }} />
                       <span className="text-sm font-bold" style={{ color: "hsl(var(--primary))" }}>Editor de Fondo con IA</span>
                       <span className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={{ background: hasAiConfig() ? "#dcfce7" : "hsl(var(--muted))", color: hasAiConfig() ? "#16a34a" : "hsl(var(--muted-foreground))" }}>
-                        {hasAiConfig() ? "✓ API conectada" : "Requiere API Key en Configuración"}
+                        style={{ background: "#dcfce7", color: "#16a34a" }}>
+                        ✓ Listo para usar
                       </span>
                     </div>
 
