@@ -2,3 +2,6 @@ project_id = "xzyveouixrqkhwhllprw"
 
 [functions.edit-vehicle-image]
 verify_jwt = false
+
+[functions.get-autos]
+verify_jwt = false
