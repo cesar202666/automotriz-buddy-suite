@@ -170,43 +170,9 @@ interface AppState {
   setUsuarioActual: (u: Usuario | null) => void;
 }
 
-const INITIAL_CLIENTES: Cliente[] = [
-  { id: "101", nombres: "Juan", apellidos: "Perez", direccion: "Las Condes 102", telefono: "+56 9 1234 5678", email: "juan@demo.cl", docCedula: null, docCedulaName: null },
-  { id: "102", nombres: "Maria", apellidos: "Gonzalez", direccion: "Providencia 45", telefono: "+56 9 8765 4321", email: "maria@demo.cl", docCedula: null, docCedulaName: null },
-  { id: "103", nombres: "Renttmontt", apellidos: "SPA", direccion: "Santiago Centro 90", telefono: "+56 2 2233 4455", email: "contacto@renttmontt.cl", docCedula: null, docCedulaName: null },
-  { id: "104", nombres: "Pedro", apellidos: "Vargas", direccion: "Ñuñoa 500", telefono: "+56 9 4444 5555", email: "pedro@demo.cl", docCedula: null, docCedulaName: null },
-];
-
-const INITIAL_VEHICULOS: Vehiculo[] = [
-  {
-    id: "1", folio: "00001", patente: "FDGT99", tipo: "AUTOMOVIL", marca: "HYUNDAI",
-    modelo: "ELANTRA", anio: "2023", estado: "DISPONIBLE", precioVenta: 5790000,
-    precioCosto: 4000000, sucursal: "Egaña", usuarioAsignado: "César", combustible: "Bencina",
-    nMotor: "", vin: "", color: "Blanco", kilometraje: 45000, ubicacion: "Egaña",
-    comentarios: "", transmision: "Transmisión Automática", traccion: "Tracción Delantera",
-    aireAcondicionado: true, equipamientoExtra: [], fotos: []
-  },
-  {
-    id: "2", folio: "00002", patente: "HXDD99", tipo: "AUTOMOVIL", marca: "CHEVROLET",
-    modelo: "SPARK", anio: "2022", estado: "DISPONIBLE", precioVenta: 4900000,
-    precioCosto: 3500000, sucursal: "Egaña", usuarioAsignado: "Pamela V.", combustible: "Bencina",
-    nMotor: "", vin: "", color: "Rojo", kilometraje: 32000, ubicacion: "Egaña",
-    comentarios: "", transmision: "Transmisión Manual", traccion: "Tracción Delantera",
-    aireAcondicionado: true, equipamientoExtra: [], fotos: []
-  },
-];
-
-const INITIAL_VENTAS: Venta[] = [
-  {
-    id: "1", ejecutiva: "BELEN O.", fechaVenta: "27-02-2026", sucursal: "EGAÑA", clienteId: "",
-    clienteNombre: "", informeTecnico: null, informeTecnicoName: null, patente: "FDGT99",
-    marca: "HYUNDAI", modelo: "ELANTRA", precioRetoma: 4000000, precioVenta: 5790000,
-    margenBruto: 1790000, nCredito: "", comisionCredito: 166850, gastosAdmin: 200000,
-    precioVtaFinal: 5756850, creditoFirmado: "NO", creditoFirmadoDoc: null, creditoFirmadoDocName: null,
-    montoPieCaja: 1272500, prepago: "NO", prepagoDoc: null, prepagoDocName: null,
-    documentacionVenta: null, documentacionVentaName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false
-  },
-];
+const INITIAL_CLIENTES: Cliente[] = [];
+const INITIAL_VEHICULOS: Vehiculo[] = [];
+const INITIAL_VENTAS: Venta[] = [];
 
 const AppContext = createContext<AppState>({} as AppState);
 

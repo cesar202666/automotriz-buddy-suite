@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Plus, Trash2, TrendingUp, Car, DollarSign, BarChart2 } from "lucide-react";
+import { Lock, Plus, Trash2, TrendingUp, Car, DollarSign, BarChart2 } from "lucide-react";
 import { useApp, Adquisicion } from "@/context/AppContext";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
 
 const fmt = (n: number) => "$" + n.toLocaleString("es-CL");
+const CLAVE_GERENCIA = "123cuatro";
+
 const emptyAdq = (): Omit<Adquisicion, "id"> => ({
   empresa: "", tipoProcedencia: "", observaciones: "", patente: "", marca: "", modelo: "",
   anio: "", kilometraje: "", tipo: "", color: "", obsVehiculo: "", precioOriginal: 0,
@@ -12,9 +14,38 @@ const emptyAdq = (): Omit<Adquisicion, "id"> => ({
 
 export default function Gerencia() {
   const { adquisiciones, setAdquisiciones, vehiculos, ventas } = useApp();
+  const [unlocked, setUnlocked] = useState(false);
+  const [clave, setClave] = useState("");
+  const [claveError, setClaveError] = useState("");
   const [tab, setTab] = useState<"ficha" | "inventario">("ficha");
   const [form, setForm] = useState<Omit<Adquisicion, "id">>(emptyAdq());
   const [nuevoGasto, setNuevoGasto] = useState({ descripcion: "", monto: 0 });
+
+  const tryUnlock = () => {
+    if (clave === CLAVE_GERENCIA) { setUnlocked(true); setClaveError(""); }
+    else { setClaveError("Clave incorrecta"); }
+  };
+
+  if (!unlocked) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24">
+        <div className="bg-card rounded-xl shadow-lg p-8 w-full max-w-sm border" style={{ borderColor: "hsl(var(--border))" }}>
+          <div className="flex items-center gap-2 mb-4" style={{ color: "hsl(var(--primary))" }}>
+            <Lock size={22} />
+            <h2 className="text-lg font-bold">Módulo Gerencia</h2>
+          </div>
+          <p className="text-sm mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Ingrese la clave de acceso para continuar.</p>
+          <input type="password" className="w-full border rounded px-3 py-2 text-sm bg-background mb-2"
+            style={{ borderColor: claveError ? "#ef4444" : "hsl(var(--border))" }}
+            placeholder="Clave de gerencia" value={clave}
+            onChange={e => { setClave(e.target.value); setClaveError(""); }}
+            onKeyDown={e => e.key === "Enter" && tryUnlock()} autoFocus />
+          {claveError && <p className="text-xs text-red-500 mb-3">{claveError}</p>}
+          <button onClick={tryUnlock} className="w-full py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Ingresar</button>
+        </div>
+      </div>
+    );
+  }
 
   const calcCostoTotal = (precioBase: number, gastos: { monto: number }[]) =>
     precioBase + gastos.reduce((s, g) => s + g.monto, 0);
@@ -39,12 +70,10 @@ export default function Gerencia() {
     setForm(f => ({ ...f, gastosExtra: newGastos, costoTotal: ct, precioSugerido: ct + 850000 }));
   };
 
-  const limpiarFormulario = () => setForm(emptyAdq());
-
   const guardarCompra = () => {
     if (!form.patente || !form.marca) return alert("Patente y Marca son requeridos.");
     setAdquisiciones([...adquisiciones, { id: String(Date.now()), ...form }]);
-    limpiarFormulario();
+    setForm(emptyAdq());
   };
 
   // KPI data
@@ -53,7 +82,6 @@ export default function Gerencia() {
   const costoPromedio = adquisiciones.length > 0 ? inversionTotal / adquisiciones.length : 0;
   const margenProyectado = adquisiciones.reduce((s, a) => s + (a.precioSugerido - a.costoTotal), 0);
 
-  // Chart data: compras vs ventas por mes ficticio
   const chartData = adquisiciones.slice(-6).map((a, i) => ({
     mes: a.fechaCompra || `Compra ${i + 1}`,
     Compras: a.costoTotal,
@@ -69,7 +97,6 @@ export default function Gerencia() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2 mb-6">
         {[{ key: "ficha" as const, label: "1. Ficha de Ingreso" }, { key: "inventario" as const, label: "2. Inventario y KPIs" }].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -80,7 +107,6 @@ export default function Gerencia() {
         ))}
       </div>
 
-      {/* === FICHA DE INGRESO === */}
       {tab === "ficha" && (
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -89,7 +115,7 @@ export default function Gerencia() {
               <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Complete los datos de procedencia y costos reales</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={limpiarFormulario} className="px-4 py-2 rounded text-sm border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Limpiar Formulario</button>
+              <button onClick={() => setForm(emptyAdq())} className="px-4 py-2 rounded text-sm border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Limpiar</button>
               <button onClick={guardarCompra} className="px-4 py-2 rounded text-sm font-medium text-white flex items-center gap-2" style={{ background: "hsl(var(--primary))" }}>
                 ✓ Guardar Compra
               </button>
@@ -97,7 +123,6 @@ export default function Gerencia() {
           </div>
 
           <div className="flex gap-6">
-            {/* Left */}
             <div className="flex-1 space-y-4">
               <div className="border rounded-lg p-5" style={{ borderColor: "hsl(var(--border))" }}>
                 <div className="flex items-center gap-2 mb-4 text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>
@@ -119,13 +144,13 @@ export default function Gerencia() {
                     </select></div>
                   <div><label className="block text-xs font-medium mb-1">Observaciones</label>
                     <textarea rows={3} className="w-full border rounded px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }}
-                      placeholder="Contexto, estado..." value={form.observaciones} onChange={e => setForm(f => ({ ...f, observaciones: e.target.value }))} /></div>
+                      value={form.observaciones} onChange={e => setForm(f => ({ ...f, observaciones: e.target.value }))} /></div>
                 </div>
               </div>
 
               <div className="border rounded-lg p-5" style={{ borderColor: "hsl(var(--border))" }}>
                 <div className="flex items-center gap-2 mb-4 text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>
-                  <Car size={16} /> Identificación
+                  <Car size={16} /> Identificación del Vehículo
                 </div>
                 <div className="space-y-3">
                   <div><label className="block text-xs font-medium mb-1">Patente *</label>
@@ -134,9 +159,9 @@ export default function Gerencia() {
                   <div className="grid grid-cols-2 gap-3">
                     <div><label className="block text-xs font-medium mb-1">Marca *</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={form.marca} onChange={e => setForm(f => ({ ...f, marca: e.target.value }))} /></div>
-                    <div><label className="block text-xs font-medium mb-1">Modelo *</label>
+                    <div><label className="block text-xs font-medium mb-1">Modelo</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={form.modelo} onChange={e => setForm(f => ({ ...f, modelo: e.target.value }))} /></div>
-                    <div><label className="block text-xs font-medium mb-1">Año *</label>
+                    <div><label className="block text-xs font-medium mb-1">Año</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={form.anio} onChange={e => setForm(f => ({ ...f, anio: e.target.value }))} /></div>
                     <div><label className="block text-xs font-medium mb-1">Kilometraje</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={form.kilometraje} onChange={e => setForm(f => ({ ...f, kilometraje: e.target.value }))} /></div>
@@ -148,38 +173,39 @@ export default function Gerencia() {
                     <div><label className="block text-xs font-medium mb-1">Color</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
                   </div>
-                  <div><label className="block text-xs font-medium mb-1">Observaciones del Vehículo</label>
+                  <div><label className="block text-xs font-medium mb-1">Observaciones Vehículo</label>
                     <textarea rows={2} className="w-full border rounded px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }}
-                      placeholder="estado mecánico, accesorios..." value={form.obsVehiculo} onChange={e => setForm(f => ({ ...f, obsVehiculo: e.target.value }))} /></div>
+                      value={form.obsVehiculo} onChange={e => setForm(f => ({ ...f, obsVehiculo: e.target.value }))} /></div>
                 </div>
               </div>
             </div>
 
-            {/* Right */}
             <div className="w-80">
-              <div className="border rounded-lg p-5" style={{ borderColor: "hsl(var(--primary))", borderWidth: 2 }}>
+              <div className="border-2 rounded-lg p-5" style={{ borderColor: "hsl(var(--primary))" }}>
                 <div className="flex items-center gap-2 mb-4 text-sm font-semibold" style={{ color: "#f59e0b" }}>
                   <DollarSign size={16} /> Finanzas y Gastos Reales
                 </div>
                 <div className="space-y-3">
                   <div><label className="block text-xs font-medium mb-1">PRECIO ORIGINAL *</label>
-                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: "hsl(var(--muted-foreground))" }}>$</span>
+                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>$</span>
                       <input type="number" className="w-full border rounded pl-8 pr-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioOriginal} onChange={e => updatePrecio(Number(e.target.value))} /></div></div>
+                        value={form.precioOriginal || ""} onChange={e => updatePrecio(Number(e.target.value))} /></div></div>
                   <div><label className="block text-xs font-medium mb-1">FECHA COMPRA *</label>
                     <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                       placeholder="DD-MM-YYYY" value={form.fechaCompra} onChange={e => setForm(f => ({ ...f, fechaCompra: e.target.value }))} /></div>
 
                   <div className="border rounded-lg p-3" style={{ borderColor: "hsl(var(--border))", borderStyle: "dashed" }}>
-                    <p className="text-xs font-semibold mb-2">● Gastos Asociados Individuales</p>
+                    <p className="text-xs font-semibold mb-2">Gastos Asociados Individuales</p>
                     <div className="flex gap-2 mb-2">
                       <input className="flex-1 border rounded px-2 py-1 text-xs bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="Descripción ej: Flete" value={nuevoGasto.descripcion}
+                        placeholder="Descripción" value={nuevoGasto.descripcion}
                         onChange={e => setNuevoGasto(g => ({ ...g, descripcion: e.target.value }))} />
                       <input type="number" className="w-20 border rounded px-2 py-1 text-xs bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         placeholder="Monto" value={nuevoGasto.monto || ""}
                         onChange={e => setNuevoGasto(g => ({ ...g, monto: Number(e.target.value) }))} />
-                      <button onClick={addGasto} className="px-2 py-1 rounded text-xs font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Add</button>
+                      <button onClick={addGasto} className="px-2 py-1 rounded text-xs font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
+                        <Plus size={12} />
+                      </button>
                     </div>
                     {form.gastosExtra.map((g, i) => (
                       <div key={i} className="flex items-center justify-between text-xs py-1 border-b" style={{ borderColor: "hsl(var(--border))" }}>
@@ -191,18 +217,18 @@ export default function Gerencia() {
                       </div>
                     ))}
                     <div className="flex justify-between text-xs mt-2 font-semibold">
-                      <span>Subtotal Gastos Adicionales</span>
+                      <span>Subtotal Gastos</span>
                       <span>{fmt(form.gastosExtra.reduce((s, g) => s + g.monto, 0))}</span>
                     </div>
                   </div>
 
                   <div className="rounded-lg p-3 border" style={{ background: "hsl(var(--muted))", borderColor: "hsl(var(--border))" }}>
                     <p className="text-xs font-medium mb-1">Costo Total Real de Adquisición</p>
-                    <p className="text-lg font-bold" style={{ color: "hsl(var(--primary))" }}>$ {form.costoTotal.toLocaleString("es-CL")}</p>
+                    <p className="text-lg font-bold" style={{ color: "hsl(var(--primary))" }}>{fmt(form.costoTotal)}</p>
                   </div>
-                  <div className="rounded-lg p-3 border" style={{ borderColor: "hsl(var(--primary))", borderWidth: 2 }}>
+                  <div className="rounded-lg p-3 border-2" style={{ borderColor: "hsl(var(--primary))" }}>
                     <p className="text-xs font-medium mb-1">Precio Piso Comercial Sugerido</p>
-                    <p className="text-lg font-bold" style={{ color: "hsl(var(--primary))" }}>$ {form.precioSugerido.toLocaleString("es-CL")}</p>
+                    <p className="text-lg font-bold" style={{ color: "hsl(var(--primary))" }}>{fmt(form.precioSugerido)}</p>
                   </div>
                 </div>
               </div>
@@ -211,7 +237,6 @@ export default function Gerencia() {
         </div>
       )}
 
-      {/* === INVENTARIO Y KPIs === */}
       {tab === "inventario" && (
         <div>
           <div className="grid grid-cols-4 gap-4 mb-6">
@@ -246,19 +271,17 @@ export default function Gerencia() {
             ) : (
               <div className="py-12 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>
                 <TrendingUp size={36} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Registre adquisiciones en la Ficha de Ingreso para ver el gráfico</p>
+                <p className="text-sm">Registre adquisiciones para ver el gráfico</p>
               </div>
             )}
           </div>
 
           <div className="bg-card rounded-lg border overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
-            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "hsl(var(--border))" }}>
-              <h3 className="font-semibold text-sm">Detalle Descriptivo de Compras</h3>
-            </div>
+            <div className="px-4 py-3 border-b font-semibold text-sm" style={{ borderColor: "hsl(var(--border))" }}>Detalle Descriptivo de Compras</div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs uppercase" style={{ background: "hsl(220,25%,10%)", color: "#fff" }}>
-                  {["Fecha Compra","Procedencia","Patente","Vehículo","Obs. Unidad","Costo Base","Gastos Extra","Total Final","Precio Piso"].map(h => (
+                  {["Fecha Compra","Procedencia","Patente","Vehículo","Costo Base","Gastos Extra","Total Final","Precio Piso"].map(h => (
                     <th key={h} className="px-4 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -273,19 +296,16 @@ export default function Gerencia() {
                     </td>
                     <td className="px-4 py-3 font-semibold">{a.patente}</td>
                     <td className="px-4 py-3">
-                      <p className="font-medium">{a.marca} - {a.modelo}</p>
-                      <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>{a.anio} • {a.kilometraje} km</p>
+                      <p className="font-medium">{a.marca} {a.modelo}</p>
+                      <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>{a.anio} · {a.color}</p>
                     </td>
-                    <td className="px-4 py-3 text-xs max-w-xs truncate">{a.obsVehiculo}</td>
-                    <td className="px-4 py-3 font-semibold">{fmt(a.precioOriginal)}</td>
-                    <td className="px-4 py-3 font-semibold text-red-500">{fmt(a.gastosExtra.reduce((s, g) => s + g.monto, 0))}</td>
-                    <td className="px-4 py-3 font-bold" style={{ color: "hsl(var(--primary))" }}>{fmt(a.costoTotal)}</td>
-                    <td className="px-4 py-3 font-bold" style={{ color: "#22c55e" }}>{fmt(a.precioSugerido)}</td>
+                    <td className="px-4 py-3">{fmt(a.precioOriginal)}</td>
+                    <td className="px-4 py-3 text-red-500">{fmt(a.costoTotal - a.precioOriginal)}</td>
+                    <td className="px-4 py-3 font-semibold" style={{ color: "hsl(var(--primary))" }}>{fmt(a.costoTotal)}</td>
+                    <td className="px-4 py-3 font-semibold text-green-600">{fmt(a.precioSugerido)}</td>
                   </tr>
                 ))}
-                {adquisiciones.length === 0 && (
-                  <tr><td colSpan={9} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>Sin adquisiciones registradas</td></tr>
-                )}
+                {adquisiciones.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>Sin adquisiciones registradas</td></tr>}
               </tbody>
             </table>
           </div>
