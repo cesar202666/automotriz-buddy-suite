@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface Cliente {
   id: string;
@@ -149,11 +150,78 @@ const USUARIOS_INICIALES: Usuario[] = [
   { id: "3", nombre: "Nicol M.", clave: "nicol123", rol: "vendedor", email: "nicol@egana.cl" },
 ];
 
+// ─── DB helpers ──────────────────────────────────────────────────────────────
+
+function toDb(v: Vehiculo) {
+  return {
+    id: v.id,
+    folio: v.folio,
+    patente: v.patente,
+    tipo: v.tipo,
+    marca: v.marca,
+    modelo: v.modelo,
+    anio: v.anio,
+    estado: v.estado,
+    precio_venta: v.precioVenta,
+    precio_costo: v.precioCosto,
+    sucursal: v.sucursal,
+    usuario_asignado: v.usuarioAsignado,
+    combustible: v.combustible,
+    n_motor: v.nMotor,
+    vin: v.vin,
+    color: v.color,
+    kilometraje: v.kilometraje,
+    ubicacion: v.ubicacion,
+    comentarios: v.comentarios,
+    transmision: v.transmision,
+    traccion: v.traccion,
+    aire_acondicionado: v.aireAcondicionado,
+    equipamiento_extra: v.equipamientoExtra,
+    fotos: v.fotos,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function fromDb(row: Record<string, unknown>): Vehiculo {
+  return {
+    id: String(row.id ?? ""),
+    folio: String(row.folio ?? ""),
+    patente: String(row.patente ?? ""),
+    tipo: String(row.tipo ?? "AUTOMOVIL"),
+    marca: String(row.marca ?? ""),
+    modelo: String(row.modelo ?? ""),
+    anio: String(row.anio ?? ""),
+    estado: (row.estado ?? "DISPONIBLE") as Vehiculo["estado"],
+    precioVenta: Number(row.precio_venta ?? 0),
+    precioCosto: Number(row.precio_costo ?? 0),
+    sucursal: String(row.sucursal ?? ""),
+    usuarioAsignado: String(row.usuario_asignado ?? ""),
+    combustible: String(row.combustible ?? "Bencina"),
+    nMotor: String(row.n_motor ?? ""),
+    vin: String(row.vin ?? ""),
+    color: String(row.color ?? ""),
+    kilometraje: Number(row.kilometraje ?? 0),
+    ubicacion: String(row.ubicacion ?? ""),
+    comentarios: String(row.comentarios ?? ""),
+    transmision: String(row.transmision ?? ""),
+    traccion: String(row.traccion ?? ""),
+    aireAcondicionado: Boolean(row.aire_acondicionado ?? false),
+    equipamientoExtra: (row.equipamiento_extra as string[]) ?? [],
+    fotos: (row.fotos as string[]) ?? [],
+  };
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+
 interface AppState {
   clientes: Cliente[];
   setClientes: (c: Cliente[]) => void;
   vehiculos: Vehiculo[];
   setVehiculos: (v: Vehiculo[]) => void;
+  addVehiculo: (v: Vehiculo) => Promise<void>;
+  updateVehiculo: (v: Vehiculo) => Promise<void>;
+  deleteVehiculo: (id: string) => Promise<void>;
+  vehiculosLoading: boolean;
   consignatarios: Consignatario[];
   setConsignatarios: (c: Consignatario[]) => void;
   ventas: Venta[];
@@ -170,27 +238,75 @@ interface AppState {
   setUsuarioActual: (u: Usuario | null) => void;
 }
 
-const INITIAL_CLIENTES: Cliente[] = [];
-const INITIAL_VEHICULOS: Vehiculo[] = [];
-const INITIAL_VENTAS: Venta[] = [];
-
 const AppContext = createContext<AppState>({} as AppState);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [clientes, setClientes] = useState<Cliente[]>(INITIAL_CLIENTES);
-  const [vehiculos, setVehiculos] = useState<Vehiculo[]>(INITIAL_VEHICULOS);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
+  const [vehiculosLoading, setVehiculosLoading] = useState(true);
   const [consignatarios, setConsignatarios] = useState<Consignatario[]>([]);
-  const [ventas, setVentas] = useState<Venta[]>(INITIAL_VENTAS);
+  const [ventas, setVentas] = useState<Venta[]>([]);
   const [cuentasPagar, setCuentasPagar] = useState<CuentaPagar[]>([]);
   const [cuentasCobrar, setCuentasCobrar] = useState<CuentaCobrar[]>([]);
   const [adquisiciones, setAdquisiciones] = useState<Adquisicion[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>(USUARIOS_INICIALES);
   const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(USUARIOS_INICIALES[0]);
 
+  // ── Load vehicles from DB on mount ─────────────────────────────────────────
+  useEffect(() => {
+    const loadVehiculos = async () => {
+      setVehiculosLoading(true);
+      const { data, error } = await supabase
+        .from("vehiculos")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!error && data) {
+        setVehiculos(data.map(row => fromDb(row as Record<string, unknown>)));
+      }
+      setVehiculosLoading(false);
+    };
+    loadVehiculos();
+  }, []);
+
+  // ── CRUD ────────────────────────────────────────────────────────────────────
+  const addVehiculo = async (v: Vehiculo) => {
+    const { data, error } = await supabase
+      .from("vehiculos")
+      .insert(toDb(v))
+      .select()
+      .single();
+    if (!error && data) {
+      setVehiculos(prev => [fromDb(data as Record<string, unknown>), ...prev]);
+    }
+  };
+
+  const updateVehiculo = async (v: Vehiculo) => {
+    const { data, error } = await supabase
+      .from("vehiculos")
+      .update(toDb(v))
+      .eq("id", v.id)
+      .select()
+      .single();
+    if (!error && data) {
+      setVehiculos(prev =>
+        prev.map(x => x.id === v.id ? fromDb(data as Record<string, unknown>) : x)
+      );
+    }
+  };
+
+  const deleteVehiculo = async (id: string) => {
+    const { error } = await supabase.from("vehiculos").delete().eq("id", id);
+    if (!error) {
+      setVehiculos(prev => prev.filter(x => x.id !== id));
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       clientes, setClientes,
       vehiculos, setVehiculos,
+      addVehiculo, updateVehiculo, deleteVehiculo,
+      vehiculosLoading,
       consignatarios, setConsignatarios,
       ventas, setVentas,
       cuentasPagar, setCuentasPagar,
