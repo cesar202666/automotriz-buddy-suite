@@ -3,7 +3,35 @@ import { Plus, Search, Edit2, Trash2, Phone, Mail, FileText, Download, Upload, X
 import { useApp, Cliente } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 
+const MASTER_PASS = "123cuatro";
+
 const emptyForm = (): Omit<Cliente, "id"> => ({ nombres: "", apellidos: "", direccion: "", telefono: "", email: "", docCedula: null, docCedulaName: null });
+
+function DeleteModal({ label, onConfirm, onCancel }: { label: string; onConfirm: () => void; onCancel: () => void }) {
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState(false);
+  const submit = () => {
+    if (pass === MASTER_PASS) onConfirm();
+    else { setErr(true); setPass(""); }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+      <div className="bg-card rounded-xl shadow-2xl p-7 w-80 animate-fade-in" style={{ border: "1px solid hsl(var(--border))" }}>
+        <h3 className="font-bold text-sm mb-1" style={{ color: "hsl(var(--destructive))" }}>Eliminar {label}</h3>
+        <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa la clave de Administrador Master para confirmar.</p>
+        <input type="password" className={`w-full border rounded px-3 py-2 text-sm bg-background mb-2 ${err ? "border-destructive" : ""}`}
+          style={{ borderColor: err ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
+          placeholder="Clave master" value={pass} onChange={e => { setPass(e.target.value); setErr(false); }}
+          onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
+        {err && <p className="text-xs mb-2" style={{ color: "hsl(var(--destructive))" }}>Clave incorrecta</p>}
+        <div className="flex gap-2 justify-end mt-3">
+          <button onClick={onCancel} className="px-3 py-1.5 rounded border text-sm hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
+          <button onClick={submit} className="px-3 py-1.5 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--destructive))" }}>Eliminar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Clientes() {
   const { clientes, setClientes } = useApp();
@@ -14,6 +42,7 @@ export default function Clientes() {
   const [docDataUrl, setDocDataUrl] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const exportExcel = () => {
     const data = clientes.map(c => ({
@@ -69,8 +98,9 @@ export default function Clientes() {
     setShowModal(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("¿Eliminar este cliente?")) setClientes(clientes.filter(c => c.id !== id));
+  const doDelete = () => {
+    if (deleteId) setClientes(clientes.filter(c => c.id !== deleteId));
+    setDeleteId(null);
   };
 
   const handleSave = () => {
@@ -103,6 +133,14 @@ export default function Clientes() {
 
   return (
     <div>
+      {deleteId && (
+        <DeleteModal
+          label="Cliente"
+          onConfirm={doDelete}
+          onCancel={() => setDeleteId(null)}
+        />
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Directorio de Clientes</h1>
@@ -172,7 +210,7 @@ export default function Clientes() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button onClick={() => openEdit(c)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={15} /></button>
-                    <button onClick={() => handleDelete(c.id)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={15} /></button>
+                    <button onClick={() => setDeleteId(c.id)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={15} /></button>
                   </div>
                 </td>
               </tr>
@@ -191,7 +229,16 @@ export default function Clientes() {
               <h2 className="text-base font-bold" style={{ color: "hsl(var(--primary))" }}>
                 {editId ? "Editar Cliente" : "Nuevo Registro de Cliente"}
               </h2>
-              <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-muted"><X size={18} /></button>
+              <div className="flex items-center gap-2">
+                {editId && (
+                  <button onClick={() => { setShowModal(false); setDeleteId(editId); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium"
+                    style={{ color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
+                    <Trash2 size={13} /> Eliminar
+                  </button>
+                )}
+                <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-muted"><X size={18} /></button>
+              </div>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
               <div>
