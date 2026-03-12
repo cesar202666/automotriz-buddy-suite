@@ -50,10 +50,7 @@ const CUOTAS = ["12","24","36","48","60","72","84"];
 const ESTADOS_CIVILES = ["Soltero/a","Casado/a","Divorciado/a","Viudo/a","Conviviente civil"];
 const SITUACIONES = ["Dependiente","Independiente","Jubilado/a","Sin actividad"];
 
-const initialCreditos: Credito[] = [
-  { id:"1", financiera:"Nicolas Jaramillo", cotizacion:"MARIO SEBASTIAN VEAS NAVARRO", descripcion:"", estado:"APROBADA", tiempoRespuesta:"", comentario:"", montoFinanciar:8000000, cuotas:"48", valorCuota:250000, tasaInteres:"2.5", comision:0, clienteId:"101", clienteNombre:"Mario Veas", clienteDesc:"", rut:"12.345.678-9", estadoCivil:"Soltero/a", fechaNacimiento:"01/01/1990", nombres:"Mario Sebastian", apellidos:"Veas Navarro", direccion:"Santiago", ciudad:"Santiago", casaHabita:"Arrendada", estudios:"Universitario", precioVehiculo:10000000, montoPie:2000000, situacionLaboral:"Dependiente", patrimonio:"Bajo", banco:"BancoEstado", antiguedad:"5 años", tipoCredito:"Auto", marcaVehiculo:"Toyota", modeloVehiculo:"Corolla", patenteVehiculo:"ABC123", anioVehiculo:"2024" },
-  { id:"2", financiera:"Nicolas Jaramillo", cotizacion:"MATIAS OLAVARRIA", descripcion:"", estado:"NEGOCIO CERRADO", tiempoRespuesta:"", comentario:"", montoFinanciar:5000000, cuotas:"36", valorCuota:180000, tasaInteres:"3", comision:0, clienteId:"102", clienteNombre:"Matias Olavarria", clienteDesc:"", rut:"13.456.789-0", estadoCivil:"Casado/a", fechaNacimiento:"15/05/1985", nombres:"Matias", apellidos:"Olavarria", direccion:"Providencia", ciudad:"Santiago", casaHabita:"Propia", estudios:"Técnico", precioVehiculo:7000000, montoPie:2000000, situacionLaboral:"Dependiente", patrimonio:"Medio", banco:"Santander", antiguedad:"3 años", tipoCredito:"Auto", marcaVehiculo:"Mazda", modeloVehiculo:"3", patenteVehiculo:"DEF456", anioVehiculo:"2022" },
-];
+const initialCreditos: Credito[] = [];
 
 const emptyCredito = (): Partial<Credito> => ({
   financiera:"", cotizacion:"", descripcion:"", estado:"EN EVALUACIÓN", tiempoRespuesta:"", comentario:"",
