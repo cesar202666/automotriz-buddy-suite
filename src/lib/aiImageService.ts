@@ -62,7 +62,7 @@ async function processWithGemini(
   console.log("[aiImageService] Gemini: mimeType:", mimeType, "base64 length:", base64.length);
 
   const endpoint =
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
 
   const body = JSON.stringify({
     contents: [
