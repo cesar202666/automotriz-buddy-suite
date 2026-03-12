@@ -163,16 +163,49 @@ async function processWithOpenAI(dataUrl: string, prompt: string, apiKey: string
 
   console.log("[aiImageService] OpenAI status:", res.status);
 
+  const rawText = await res.text();
+  console.log("[aiImageService] OpenAI raw response (primeros 300):", rawText.slice(0, 300));
+
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    return { ok: false, error: `OpenAI error ${res.status}: ${body.slice(0, 300)}` };
+    return { ok: false, error: `OpenAI error ${res.status}: ${rawText.slice(0, 300)}` };
   }
 
-  const data = await res.json();
-  const b64 = data?.data?.[0]?.b64_json;
-  if (!b64) return { ok: false, error: "OpenAI no devolvió imagen." };
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    return { ok: false, error: "OpenAI devolvió respuesta inválida (no es JSON)." };
+  }
 
-  return { ok: true, dataUrl: `data:image/png;base64,${b64}` };
+  console.log("[aiImageService] OpenAI data keys:", JSON.stringify(Object.keys(data)));
+  const item = (data?.data as Array<Record<string, string>>)?.[0];
+  console.log("[aiImageService] OpenAI item keys:", item ? JSON.stringify(Object.keys(item)) : "null");
+
+  // DALL-E puede retornar b64_json o url según el contexto
+  const b64 = item?.b64_json;
+  const url = item?.url;
+
+  if (b64) {
+    return { ok: true, dataUrl: `data:image/png;base64,${b64}` };
+  }
+  if (url) {
+    // Convertir URL a dataUrl descargando la imagen
+    console.log("[aiImageService] OpenAI devolvió URL, descargando imagen...");
+    try {
+      const imgRes = await fetch(url);
+      const blob = await imgRes.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve({ ok: true, dataUrl: reader.result as string });
+        reader.onerror = () => resolve({ ok: false, error: "No se pudo convertir la URL de OpenAI a imagen." });
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return { ok: false, error: "No se pudo descargar la imagen generada por OpenAI." };
+    }
+  }
+
+  return { ok: false, error: `OpenAI no devolvió imagen. Keys recibidas: ${item ? JSON.stringify(Object.keys(item)) : "vacío"}` };
 }
 
 // ─── API pública ──────────────────────────────────────────────────
