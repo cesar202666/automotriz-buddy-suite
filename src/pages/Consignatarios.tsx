@@ -387,6 +387,8 @@ export default function Consignatarios() {
 
   return (
     <div>
+      {deleteId && <DeleteConsigModal onConfirm={doDelete} onCancel={() => setDeleteId(null)} />}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Consignatarios</h1>
