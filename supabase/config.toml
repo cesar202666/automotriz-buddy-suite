@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.agente-egana]
 verify_jwt = false
+
+[functions.manychat-webhook]
+verify_jwt = false
