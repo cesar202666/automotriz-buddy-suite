@@ -439,6 +439,15 @@ export default function Vehiculos() {
               {tab === "galeria" && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
+                    {fotosCount > 0 && (
+                      <button onClick={downloadAllFotos}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs font-medium hover:bg-muted absolute right-6"
+                        style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}>
+                        <Download size={13} /> Descargar todas las fotos
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between mb-3">
                     <div>
                       <h3 className="text-sm font-bold">📷 Registro Fotográfico Requerido</h3>
                       <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Haz clic en cada cuadrante para cargar la vista correspondiente.</p>
