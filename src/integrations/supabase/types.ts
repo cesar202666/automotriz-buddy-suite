@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      conversaciones: {
+        Row: {
+          apellido: string | null
+          canal: string | null
+          contact_id: string
+          created_at: string
+          datos_capturados: Json | null
+          id: string
+          interes: string | null
+          leido: boolean
+          mensaje_cliente: string
+          nombre: string
+          notificado_vendedor: boolean
+          respuesta_agente: string
+          telefono: string | null
+          urgencia: string | null
+          vendedor_asignado: string | null
+        }
+        Insert: {
+          apellido?: string | null
+          canal?: string | null
+          contact_id: string
+          created_at?: string
+          datos_capturados?: Json | null
+          id?: string
+          interes?: string | null
+          leido?: boolean
+          mensaje_cliente: string
+          nombre?: string
+          notificado_vendedor?: boolean
+          respuesta_agente: string
+          telefono?: string | null
+          urgencia?: string | null
+          vendedor_asignado?: string | null
+        }
+        Update: {
+          apellido?: string | null
+          canal?: string | null
+          contact_id?: string
+          created_at?: string
+          datos_capturados?: Json | null
+          id?: string
+          interes?: string | null
+          leido?: boolean
+          mensaje_cliente?: string
+          nombre?: string
+          notificado_vendedor?: boolean
+          respuesta_agente?: string
+          telefono?: string | null
+          urgencia?: string | null
+          vendedor_asignado?: string | null
+        }
+        Relationships: []
+      }
       vehiculos: {
         Row: {
           aire_acondicionado: boolean
