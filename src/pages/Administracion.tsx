@@ -19,7 +19,7 @@ export default function Administracion() {
   // Usuarios
   const [showUserModal, setShowUserModal] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [userForm, setUserForm] = useState({ nombre: "", clave: "", rol: "vendedor" as Usuario["rol"], email: "" });
+  const [userForm, setUserForm] = useState({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor" as Usuario["rol"], email: "" });
 
   // Cuentas por Pagar
   const [showPagarModal, setShowPagarModal] = useState(false);
@@ -99,8 +99,8 @@ export default function Administracion() {
     .slice(0, 10);
 
   // === USUARIOS ===
-  const openCreateUser = () => { setUserForm({ nombre: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
-  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
+  const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
+  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
   const saveUser = () => {
     if (!userForm.nombre.trim()) return alert("Nombre requerido");
     if (editUserId) setUsuarios(usuarios.map(u => u.id === editUserId ? { ...u, ...userForm } : u));
@@ -468,12 +468,16 @@ export default function Administracion() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <h3 className="font-bold mb-4">{editUserId ? "Editar Usuario" : "Nuevo Usuario"}</h3>
-            <div className="space-y-3">
-              <div><label className="block text-xs font-medium mb-1">Nombre</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-xs font-medium mb-1">Nombre *</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.nombre} onChange={e => setUserForm(f => ({ ...f, nombre: e.target.value }))} /></div>
+              <div><label className="block text-xs font-medium mb-1">Apellido</label>
+                <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.apellido} onChange={e => setUserForm(f => ({ ...f, apellido: e.target.value }))} /></div>
+              <div><label className="block text-xs font-medium mb-1">Teléfono</label>
+                <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="+56 9..." value={userForm.telefono} onChange={e => setUserForm(f => ({ ...f, telefono: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1">Email</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.email} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">Clave</label>
+              <div><label className="block text-xs font-medium mb-1">Contraseña</label>
                 <input type="password" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.clave} onChange={e => setUserForm(f => ({ ...f, clave: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1">Rol</label>
                 <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.rol} onChange={e => setUserForm(f => ({ ...f, rol: e.target.value as Usuario["rol"] }))}>

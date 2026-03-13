@@ -1,9 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
+import { useState } from "react";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
-  ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare,
+  ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
+import { useApp } from "@/context/AppContext";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -18,8 +20,75 @@ const navItems = [
   { label: "Configuración", icon: Wrench, path: "/configuracion" },
 ];
 
+// Roles que pueden ver admin/gerencia
+const ADMIN_ROUTES = ["/administracion", "/gerencia"];
+const VENDEDOR_HIDDEN = ["/administracion", "/gerencia"];
+
+function LoginScreen({ onLogin }: { onLogin: (clave: string) => boolean }) {
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ok = onLogin(clave);
+    if (!ok) { setError("Clave incorrecta"); setClave(""); }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="bg-card rounded-2xl shadow-2xl p-10 w-full max-w-sm border" style={{ borderColor: "hsl(var(--border))" }}>
+        <div className="flex items-center gap-3 mb-8">
+          <img src={logoEa} alt="Egaña" className="w-12 h-12 rounded-lg object-cover" />
+          <div>
+            <div className="text-lg font-bold">Egaña Automotriz</div>
+            <div className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Sistema ERP</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mb-1" style={{ color: "hsl(var(--primary))" }}>
+          <Lock size={18} />
+          <h2 className="text-base font-bold">Iniciar Sesión</h2>
+        </div>
+        <p className="text-xs mb-5" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa tu contraseña para acceder al sistema.</p>
+        <form onSubmit={handleSubmit}>
+          <label className="block text-xs font-medium mb-1">Contraseña</label>
+          <input
+            type="password"
+            autoFocus
+            className="w-full border rounded-lg px-4 py-3 text-sm bg-background mb-2 focus:outline-none focus:ring-2"
+            style={{ borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
+            placeholder="Tu contraseña..."
+            value={clave}
+            onChange={e => { setClave(e.target.value); setError(""); }}
+          />
+          {error && <p className="text-xs mb-3" style={{ color: "hsl(var(--destructive))" }}>{error}</p>}
+          <button type="submit" className="w-full py-2.5 rounded-lg text-sm font-medium text-white mt-1" style={{ background: "hsl(var(--primary))" }}>
+            Ingresar
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { usuarioActual, setUsuarioActual, usuarios } = useApp();
+
+  const handleLogin = (clave: string): boolean => {
+    const found = usuarios.find(u => u.clave === clave);
+    if (found) { setUsuarioActual(found); return true; }
+    return false;
+  };
+
+  if (!usuarioActual) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  const rolUsuario = usuarioActual.rol;
+  const visibleNavItems = navItems.filter(item => {
+    if (rolUsuario === "vendedor" && VENDEDOR_HIDDEN.includes(item.path)) return false;
+    return true;
+  });
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -38,7 +107,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-0.5">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
             return (
@@ -50,10 +119,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Footer */}
+        {/* Footer - user info + logout */}
         <div className="px-3 py-3 border-t" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
-          <div className="text-xs font-semibold text-white">Egaña Automotriz</div>
-          <div className="text-xs" style={{ color: "hsl(var(--sidebar-foreground))" }}>Sistema ERP</div>
+          <div className="text-xs font-semibold text-white truncate">{usuarioActual.nombre} {usuarioActual.apellido}</div>
+          <div className="text-xs mb-2" style={{ color: "hsl(var(--sidebar-foreground))" }}>
+            {rolUsuario === "master" ? "Admin Master" : rolUsuario === "administracion" ? "Administración" : "Vendedor"}
+          </div>
+          <button
+            onClick={() => setUsuarioActual(null)}
+            className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded w-full hover:bg-white/10 transition-colors"
+            style={{ color: "hsl(var(--sidebar-foreground))" }}>
+            <LogOut size={12} /> Cerrar sesión
+          </button>
         </div>
       </aside>
 

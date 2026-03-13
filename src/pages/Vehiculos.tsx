@@ -240,8 +240,14 @@ export default function Vehiculos() {
     setNuevoEquipamiento("");
   };
 
-  const TABS = ["general", "datos_adicionales", "galeria", "equipamiento"];
-  const TAB_LABELS: Record<string, string> = { general: "General", datos_adicionales: "Datos Adicionales", galeria: "Galería", equipamiento: "Equipamiento" };
+  const TABS = ["general", "equipamiento", "datos_adicionales", "galeria"];
+  const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería" };
+
+  const downloadAllFotos = () => {
+    const available = fotoSlots.filter(s => s.preview);
+    if (available.length === 0) return alert("No hay fotos cargadas.");
+    available.forEach(s => { downloadFoto(s.preview!, s.label); });
+  };
 
   return (
     <div>
@@ -432,6 +438,15 @@ export default function Vehiculos() {
 
               {tab === "galeria" && (
                 <div>
+                  <div className="flex items-center justify-between mb-3">
+                    {fotosCount > 0 && (
+                      <button onClick={downloadAllFotos}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs font-medium hover:bg-muted absolute right-6"
+                        style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}>
+                        <Download size={13} /> Descargar todas las fotos
+                      </button>
+                    )}
+                  </div>
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <h3 className="text-sm font-bold">📷 Registro Fotográfico Requerido</h3>
