@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.get-autos]
 verify_jwt = false
+
+[functions.agente-egana]
+verify_jwt = false
