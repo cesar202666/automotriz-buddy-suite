@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      contacts: {
+        Row: {
+          avatar_url: string | null
+          channel: string | null
+          created_at: string
+          email: string | null
+          id: string
+          last_seen: string | null
+          manychat_subscriber_id: string | null
+          name: string
+          phone: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          channel?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_seen?: string | null
+          manychat_subscriber_id?: string | null
+          name?: string
+          phone?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          channel?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_seen?: string | null
+          manychat_subscriber_id?: string | null
+          name?: string
+          phone?: string | null
+        }
+        Relationships: []
+      }
       conversaciones: {
         Row: {
           apellido: string | null
@@ -67,6 +103,101 @@ export type Database = {
           vendedor_asignado?: string | null
         }
         Relationships: []
+      }
+      conversations: {
+        Row: {
+          assigned_to: string | null
+          channel: string | null
+          contact_id: string | null
+          created_at: string
+          id: string
+          last_message: string | null
+          last_message_at: string | null
+          status: string | null
+          unread_count: number
+        }
+        Insert: {
+          assigned_to?: string | null
+          channel?: string | null
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          status?: string | null
+          unread_count?: number
+        }
+        Update: {
+          assigned_to?: string | null
+          channel?: string | null
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          status?: string | null
+          unread_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          channel: string | null
+          contact_id: string | null
+          content: string
+          conversation_id: string | null
+          created_at: string
+          direction: string
+          id: string
+          manychat_message_id: string | null
+          sent_at: string | null
+        }
+        Insert: {
+          channel?: string | null
+          contact_id?: string | null
+          content?: string
+          conversation_id?: string | null
+          created_at?: string
+          direction?: string
+          id?: string
+          manychat_message_id?: string | null
+          sent_at?: string | null
+        }
+        Update: {
+          channel?: string | null
+          contact_id?: string | null
+          content?: string
+          conversation_id?: string | null
+          created_at?: string
+          direction?: string
+          id?: string
+          manychat_message_id?: string | null
+          sent_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vehiculos: {
         Row: {
