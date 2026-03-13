@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
-import { Plus, Search, Check, X, Upload, FileText, Download, AlertTriangle, Lock } from "lucide-react";
-import { useApp, Venta, TipoVenta } from "@/context/AppContext";
+import { Plus, Search, Check, X, Upload, FileText, Download, AlertTriangle, Lock, ChevronRight, ChevronLeft } from "lucide-react";
+import { useApp, Venta, TipoVenta, Cliente } from "@/context/AppContext";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "—";
 
@@ -21,23 +21,76 @@ interface DocField {
   name: string | null;
 }
 
-const emptyVenta = (): Omit<Venta, "id"> => ({
-  ejecutiva: "", fechaVenta: "", sucursal: "", clienteId: "", clienteNombre: "",
+const todayStr = () => {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
+};
+
+const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
+  ejecutiva, fechaVenta: todayStr(), sucursal: "", clienteId: "", clienteNombre: "",
   informeTecnico: null, informeTecnicoName: null, patente: "", marca: "", modelo: "",
-  precioRetoma: 0, precioVenta: 0, margenBruto: 0, nCredito: "", comisionCredito: 0,
+  anioVehiculo: "", colorVehiculo: "", kilometrajeVehiculo: 0,
+  precioRetoma: 0, precioPublicado: 0, precioVenta: 0, margenBruto: 0, nCredito: "", comisionCredito: 0,
   gastosAdmin: 0, precioVtaFinal: 0, creditoFirmado: "NO", creditoFirmadoDoc: null, creditoFirmadoDocName: null,
   montoPieCaja: 0, prepago: "NO", prepagoDoc: null, prepagoDocName: null,
   documentacionVenta: null, documentacionVentaName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false,
 });
 
+// Mini form to create a client inline
+function CreateClienteInline({ onCreated, onCancel }: { onCreated: (c: Cliente) => void; onCancel: () => void }) {
+  const { clientes, setClientes } = useApp();
+  const [f, setF] = useState({ nombres: "", apellidos: "", telefono: "", email: "", rut: "", direccion: "" });
+  const save = () => {
+    if (!f.nombres.trim() || !f.apellidos.trim() || !f.telefono.trim()) return alert("Nombre, apellido y teléfono son obligatorios");
+    const id = String(Math.max(...clientes.map(c => parseInt(c.id) || 100), 100) + 1);
+    const nuevo: Cliente = {
+      id, nombres: f.nombres, apellidos: f.apellidos, telefono: f.telefono,
+      email: f.email, direccion: f.direccion, rut: f.rut || null,
+      comentario: null, estadoCivil: null, ciudad: null, casaHabita: null, estudios: null,
+      seguimiento: null, seguimientoComentario1: null, seguimientoComentario2: null, seguimientoComentario3: null,
+      creadoPor: null,
+    };
+    setClientes([...clientes, nuevo]);
+    onCreated(nuevo);
+  };
+  const inp = "w-full border rounded px-3 py-2 text-sm bg-background";
+  const bd = { borderColor: "hsl(var(--border))" };
+  return (
+    <div className="mt-3 p-4 rounded-lg border bg-muted/20" style={bd}>
+      <div className="text-xs font-bold mb-3" style={{ color: "hsl(var(--primary))" }}>CREAR NUEVO CLIENTE</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="block text-xs mb-1">Nombres *</label><input className={inp} style={bd} value={f.nombres} onChange={e => setF({...f, nombres: e.target.value})} /></div>
+        <div><label className="block text-xs mb-1">Apellidos *</label><input className={inp} style={bd} value={f.apellidos} onChange={e => setF({...f, apellidos: e.target.value})} /></div>
+        <div><label className="block text-xs mb-1">Teléfono *</label><input className={inp} style={bd} value={f.telefono} onChange={e => setF({...f, telefono: e.target.value})} /></div>
+        <div><label className="block text-xs mb-1">Email</label><input className={inp} style={bd} value={f.email} onChange={e => setF({...f, email: e.target.value})} /></div>
+        <div><label className="block text-xs mb-1">RUT</label><input className={inp} style={bd} placeholder="12.345.678-9" value={f.rut} onChange={e => setF({...f, rut: e.target.value})} /></div>
+        <div><label className="block text-xs mb-1">Dirección</label><input className={inp} style={bd} value={f.direccion} onChange={e => setF({...f, direccion: e.target.value})} /></div>
+      </div>
+      <div className="flex gap-2 mt-3 justify-end">
+        <button onClick={onCancel} className="px-3 py-1.5 text-sm border rounded hover:bg-muted" style={bd}>Cancelar</button>
+        <button onClick={save} className="px-3 py-1.5 text-sm rounded font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Crear y Asignar</button>
+      </div>
+    </div>
+  );
+}
+
+const WIZARD_STEPS = [
+  { key: "identificacion", label: "Identificación" },
+  { key: "vehiculo", label: "Vehículo" },
+  { key: "tipo_venta", label: "Tipo de Venta" },
+  { key: "valores", label: "Valores" },
+] as const;
+type WizardStep = typeof WIZARD_STEPS[number]["key"];
+
 export default function Ventas() {
-  const { ventas, setVentas, clientes, vehiculos, cuentasCobrar, setCuentasCobrar } = useApp();
+  const { ventas, setVentas, clientes, setClientes, vehiculos, cuentasCobrar, setCuentasCobrar, usuarioActual } = useApp();
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<Venta, "id">>(emptyVenta());
+  const [form, setForm] = useState<Omit<Venta, "id">>(emptyVenta(""));
+  const [wizardStep, setWizardStep] = useState<WizardStep>("identificacion");
   const [infTecDoc, setInfTecDoc] = useState<DocField>({ dataUrl: null, name: null });
   const [prepagoDoc, setPrepagoDoc] = useState<DocField>({ dataUrl: null, name: null });
   const [creditoFirmDoc, setCreditoFirmDoc] = useState<DocField>({ dataUrl: null, name: null });
@@ -47,6 +100,7 @@ export default function Ventas() {
   const [claveValidar, setClaveValidar] = useState("");
   const [claveError, setClaveError] = useState("");
   const [filtro, setFiltro] = useState<"TODOS" | "VALIDADAS" | "PENDIENTE_VALIDACION">("TODOS");
+  const [showCreateCliente, setShowCreateCliente] = useState(false);
 
   const infTecRef = useRef<HTMLInputElement>(null);
   const prepagoRef = useRef<HTMLInputElement>(null);
@@ -61,10 +115,7 @@ export default function Ventas() {
 
   const pendientes = ventas.filter(v => v.estado === "PENDIENTE_VALIDACION").length;
 
-  const handleFileRead = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setter: (d: DocField) => void
-  ) => {
+  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>, setter: (d: DocField) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -91,13 +142,20 @@ export default function Ventas() {
     setForm(f => ({ ...f, [field]: val, ...calc }));
   };
 
+  const getEjecutivaDefault = () => {
+    if (usuarioActual) return `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim();
+    return "";
+  };
+
   const openCreate = () => {
-    setForm(emptyVenta());
+    setForm(emptyVenta(getEjecutivaDefault()));
     setInfTecDoc({ dataUrl: null, name: null });
     setPrepagoDoc({ dataUrl: null, name: null });
     setCreditoFirmDoc({ dataUrl: null, name: null });
     setDocVentaDoc({ dataUrl: null, name: null });
     setEditId(null);
+    setWizardStep("identificacion");
+    setShowCreateCliente(false);
     setShowModal(true);
   };
 
@@ -108,40 +166,43 @@ export default function Ventas() {
     setCreditoFirmDoc({ dataUrl: v.creditoFirmadoDoc, name: v.creditoFirmadoDocName });
     setDocVentaDoc({ dataUrl: v.documentacionVenta, name: v.documentacionVentaName });
     setEditId(v.id);
+    setWizardStep("identificacion");
+    setShowCreateCliente(false);
     setShowModal(true);
   };
 
   const selectCliente = (clienteId: string) => {
     const c = clientes.find(x => x.id === clienteId);
-    setForm(f => ({ ...f, clienteId, clienteNombre: c ? `${c.nombres} ${c.apellidos}` : "" }));
+    if (c) {
+      setForm(f => ({ ...f, clienteId, clienteNombre: `${c.nombres} ${c.apellidos}` }));
+    } else {
+      setForm(f => ({ ...f, clienteId: "", clienteNombre: "" }));
+    }
   };
 
   const selectVehiculo = (patente: string) => {
     const v = vehiculos.find(x => x.patente === patente);
     if (v) {
       const calc = calcFields(v.precioVenta, v.precioCosto, form.gastosAdmin);
-      setForm(f => ({ ...f, patente: v.patente, marca: v.marca, modelo: v.modelo, precioRetoma: v.precioCosto, precioVenta: v.precioVenta, sucursal: v.sucursal, ...calc }));
+      setForm(f => ({
+        ...f, patente: v.patente, marca: v.marca, modelo: v.modelo,
+        precioRetoma: v.precioCosto, precioVenta: v.precioVenta, precioPublicado: v.precioVenta,
+        sucursal: v.sucursal, anioVehiculo: v.anio, colorVehiculo: v.color,
+        kilometrajeVehiculo: v.kilometraje, ...calc
+      }));
     }
   };
 
-  // Save without any mandatory-doc blocking — user can save anytime
   const handleSave = (solicitar = false) => {
     if (!form.patente || !form.ejecutiva) return alert("Ejecutiva y Patente son requeridos.");
-
     const saved: Venta = {
-      ...form,
-      id: editId || String(Date.now()),
-      informeTecnico: infTecDoc.dataUrl,
-      informeTecnicoName: infTecDoc.name,
-      prepagoDoc: prepagoDoc.dataUrl,
-      prepagoDocName: prepagoDoc.name,
-      creditoFirmadoDoc: creditoFirmDoc.dataUrl,
-      creditoFirmadoDocName: creditoFirmDoc.name,
-      documentacionVenta: docVentaDoc.dataUrl,
-      documentacionVentaName: docVentaDoc.name,
+      ...form, id: editId || String(Date.now()),
+      informeTecnico: infTecDoc.dataUrl, informeTecnicoName: infTecDoc.name,
+      prepagoDoc: prepagoDoc.dataUrl, prepagoDocName: prepagoDoc.name,
+      creditoFirmadoDoc: creditoFirmDoc.dataUrl, creditoFirmadoDocName: creditoFirmDoc.name,
+      documentacionVenta: docVentaDoc.dataUrl, documentacionVentaName: docVentaDoc.name,
       estado: solicitar ? "PENDIENTE_VALIDACION" : (editId ? form.estado : "BORRADOR"),
     };
-
     if (editId) {
       setVentas(ventas.map(v => v.id === editId ? saved : v));
     } else {
@@ -171,6 +232,13 @@ export default function Ventas() {
     return "";
   };
 
+  const stepIndex = WIZARD_STEPS.findIndex(s => s.key === wizardStep);
+  const canGoNext = stepIndex < WIZARD_STEPS.length - 1;
+  const canGoPrev = stepIndex > 0;
+
+  const bd = { borderColor: "hsl(var(--border))" };
+  const inp = "w-full border rounded px-3 py-2 text-sm bg-background";
+
   return (
     <div>
       <div className="page-header">
@@ -186,20 +254,20 @@ export default function Ventas() {
       {pendientes > 0 && (
         <div className="mb-4 flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-400 bg-yellow-50 text-yellow-800 text-sm font-medium dark:bg-yellow-900/20 dark:text-yellow-300">
           <AlertTriangle size={16} />
-          {pendientes} venta(s) pendiente(s) de validación — haga clic en "Validar" en la columna Verificación
+          {pendientes} venta(s) pendiente(s) de validación
         </div>
       )}
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "hsl(var(--muted-foreground))" }} />
-          <input className="pl-9 pr-3 py-2 border rounded text-sm bg-card w-64" style={{ borderColor: "hsl(var(--border))" }}
+          <input className="pl-9 pr-3 py-2 border rounded text-sm bg-card w-64" style={bd}
             placeholder="Buscar patente, vendedor..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <label className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>DESDE</label>
-        <input type="date" className="border rounded px-2 py-1.5 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }} value={desde} onChange={e => setDesde(e.target.value)} />
+        <input type="date" className="border rounded px-2 py-1.5 text-sm bg-card" style={bd} value={desde} onChange={e => setDesde(e.target.value)} />
         <label className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>HASTA</label>
-        <input type="date" className="border rounded px-2 py-1.5 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }} value={hasta} onChange={e => setHasta(e.target.value)} />
+        <input type="date" className="border rounded px-2 py-1.5 text-sm bg-card" style={bd} value={hasta} onChange={e => setHasta(e.target.value)} />
         <div className="ml-auto flex gap-2">
           {(["TODOS","VALIDADAS","PENDIENTE_VALIDACION"] as const).map(f => (
             <button key={f} onClick={() => setFiltro(f)}
@@ -210,56 +278,34 @@ export default function Ventas() {
         </div>
       </div>
 
-      <div className="bg-card rounded-lg border overflow-x-auto" style={{ borderColor: "hsl(var(--border))" }}>
+      <div className="bg-card rounded-lg border overflow-x-auto" style={bd}>
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">ID</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Tipo Vta</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Prepago</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Fecha Vta</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Ejecutiva</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Sucursal</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Cliente</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Inf. Tec.</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Patente</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Marca</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Modelo</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">P. Retoma</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">P. Venta</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Margen</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">N° Crédito</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">G. Admin</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Com. Crédito</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">P. Vta Final</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Cred. Firmado</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Monto Pie</th>
-              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Verificación</th>
+              {["ID","Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","P. Retoma","P. Venta","Margen","N° Crédito","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación"].map(h => (
+                <th key={h} className="px-3 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {filtered.map((v) => (
               <tr key={v.id} className={`border-b table-row-hover cursor-pointer ${rowBg(v)}`}
-                style={{ borderColor: "hsl(var(--border))" }} onClick={() => openEdit(v)}>
+                style={bd} onClick={() => openEdit(v)}>
                 <td className="px-3 py-2 font-semibold" style={{ color: "hsl(var(--primary))" }}>#{v.id.slice(-6)}</td>
                 <td className="px-3 py-2 capitalize">{v.tipoVenta?.replace(/_/g, " ").toLowerCase()}</td>
                 <td className="px-3 py-2">
                   {v.prepago === "SI" ? (
-                    v.prepagoDoc
-                      ? <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Sí ✓</span>
+                    v.prepagoDoc ? <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Sí ✓</span>
                       : <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Sí (Falta Doc)</span>
                   ) : <span style={{ color: "hsl(var(--muted-foreground))" }}>—</span>}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">{v.fechaVenta}</td>
                 <td className="px-3 py-2 font-medium">{v.ejecutiva}</td>
                 <td className="px-3 py-2">{v.sucursal}</td>
-                <td className="px-3 py-2" style={{ color: "hsl(var(--primary))" }}>{v.clienteNombre || v.clienteId || "—"}</td>
+                <td className="px-3 py-2" style={{ color: "hsl(var(--primary))" }}>{v.clienteNombre || "—"}</td>
                 <td className="px-3 py-2">
-                  {v.informeTecnico ? (
-                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">✓ Ok</span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Pendiente</span>
-                  )}
+                  {v.informeTecnico ? <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">✓ Ok</span>
+                    : <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Pendiente</span>}
                 </td>
                 <td className="px-3 py-2 font-semibold">{v.patente}</td>
                 <td className="px-3 py-2">{v.marca}</td>
@@ -285,7 +331,7 @@ export default function Ventas() {
                   ) : (
                     <button onClick={() => iniciarValidacion(v.id)}
                       className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${v.estado === "PENDIENTE_VALIDACION" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                      <Lock size={10} /> {v.estado === "PENDIENTE_VALIDACION" ? "Validar" : "Validar"}
+                      <Lock size={10} /> Validar
                     </button>
                   )}
                 </td>
@@ -298,160 +344,123 @@ export default function Ventas() {
         </table>
       </div>
 
-      {/* Modal Crear/Editar Venta */}
+      {/* Modal Wizard */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-6 pb-6 overflow-y-auto" style={{ background: "rgba(0,0,0,0.6)" }}>
-          <div className="bg-card rounded-xl shadow-2xl w-full max-w-4xl mx-4 animate-fade-in">
-            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "hsl(var(--border))" }}>
+          <div className="bg-card rounded-xl shadow-2xl w-full max-w-2xl mx-4 animate-fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={bd}>
               <h2 className="text-base font-bold" style={{ color: "hsl(var(--primary))" }}>
                 {editId ? "Editar Venta" : "Crear Nueva Venta"}
               </h2>
               <button onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
 
-            <div className="flex gap-6 p-6">
-              {/* Left column */}
-              <div className="flex-1 space-y-5">
-                {/* Identificación */}
-                <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
+            {/* Wizard Steps indicator */}
+            <div className="flex border-b px-6" style={bd}>
+              {WIZARD_STEPS.map((s, i) => (
+                <button key={s.key} onClick={() => setWizardStep(s.key)}
+                  className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${wizardStep === s.key ? "border-primary" : "border-transparent"}`}
+                  style={{ color: wizardStep === s.key ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                  <span className={`w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold ${wizardStep === s.key ? "bg-primary text-white" : "bg-muted"}`}>{i+1}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="px-6 py-5 min-h-[320px]">
+
+              {/* Step 1: Identificación */}
+              {wizardStep === "identificacion" && (
+                <div className="space-y-4">
                   <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>IDENTIFICACIÓN DE VENTA Y CLIENTE</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1">Ejecutiva *</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.ejecutiva} onChange={e => setForm(f => ({ ...f, ejecutiva: e.target.value }))} />
+                      <input className={inp} style={bd} value={form.ejecutiva} onChange={e => setForm(f => ({ ...f, ejecutiva: e.target.value }))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Fecha Venta</label>
-                      <input type="text" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="DD-MM-YYYY" value={form.fechaVenta} onChange={e => setForm(f => ({ ...f, fechaVenta: e.target.value }))} />
+                      <input className={inp} style={bd} value={form.fechaVenta} onChange={e => setForm(f => ({ ...f, fechaVenta: e.target.value }))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Sucursal</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.sucursal} onChange={e => setForm(f => ({ ...f, sucursal: e.target.value }))} />
+                      <input className={inp} style={bd} value={form.sucursal} onChange={e => setForm(f => ({ ...f, sucursal: e.target.value }))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Cliente Asignado</label>
-                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.clienteId} onChange={e => selectCliente(e.target.value)}>
+                      <select className={inp} style={bd} value={form.clienteId} onChange={e => { selectCliente(e.target.value); setShowCreateCliente(false); }}>
                         <option value="">-- Seleccionar --</option>
-                        {clientes.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos}</option>)}
+                        {clientes.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos} {c.telefono ? `(${c.telefono})` : ""}</option>)}
                       </select>
+                      {form.clienteId && (
+                        <div className="mt-1.5 text-xs p-2 rounded bg-muted/40">
+                          {(() => {
+                            const c = clientes.find(x => x.id === form.clienteId);
+                            if (!c) return null;
+                            return <span>{c.nombres} {c.apellidos} · {c.telefono} {c.rut ? `· RUT: ${c.rut}` : ""}</span>;
+                          })()}
+                        </div>
+                      )}
                     </div>
                   </div>
+                  <button onClick={() => setShowCreateCliente(v => !v)} className="text-xs font-medium flex items-center gap-1" style={{ color: "hsl(var(--primary))" }}>
+                    <Plus size={12} /> {showCreateCliente ? "Cancelar nuevo cliente" : "Crear nuevo cliente"}
+                  </button>
+                  {showCreateCliente && (
+                    <CreateClienteInline
+                      onCreated={(c) => { selectCliente(c.id); setShowCreateCliente(false); }}
+                      onCancel={() => setShowCreateCliente(false)}
+                    />
+                  )}
                 </div>
+              )}
 
-                {/* Vehículo */}
-                <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
+              {/* Step 2: Vehículo */}
+              {wizardStep === "vehiculo" && (
+                <div className="space-y-3">
                   <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>ESPECIFICACIONES DE VEHÍCULO</div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={`block text-xs font-medium mb-1 ${!infTecDoc.dataUrl ? "text-red-500" : ""}`}>
-                        Informe Técnico {!infTecDoc.dataUrl && "(Pendiente)"}
-                      </label>
-                      <div className="flex gap-2">
-                        <div onClick={() => infTecRef.current?.click()}
-                          className={`flex-1 border-2 border-dashed rounded-lg flex items-center justify-center py-2 cursor-pointer hover:bg-muted/30 transition-colors ${!infTecDoc.dataUrl ? "border-red-400 bg-red-50/50" : "border-primary"}`}>
-                          {infTecDoc.dataUrl ? (
-                            <span className="text-xs flex items-center gap-1" style={{ color: "hsl(var(--primary))" }}><FileText size={12} />{infTecDoc.name}</span>
-                          ) : (
-                            <span className="text-xs flex items-center gap-1 text-red-500"><Upload size={12} /> Subir Inf. Tec.</span>
-                          )}
-                        </div>
-                        {infTecDoc.dataUrl && <button onClick={() => download(infTecDoc.dataUrl!, infTecDoc.name!)} className="p-2 rounded border hover:bg-muted"><Download size={14} /></button>}
-                      </div>
-                      <input ref={infTecRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setInfTecDoc)} />
-                    </div>
-                    <div>
+                    <div className="col-span-2">
                       <label className="block text-xs font-medium mb-1">Patente *</label>
-                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.patente} onChange={e => selectVehiculo(e.target.value)}>
+                      <select className={inp} style={bd} value={form.patente} onChange={e => selectVehiculo(e.target.value)}>
                         <option value="">-- Seleccionar --</option>
-                        {vehiculos.map(v => <option key={v.id} value={v.patente}>{v.patente} - {v.marca} {v.modelo}</option>)}
+                        {vehiculos.map(v => <option key={v.id} value={v.patente}>{v.patente} - {v.marca} {v.modelo} ({v.anio})</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Marca</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.marca} onChange={e => setForm(f => ({ ...f, marca: e.target.value }))} />
+                      <input className={inp} style={bd} value={form.marca} onChange={e => setForm(f => ({ ...f, marca: e.target.value }))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Modelo</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.modelo} onChange={e => setForm(f => ({ ...f, modelo: e.target.value }))} />
+                      <input className={inp} style={bd} value={form.modelo} onChange={e => setForm(f => ({ ...f, modelo: e.target.value }))} />
                     </div>
-                  </div>
-                </div>
-
-                {/* Valores */}
-                <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
-                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>VALORES Y FINANCIAMIENTO COMERCIAL</div>
-                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Año</label>
+                      <input className={inp} style={bd} value={form.anioVehiculo} onChange={e => setForm(f => ({ ...f, anioVehiculo: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Color</label>
+                      <input className={inp} style={bd} value={form.colorVehiculo} onChange={e => setForm(f => ({ ...f, colorVehiculo: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Kilometraje</label>
+                      <input type="number" className={inp} style={bd} value={form.kilometrajeVehiculo} onChange={e => setForm(f => ({ ...f, kilometrajeVehiculo: Number(e.target.value) }))} />
+                    </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio Retoma</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioRetoma || ""} onChange={e => updatePrecio("precioRetoma", Number(e.target.value))} />
+                      <input type="number" className={inp} style={bd} value={form.precioRetoma || ""} onChange={e => updatePrecio("precioRetoma", Number(e.target.value))} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Precio Venta *</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioVenta || ""} onChange={e => updatePrecio("precioVenta", Number(e.target.value))} />
+                      <label className="block text-xs font-medium mb-1">Precio Publicado</label>
+                      <input type="number" className={inp} style={bd} value={form.precioPublicado || ""} onChange={e => setForm(f => ({ ...f, precioPublicado: Number(e.target.value) }))} />
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Margen Bruto (auto)</label>
-                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50 font-semibold" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--chart-2))" }}
-                        value={fmt(form.margenBruto)} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Monto Pie Caja</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.montoPieCaja || ""} onChange={e => setForm(f => ({ ...f, montoPieCaja: Number(e.target.value) }))} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">N° Crédito</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.nCredito} onChange={e => setForm(f => ({ ...f, nCredito: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.gastosAdmin || ""} onChange={e => updatePrecio("gastosAdmin", Number(e.target.value))} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$80k)</label>
-                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={{ borderColor: "hsl(var(--border))" }}
-                        value={fmt(form.comisionCredito)} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Precio Vta Final (auto)</label>
-                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50 font-semibold" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
-                        value={fmt(form.precioVtaFinal)} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Crédito Firmado</label>
+                    {/* Prepago in vehiculo card */}
+                    <div className="col-span-2 border rounded-lg p-3" style={bd}>
+                      <label className="block text-xs font-medium mb-2">Prepago</label>
                       <div className="flex gap-2 items-center">
-                        <select className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                          value={form.creditoFirmado} onChange={e => setForm(f => ({ ...f, creditoFirmado: e.target.value }))}>
-                          <option value="NO">NO</option>
-                          <option value="SI">SI</option>
-                        </select>
-                        {form.creditoFirmado === "SI" && (
-                          <div className="flex gap-1">
-                            <button onClick={() => creditoFirmRef.current?.click()}
-                              className={`px-2 py-1 rounded border text-xs flex items-center gap-1 ${!creditoFirmDoc.dataUrl ? "border-red-400 text-red-600 bg-red-50" : "border-primary text-primary"}`}>
-                              {creditoFirmDoc.dataUrl ? <><FileText size={12} />Doc</> : <><Upload size={12} />Subir</>}
-                            </button>
-                            {creditoFirmDoc.dataUrl && <button onClick={() => download(creditoFirmDoc.dataUrl!, creditoFirmDoc.name!)} className="px-2 py-1 rounded border hover:bg-muted"><Download size={14} /></button>}
-                          </div>
-                        )}
-                        <input ref={creditoFirmRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setCreditoFirmDoc)} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Prepago</label>
-                      <div className="flex gap-2 items-center">
-                        <select className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        <select className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={bd}
                           value={form.prepago} onChange={e => setForm(f => ({ ...f, prepago: e.target.value }))}>
                           <option value="NO">NO</option>
                           <option value="SI">SI</option>
@@ -468,69 +477,157 @@ export default function Ventas() {
                         <input ref={prepagoRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setPrepagoDoc)} />
                       </div>
                     </div>
+                    {/* Informe Técnico */}
+                    <div className="col-span-2">
+                      <label className={`block text-xs font-medium mb-1 ${!infTecDoc.dataUrl ? "text-red-500" : ""}`}>
+                        Informe Técnico {!infTecDoc.dataUrl && "(Pendiente)"}
+                      </label>
+                      <div className="flex gap-2">
+                        <div onClick={() => infTecRef.current?.click()}
+                          className={`flex-1 border-2 border-dashed rounded-lg flex items-center justify-center py-2 cursor-pointer hover:bg-muted/30 transition-colors ${!infTecDoc.dataUrl ? "border-red-400 bg-red-50/50" : "border-primary"}`}>
+                          {infTecDoc.dataUrl ? (
+                            <span className="text-xs flex items-center gap-1" style={{ color: "hsl(var(--primary))" }}><FileText size={12} />{infTecDoc.name}</span>
+                          ) : (
+                            <span className="text-xs flex items-center gap-1 text-red-500"><Upload size={12} /> Subir Inf. Tec.</span>
+                          )}
+                        </div>
+                        {infTecDoc.dataUrl && <button onClick={() => download(infTecDoc.dataUrl!, infTecDoc.name!)} className="p-2 rounded border hover:bg-muted"><Download size={14} /></button>}
+                      </div>
+                      <input ref={infTecRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setInfTecDoc)} />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Right column */}
-              <div className="w-64 space-y-4">
-                <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
-                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>TIPO DE VENTA *</div>
-                  <div className="grid grid-cols-2 gap-2">
+              {/* Step 3: Tipo de Venta */}
+              {wizardStep === "tipo_venta" && (
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>TIPO DE VENTA *</div>
+                  <div className="grid grid-cols-2 gap-3">
                     {TIPO_VENTA_OPTIONS.map(opt => (
                       <button key={opt.value} onClick={() => setForm(f => ({ ...f, tipoVenta: opt.value }))}
-                        className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors text-center ${form.tipoVenta === opt.value ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted/50"}`}>
+                        className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors text-center ${form.tipoVenta === opt.value ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted/50"}`}>
                         {opt.label}
                       </button>
                     ))}
                   </div>
-                </div>
-                <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
-                  <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>DOCUMENTACIÓN VENTA</div>
-                  <div onClick={() => docVentaRef.current?.click()}
-                    className="border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-6 cursor-pointer hover:bg-muted/30 transition-colors"
-                    style={{ borderColor: docVentaDoc.dataUrl ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
-                    {docVentaDoc.dataUrl ? (
-                      <>
-                        <FileText size={20} style={{ color: "hsl(var(--primary))" }} />
-                        <span className="text-xs mt-1 text-center truncate w-full px-2" style={{ color: "hsl(var(--primary))" }}>{docVentaDoc.name}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
-                        <span className="text-xs mt-1 font-medium" style={{ color: "hsl(var(--primary))" }}>Subir Documentos</span>
-                        <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Factura y anexos</span>
-                      </>
+                  <div className="mt-4">
+                    <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>DOCUMENTACIÓN VENTA</div>
+                    <div onClick={() => docVentaRef.current?.click()}
+                      className="border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-6 cursor-pointer hover:bg-muted/30 transition-colors"
+                      style={{ borderColor: docVentaDoc.dataUrl ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
+                      {docVentaDoc.dataUrl ? (
+                        <><FileText size={20} style={{ color: "hsl(var(--primary))" }} />
+                          <span className="text-xs mt-1 text-center truncate w-full px-2" style={{ color: "hsl(var(--primary))" }}>{docVentaDoc.name}</span></>
+                      ) : (
+                        <><Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
+                          <span className="text-xs mt-1 font-medium" style={{ color: "hsl(var(--primary))" }}>Subir Documentos</span>
+                          <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Factura y anexos</span></>
+                      )}
+                    </div>
+                    {docVentaDoc.dataUrl && (
+                      <button onClick={() => download(docVentaDoc.dataUrl!, docVentaDoc.name!)} className="mt-2 w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded border text-xs hover:bg-muted" style={bd}>
+                        <Download size={12} /> Descargar
+                      </button>
                     )}
+                    <input ref={docVentaRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setDocVentaDoc)} />
                   </div>
-                  {docVentaDoc.dataUrl && (
-                    <button onClick={() => download(docVentaDoc.dataUrl!, docVentaDoc.name!)} className="mt-2 w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded border text-xs hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
-                      <Download size={12} /> Descargar
-                    </button>
-                  )}
-                  <input ref={docVentaRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setDocVentaDoc)} />
                 </div>
+              )}
 
-                {/* Estado visible */}
-                <div className="border rounded-lg p-4" style={{ borderColor: "hsl(var(--border))" }}>
-                  <div className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>ESTADO ACTUAL</div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${form.estado === "VALIDADA" ? "bg-green-100 text-green-700" : form.estado === "PENDIENTE_VALIDACION" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-600"}`}>
-                    {form.estado === "VALIDADA" ? "✓ Validada" : form.estado === "PENDIENTE_VALIDACION" ? "⏳ Pendiente Validación" : "Borrador"}
-                  </span>
+              {/* Step 4: Valores */}
+              {wizardStep === "valores" && (
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>VALORES Y FINANCIAMIENTO COMERCIAL</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Precio Venta *</label>
+                      <input type="number" className={inp} style={bd} value={form.precioVenta || ""} onChange={e => updatePrecio("precioVenta", Number(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Margen Bruto (auto)</label>
+                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50 font-semibold" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--chart-2))" }}
+                        value={fmt(form.margenBruto)} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Monto Pie Caja</label>
+                      <input type="number" className={inp} style={bd} value={form.montoPieCaja || ""} onChange={e => setForm(f => ({ ...f, montoPieCaja: Number(e.target.value) }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">N° Crédito</label>
+                      <input className={inp} style={bd} value={form.nCredito} onChange={e => setForm(f => ({ ...f, nCredito: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
+                      <input type="number" className={inp} style={bd} value={form.gastosAdmin || ""} onChange={e => updatePrecio("gastosAdmin", Number(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$80k)</label>
+                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(form.comisionCredito)} />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium mb-1">Precio Vta Final (auto)</label>
+                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50 font-semibold" style={{ ...bd, color: "hsl(var(--primary))" }}
+                        value={fmt(form.precioVtaFinal)} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Crédito Firmado</label>
+                      <div className="flex gap-2 items-center">
+                        <select className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={bd}
+                          value={form.creditoFirmado} onChange={e => setForm(f => ({ ...f, creditoFirmado: e.target.value }))}>
+                          <option value="NO">NO</option>
+                          <option value="SI">SI</option>
+                        </select>
+                        {form.creditoFirmado === "SI" && (
+                          <div className="flex gap-1">
+                            <button onClick={() => creditoFirmRef.current?.click()}
+                              className={`px-2 py-1 rounded border text-xs flex items-center gap-1 ${!creditoFirmDoc.dataUrl ? "border-red-400 text-red-600 bg-red-50" : "border-primary text-primary"}`}>
+                              {creditoFirmDoc.dataUrl ? <><FileText size={12} />Doc</> : <><Upload size={12} />Subir</>}
+                            </button>
+                            {creditoFirmDoc.dataUrl && <button onClick={() => download(creditoFirmDoc.dataUrl!, creditoFirmDoc.name!)} className="px-2 py-1 rounded border hover:bg-muted"><Download size={14} /></button>}
+                          </div>
+                        )}
+                        <input ref={creditoFirmRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setCreditoFirmDoc)} />
+                      </div>
+                    </div>
+                    <div className="border rounded-lg p-3" style={bd}>
+                      <div className="text-xs font-bold uppercase mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>ESTADO ACTUAL</div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${form.estado === "VALIDADA" ? "bg-green-100 text-green-700" : form.estado === "PENDIENTE_VALIDACION" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-600"}`}>
+                        {form.estado === "VALIDADA" ? "✓ Validada" : form.estado === "PENDIENTE_VALIDACION" ? "⏳ Pendiente" : "Borrador"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
-              <button onClick={() => handleSave(false)} className="px-4 py-2 rounded text-sm font-medium text-white bg-slate-700 hover:bg-slate-800">
-                Guardar (Borrador)
+            {/* Footer navigation */}
+            <div className="flex items-center justify-between px-6 py-4 border-t" style={bd}>
+              <button onClick={() => canGoPrev && setWizardStep(WIZARD_STEPS[stepIndex - 1].key)}
+                disabled={!canGoPrev}
+                className="flex items-center gap-1 px-4 py-2 rounded text-sm border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed" style={bd}>
+                <ChevronLeft size={15} /> Anterior
               </button>
-              {form.estado !== "VALIDADA" && (
-                <button onClick={() => handleSave(true)} className="px-4 py-2 rounded text-sm font-medium text-white flex items-center gap-2" style={{ background: "hsl(var(--primary))" }}>
-                  <Check size={15} /> Solicitar Verificación
-                </button>
-              )}
+              <div className="flex gap-2">
+                <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={bd}>Cancelar</button>
+                {canGoNext ? (
+                  <button onClick={() => setWizardStep(WIZARD_STEPS[stepIndex + 1].key)}
+                    className="flex items-center gap-1 px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
+                    Siguiente <ChevronRight size={15} />
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={() => handleSave(false)} className="px-4 py-2 rounded text-sm font-medium text-white bg-slate-700 hover:bg-slate-800">
+                      Guardar (Borrador)
+                    </button>
+                    {form.estado !== "VALIDADA" && (
+                      <button onClick={() => handleSave(true)} className="px-4 py-2 rounded text-sm font-medium text-white flex items-center gap-2" style={{ background: "hsl(var(--primary))" }}>
+                        <Check size={15} /> Solicitar Verificación
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -544,9 +641,7 @@ export default function Ventas() {
               <Lock size={20} style={{ color: "hsl(var(--primary))" }} />
               <h3 className="text-base font-bold">Validar Venta</h3>
             </div>
-            <p className="text-sm mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>
-              Ingrese la clave de validación para confirmar esta venta.
-            </p>
+            <p className="text-sm mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Ingrese la clave de validación para confirmar esta venta.</p>
             <input type="password" className="w-full border rounded px-3 py-2 text-sm bg-background mb-1"
               style={{ borderColor: claveError ? "#ef4444" : "hsl(var(--border))" }}
               placeholder="Clave de validación" value={claveValidar} onChange={e => { setClaveValidar(e.target.value); setClaveError(""); }}
