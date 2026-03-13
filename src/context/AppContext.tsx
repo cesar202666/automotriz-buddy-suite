@@ -8,8 +8,17 @@ export interface Cliente {
   direccion: string;
   telefono: string;
   email: string;
-  docCedula: string | null;
-  docCedulaName: string | null;
+  rut: string | null;
+  comentario: string | null;
+  estadoCivil: string | null;
+  ciudad: string | null;
+  casaHabita: string | null;
+  estudios: string | null;
+  seguimiento: 1 | 2 | 3 | null;
+  seguimientoComentario1: string | null;
+  seguimientoComentario2: string | null;
+  seguimientoComentario3: string | null;
+  creadoPor: string | null;
 }
 
 export interface Vehiculo {
@@ -69,7 +78,11 @@ export interface Venta {
   patente: string;
   marca: string;
   modelo: string;
+  anioVehiculo: string;
+  colorVehiculo: string;
+  kilometrajeVehiculo: number;
   precioRetoma: number;
+  precioPublicado: number;
   precioVenta: number;
   margenBruto: number;
   nCredito: string;
@@ -139,15 +152,17 @@ export interface Adquisicion {
 export interface Usuario {
   id: string;
   nombre: string;
+  apellido: string;
+  telefono: string;
   clave: string;
   rol: "master" | "administracion" | "vendedor";
   email: string;
 }
 
 const USUARIOS_INICIALES: Usuario[] = [
-  { id: "1", nombre: "César", clave: "123cuatro", rol: "master", email: "cesar@egana.cl" },
-  { id: "2", nombre: "Pamela V.", clave: "pamela123", rol: "administracion", email: "pamela@egana.cl" },
-  { id: "3", nombre: "Nicol M.", clave: "nicol123", rol: "vendedor", email: "nicol@egana.cl" },
+  { id: "1", nombre: "César", apellido: "", telefono: "", clave: "123cuatro", rol: "master", email: "cesar@egana.cl" },
+  { id: "2", nombre: "Pamela", apellido: "V.", telefono: "", clave: "pamela123", rol: "administracion", email: "pamela@egana.cl" },
+  { id: "3", nombre: "Nicol", apellido: "M.", telefono: "", clave: "nicol123", rol: "vendedor", email: "nicol@egana.cl" },
 ];
 
 // ─── DB helpers ──────────────────────────────────────────────────────────────
@@ -250,7 +265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [cuentasCobrar, setCuentasCobrar] = useState<CuentaCobrar[]>([]);
   const [adquisiciones, setAdquisiciones] = useState<Adquisicion[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>(USUARIOS_INICIALES);
-  const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(USUARIOS_INICIALES[0]);
+  const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(null);
 
   // ── Load vehicles from DB on mount ─────────────────────────────────────────
   useEffect(() => {
