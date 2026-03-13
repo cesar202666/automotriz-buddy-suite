@@ -240,8 +240,14 @@ export default function Vehiculos() {
     setNuevoEquipamiento("");
   };
 
-  const TABS = ["general", "datos_adicionales", "galeria", "equipamiento"];
-  const TAB_LABELS: Record<string, string> = { general: "General", datos_adicionales: "Datos Adicionales", galeria: "Galería", equipamiento: "Equipamiento" };
+  const TABS = ["general", "equipamiento", "datos_adicionales", "galeria"];
+  const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería" };
+
+  const downloadAllFotos = () => {
+    const available = fotoSlots.filter(s => s.preview);
+    if (available.length === 0) return alert("No hay fotos cargadas.");
+    available.forEach(s => { downloadFoto(s.preview!, s.label); });
+  };
 
   return (
     <div>
