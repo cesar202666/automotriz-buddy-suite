@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      campanas: {
+        Row: {
+          canal: string | null
+          created_at: string
+          created_by: string | null
+          destinatarios_count: number | null
+          destinatarios_ids: string[] | null
+          enviada_at: string | null
+          estado: string | null
+          id: string
+          mensaje: string
+          nombre: string
+          programada_para: string | null
+        }
+        Insert: {
+          canal?: string | null
+          created_at?: string
+          created_by?: string | null
+          destinatarios_count?: number | null
+          destinatarios_ids?: string[] | null
+          enviada_at?: string | null
+          estado?: string | null
+          id?: string
+          mensaje?: string
+          nombre?: string
+          programada_para?: string | null
+        }
+        Update: {
+          canal?: string | null
+          created_at?: string
+          created_by?: string | null
+          destinatarios_count?: number | null
+          destinatarios_ids?: string[] | null
+          enviada_at?: string | null
+          estado?: string | null
+          id?: string
+          mensaje?: string
+          nombre?: string
+          programada_para?: string | null
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           avatar_url: string | null
@@ -144,6 +186,116 @@ export type Database = {
             columns: ["contact_id"]
             isOneToOne: false
             referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_actividades: {
+        Row: {
+          created_at: string
+          descripcion: string
+          id: string
+          lead_id: string | null
+          tipo: string
+          usuario: string | null
+        }
+        Insert: {
+          created_at?: string
+          descripcion?: string
+          id?: string
+          lead_id?: string | null
+          tipo?: string
+          usuario?: string | null
+        }
+        Update: {
+          created_at?: string
+          descripcion?: string
+          id?: string
+          lead_id?: string | null
+          tipo?: string
+          usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_actividades_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          canal: string | null
+          contact_id: string | null
+          conversation_id: string | null
+          created_at: string
+          email: string | null
+          etapa: string | null
+          id: string
+          interes: string | null
+          motivo_perdida: string | null
+          nombre: string
+          notas: string | null
+          presupuesto: string | null
+          score: number | null
+          telefono: string | null
+          updated_at: string
+          urgencia: string | null
+          vendedor_asignado: string | null
+        }
+        Insert: {
+          canal?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          email?: string | null
+          etapa?: string | null
+          id?: string
+          interes?: string | null
+          motivo_perdida?: string | null
+          nombre?: string
+          notas?: string | null
+          presupuesto?: string | null
+          score?: number | null
+          telefono?: string | null
+          updated_at?: string
+          urgencia?: string | null
+          vendedor_asignado?: string | null
+        }
+        Update: {
+          canal?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          email?: string | null
+          etapa?: string | null
+          id?: string
+          interes?: string | null
+          motivo_perdida?: string | null
+          nombre?: string
+          notas?: string | null
+          presupuesto?: string | null
+          score?: number | null
+          telefono?: string | null
+          updated_at?: string
+          urgencia?: string | null
+          vendedor_asignado?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
         ]
@@ -286,12 +438,42 @@ export type Database = {
         }
         Relationships: []
       }
+      vendedores: {
+        Row: {
+          activo: boolean | null
+          created_at: string
+          email: string | null
+          id: string
+          nombre: string
+          sucursal: string | null
+          telefono: string | null
+        }
+        Insert: {
+          activo?: boolean | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nombre?: string
+          sucursal?: string | null
+          telefono?: string | null
+        }
+        Update: {
+          activo?: boolean | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nombre?: string
+          sucursal?: string | null
+          telefono?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_unread: { Args: { conv_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
