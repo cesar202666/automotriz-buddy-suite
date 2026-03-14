@@ -16,7 +16,7 @@ const navItems = [
   { label: "Ventas", icon: ShoppingCart, path: "/ventas" },
   { label: "Administración", icon: Settings2, path: "/administracion" },
   { label: "Gerencia", icon: TrendingUp, path: "/gerencia" },
-  { label: "Conversaciones", icon: MessageSquare, path: "/conversaciones" },
+  { label: "CRM", icon: MessageSquare, path: "/conversaciones" },
   { label: "Configuración", icon: Wrench, path: "/configuracion" },
 ];
 
