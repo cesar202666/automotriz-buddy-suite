@@ -117,10 +117,10 @@ interface DiaHorario {
 }
 
 // ── Helper: upsert a single key in configuracion_sistema ─────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sbAny = supabase as any;
 async function upsertConfig(clave: string, valor: string) {
-  await supabase
-    .from("configuracion_sistema" as never)
-    .upsert({ clave, valor }, { onConflict: "clave" });
+  await sbAny.from("configuracion_sistema").upsert({ clave, valor }, { onConflict: "clave" });
 }
 
 // ── Card wrapper ─────────────────────────────────────────────────────────────
