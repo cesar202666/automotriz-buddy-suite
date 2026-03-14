@@ -230,9 +230,7 @@ export default function Configuracion() {
   useEffect(() => {
     if (!authenticated) return;
     (async () => {
-      const { data } = await supabase
-        .from("configuracion_sistema" as never)
-        .select("clave, valor") as { data: { clave: string; valor: string }[] | null };
+      const { data } = await sbAny.from("configuracion_sistema").select("clave, valor") as { data: { clave: string; valor: string }[] | null };
       if (!data) return;
       const map = Object.fromEntries(data.map((r) => [r.clave, r.valor]));
       if (map.AGENT_NAME) setAgenteName(map.AGENT_NAME);
