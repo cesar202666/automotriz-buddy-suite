@@ -56,6 +56,30 @@ export type Database = {
         }
         Relationships: []
       }
+      configuracion_sistema: {
+        Row: {
+          clave: string
+          created_at: string
+          id: string
+          updated_at: string
+          valor: string
+        }
+        Insert: {
+          clave: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          valor?: string
+        }
+        Update: {
+          clave?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          valor?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           avatar_url: string | null
