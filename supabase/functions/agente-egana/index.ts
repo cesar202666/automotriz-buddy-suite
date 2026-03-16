@@ -29,7 +29,7 @@ function containsKeyword(text: string, keywords: string[]): boolean {
 }
 
 async function getVendedorAsignado(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   modo: string,
   canal: string,
   asignacionPorCanal: Record<string, string>,
