@@ -21,10 +21,13 @@ Deno.serve(async (req) => {
     const challenge = url.searchParams.get('hub.challenge')
     const verifyToken = Deno.env.get('META_VERIFY_TOKEN') || ''
 
-    if (mode === 'subscribe' && token === verifyToken) {
-      return new Response(challenge, { status: 200 })
+    if (mode === 'subscribe' && token === verifyToken && challenge) {
+      return new Response(challenge, {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+      })
     }
-    return new Response('Forbidden', { status: 403 })
+    return new Response('Forbidden', { status: 403, headers: corsHeaders })
   }
 
   // POST — mensaje entrante desde Meta
