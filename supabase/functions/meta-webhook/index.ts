@@ -24,15 +24,16 @@ Deno.serve(async (req) => {
 
     const VERIFY_TOKEN = "egana_meta_token";
 
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      return new Response(challenge ?? "", {
+    if (mode === "subscribe" && token === VERIFY_TOKEN && challenge) {
+      return new Response(challenge, {
+        status: 200,
         headers: {
           "Content-Type": "text/plain",
         },
       });
     }
 
-    return new Response("Error", { status: 403 });
+    return new Response("Forbidden", { status: 403 });
   }
 
   // =========================
