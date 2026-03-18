@@ -319,8 +319,18 @@ function TabMensajes() {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.4)" }}>{conv.last_message || "Sin mensajes"}</p>
-                      {conv.unread_count > 0 && <span className="flex-shrink-0 w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ background: cfg.color, fontSize: 10 }}>{conv.unread_count > 9 ? "9+" : conv.unread_count}</span>}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {conv.escalated && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#f97316", color: "white", fontSize: 9 }}>VENDEDOR</span>
+                        )}
+                        {conv.unread_count > 0 && <span className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ background: cfg.color, fontSize: 10 }}>{conv.unread_count > 9 ? "9+" : conv.unread_count}</span>}
+                      </div>
                     </div>
+                    {conv.assigned_to && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>👤 {conv.assigned_to}</span>
+                      </div>
+                    )}
                   </div>
                 </button>
               );
