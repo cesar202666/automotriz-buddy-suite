@@ -6,9 +6,7 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
     const body = await req.json()
@@ -58,12 +56,12 @@ Deno.serve(async (req) => {
       throw new Error('No se pudo guardar el contacto')
     }
 
-    const contactId: string = contactData.id
+    const contactId: string = contactData.id  // UUID real del contacto
 
-    // ── 2. Upsert conversation (one per contact+channel) ─────────────────────
-    const { data: convData, error: convError } = await supabase
+    // ── 2. Get or create conversation ────────────────────────────────────────
+    const { data: convData } = await supabase
       .from('conversations')
-      .select('id, unread_count')
+      .select('id, unread_count, escalated')
       .eq('contact_id', contactId)
       .eq('channel', channel)
       .order('created_at', { ascending: false })
@@ -71,11 +69,6 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     let conversationId: string
-
-    if (convError) {
-      console.error('Conversation select error:', convError)
-      throw new Error('Error consultando conversación')
-    }
 
     if (convData) {
       conversationId = convData.id
@@ -102,15 +95,12 @@ Deno.serve(async (req) => {
         .select('id')
         .single()
 
-      if (newConvError || !newConv) {
-        console.error('Conversation insert error:', newConvError)
-        throw new Error('No se pudo crear la conversación')
-      }
+      if (newConvError || !newConv) throw new Error('No se pudo crear la conversación')
       conversationId = newConv.id
     }
 
     // ── 3. Insert inbound message ─────────────────────────────────────────────
-    const { error: msgInError } = await supabase.from('messages').insert({
+    await supabase.from('messages').insert({
       conversation_id: conversationId,
       contact_id: contactId,
       direction: 'inbound',
@@ -120,83 +110,62 @@ Deno.serve(async (req) => {
       sent_at: new Date().toISOString(),
     })
 
-    if (msgInError) console.error('Inbound message insert error:', msgInError)
-
-    // ── 4. Generate AI response ──────────────────────────────────────────────
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY no configurado')
-
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        max_tokens: 500,
-        messages: [
-          {
-            role: 'system',
-            content: `Eres el asistente virtual de Egaña Automotriz.
-Tu objetivo es atender clientes interesados en vehículos de manera cálida y profesional.
-- Saluda cordialmente por nombre si lo tienes
-- Pregunta qué tipo de vehículo busca (marca, modelo, año aproximado, presupuesto)
-- Intenta capturar: nombre completo, teléfono, interés específico, urgencia de compra
-- Sé breve y natural, máximo 3 líneas por respuesta
-- Usa español chileno informal pero respetuoso
-- Cuando tengas nombre, teléfono e interés completos, confirma que un vendedor lo contactará pronto
-- NO inventes precios ni disponibilidad de vehículos específicos`
-          },
-          {
-            role: 'user',
-            content: `${firstName} dice: ${messageText}`
-          }
-        ]
+    // ── 4. Si la conversación ya fue escalada, guardar msg y NO responder con IA
+    if (convData?.escalated) {
+      // Solo guardar el mensaje entrante - el vendedor atiende ahora
+      await supabase.from('conversaciones').insert({
+        contact_id: subscriberId,
+        nombre: firstName,
+        apellido: lastName || null,
+        telefono: phone || null,
+        canal: channel,
+        mensaje_cliente: messageText,
+        respuesta_agente: '',
+        leido: false,
+        notificado_vendedor: true,
+        escalada: true,
       })
-    })
 
-    let respuesta = 'Gracias por contactarnos. Un vendedor te atenderá pronto.'
-
-    if (aiResponse.ok) {
-      const aiData = await aiResponse.json()
-      respuesta = aiData.choices?.[0]?.message?.content || respuesta
-    } else {
-      const errText = await aiResponse.text()
-      console.error(`AI Gateway error [${aiResponse.status}]: ${errText}`)
+      return new Response(
+        JSON.stringify({ messages: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // ── 5. Insert outbound message ────────────────────────────────────────────
-    const { error: msgOutError } = await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      contact_id: contactId,
-      direction: 'outbound',
-      content: respuesta,
-      channel,
-      sent_at: new Date().toISOString(),
-    })
+    // ── 5. Llamar al agente-egana con los IDs correctos ──────────────────────
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 
-    if (msgOutError) console.error('Outbound message insert error:', msgOutError)
-
-    // ── 6. Also save to legacy conversaciones table ───────────────────────────
-    await supabase.from('conversaciones').insert({
-      contact_id: subscriberId,
-      nombre: firstName,
-      apellido: lastName || null,
-      telefono: phone || null,
-      canal: channel,
-      mensaje_cliente: messageText,
-      respuesta_agente: respuesta,
-      leido: false,
-      notificado_vendedor: false,
-    })
-
-    // ── 7. Return ManyChat-compatible response ────────────────────────────────
-    return new Response(
-      JSON.stringify({
-        messages: [{ type: 'text', text: respuesta }],
-        set_field_values: [{ field_name: 'ultimo_mensaje_agente', value: respuesta }]
+    const agentResponse = await fetch(`${supabaseUrl}/functions/v1/agente-egana`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      },
+      body: JSON.stringify({
+        contact_id: contactId,          // UUID real del contacto en Supabase
+        external_id: subscriberId,      // ID externo de ManyChat
+        first_name: firstName,
+        last_name: lastName,
+        phone,
+        email,
+        last_input_text: messageText,
+        channel,
+        conversation_id: conversationId,  // UUID real de la conversación
+        manychat_message_id: manychatMessageId,
+        source: 'manychat',
       }),
+    })
+
+    if (!agentResponse.ok) {
+      const errText = await agentResponse.text()
+      console.error(`agente-egana error [${agentResponse.status}]: ${errText}`)
+      throw new Error('Error en agente-egana')
+    }
+
+    const agentData = await agentResponse.json()
+
+    return new Response(
+      JSON.stringify(agentData),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
