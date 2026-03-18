@@ -67,6 +67,7 @@ interface Lead {
   vendedor_asignado: string;
   motivo_perdida: string;
   notas: string;
+  primer_apertura_at: string | null;
   created_at: string;
   updated_at: string;
 }
