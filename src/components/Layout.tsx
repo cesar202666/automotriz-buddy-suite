@@ -93,6 +93,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [usuarioActual]);
+
+  const handleLogin = (clave: string): boolean => {
     const found = usuarios.find(u => u.clave === clave);
     if (found) { setUsuarioActual(found); return true; }
     return false;
