@@ -430,12 +430,7 @@ function TabMensajes() {
               <MessageSquare size={28} style={{ color: "hsl(var(--primary))" }} />
             </div>
             <h3 className="text-base font-semibold mb-1">Selecciona una conversación</h3>
-            <p className="text-sm mb-6" style={{ color: "hsl(var(--muted-foreground))" }}>Los mensajes de ManyChat aparecen aquí en tiempo real</p>
-            <div className="text-left rounded-xl p-4 border text-xs space-y-2" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-              <p className="font-semibold">📡 Webhook ManyChat</p>
-              <div className="rounded-lg p-2 font-mono break-all" style={{ background: "hsl(var(--muted))", color: "hsl(var(--primary))" }}>{WEBHOOK_URL}</div>
-              <button onClick={() => navigator.clipboard.writeText(WEBHOOK_URL)} className="w-full py-1.5 rounded-lg font-medium text-center" style={{ background: "hsl(var(--primary))", color: "white" }}>Copiar URL</button>
-            </div>
+            <p className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Los mensajes de WhatsApp, Instagram y Facebook aparecen aquí en tiempo real</p>
           </div>
         </div>
       )}
