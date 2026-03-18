@@ -687,7 +687,27 @@ function TabLeads() {
               <button onClick={() => setSelectedLead(null)}><X size={18} /></button>
             </div>
 
-            <div className="px-5 py-4 space-y-3 flex-1">
+              {/* Response time metric */}
+              <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: "hsl(var(--muted)/0.5)" }}>
+                <p className="font-semibold mb-1">⏱ Tiempo de respuesta</p>
+                <div className="flex justify-between">
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Lead recibido</span>
+                  <span className="font-medium">{new Date(selectedLead.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Primera apertura</span>
+                  <span className="font-medium" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#f59e0b" }}>
+                    {selectedLead.primer_apertura_at
+                      ? (() => {
+                          const ms = new Date(selectedLead.primer_apertura_at).getTime() - new Date(selectedLead.created_at).getTime();
+                          const mins = Math.floor(ms / 60000);
+                          return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+                        })()
+                      : "Pendiente"}
+                  </span>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Nombre</label><input className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={editLead.nombre || ""} onChange={e => setEditLead(p => ({ ...p, nombre: e.target.value }))} /></div>
                 <div><label className="text-xs font-medium block mb-1">Teléfono</label><input className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={editLead.telefono || ""} onChange={e => setEditLead(p => ({ ...p, telefono: e.target.value }))} /></div>
