@@ -218,7 +218,7 @@ export default function Administracion() {
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <button onClick={() => openEditUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
-                        <button onClick={() => setUsuarios(usuarios.filter(x => x.id !== u.id))} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
+                        <button onClick={() => deleteUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
                       </div>
                     </td>
                   </tr>
