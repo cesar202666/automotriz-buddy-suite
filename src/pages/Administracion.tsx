@@ -102,11 +102,40 @@ export default function Administracion() {
   // === USUARIOS ===
   const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
   const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
-  const saveUser = () => {
+  const saveUser = async () => {
     if (!userForm.nombre.trim()) return alert("Nombre requerido");
-    if (editUserId) setUsuarios(usuarios.map(u => u.id === editUserId ? { ...u, ...userForm } : u));
-    else setUsuarios([...usuarios, { id: String(Date.now()), ...userForm }]);
+    const nombreCompleto = `${userForm.nombre}${userForm.apellido ? " " + userForm.apellido : ""}`.trim();
+    if (editUserId) {
+      setUsuarios(usuarios.map(u => u.id === editUserId ? { ...u, ...userForm } : u));
+      // Sync: actualizar en tabla vendedores por email o nombre
+      const usuarioActualizado = usuarios.find(u => u.id === editUserId);
+      if (usuarioActualizado) {
+        await supabase.from("vendedores").update({
+          nombre: nombreCompleto,
+          email: userForm.email,
+          telefono: userForm.telefono,
+          activo: true,
+        }).eq("email", usuarioActualizado.email);
+      }
+    } else {
+      const nuevoId = String(Date.now());
+      setUsuarios([...usuarios, { id: nuevoId, ...userForm }]);
+      // Sync: insertar en tabla vendedores
+      await supabase.from("vendedores").insert({
+        nombre: nombreCompleto,
+        email: userForm.email,
+        telefono: userForm.telefono,
+        sucursal: "Principal",
+        activo: true,
+      });
+    }
     setShowUserModal(false);
+  };
+
+  const deleteUser = async (u: Usuario) => {
+    setUsuarios(usuarios.filter(x => x.id !== u.id));
+    // Sync: desactivar en tabla vendedores (no eliminar para preservar historial)
+    await supabase.from("vendedores").update({ activo: false }).eq("email", u.email);
   };
 
   // === CUENTAS POR PAGAR ===
