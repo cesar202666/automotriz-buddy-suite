@@ -34,6 +34,8 @@ interface Conversation {
   last_message_at: string;
   unread_count: number;
   assigned_to: string | null;
+  escalated?: boolean;
+  escalated_at?: string | null;
   created_at: string;
   contact?: Contact;
 }
