@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
   ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import { useApp } from "@/context/AppContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
