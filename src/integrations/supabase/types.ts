@@ -123,6 +123,7 @@ export type Database = {
           contact_id: string
           created_at: string
           datos_capturados: Json | null
+          escalada: boolean
           id: string
           interes: string | null
           leido: boolean
@@ -140,6 +141,7 @@ export type Database = {
           contact_id: string
           created_at?: string
           datos_capturados?: Json | null
+          escalada?: boolean
           id?: string
           interes?: string | null
           leido?: boolean
@@ -157,6 +159,7 @@ export type Database = {
           contact_id?: string
           created_at?: string
           datos_capturados?: Json | null
+          escalada?: boolean
           id?: string
           interes?: string | null
           leido?: boolean
@@ -176,9 +179,12 @@ export type Database = {
           channel: string | null
           contact_id: string | null
           created_at: string
+          escalated: boolean
+          escalated_at: string | null
           id: string
           last_message: string | null
           last_message_at: string | null
+          primer_apertura_vendedor: string | null
           status: string | null
           unread_count: number
         }
@@ -187,9 +193,12 @@ export type Database = {
           channel?: string | null
           contact_id?: string | null
           created_at?: string
+          escalated?: boolean
+          escalated_at?: string | null
           id?: string
           last_message?: string | null
           last_message_at?: string | null
+          primer_apertura_vendedor?: string | null
           status?: string | null
           unread_count?: number
         }
@@ -198,9 +207,12 @@ export type Database = {
           channel?: string | null
           contact_id?: string | null
           created_at?: string
+          escalated?: boolean
+          escalated_at?: string | null
           id?: string
           last_message?: string | null
           last_message_at?: string | null
+          primer_apertura_vendedor?: string | null
           status?: string | null
           unread_count?: number
         }
@@ -263,6 +275,7 @@ export type Database = {
           nombre: string
           notas: string | null
           presupuesto: string | null
+          primer_apertura_at: string | null
           score: number | null
           telefono: string | null
           updated_at: string
@@ -282,6 +295,7 @@ export type Database = {
           nombre?: string
           notas?: string | null
           presupuesto?: string | null
+          primer_apertura_at?: string | null
           score?: number | null
           telefono?: string | null
           updated_at?: string
@@ -301,6 +315,7 @@ export type Database = {
           nombre?: string
           notas?: string | null
           presupuesto?: string | null
+          primer_apertura_at?: string | null
           score?: number | null
           telefono?: string | null
           updated_at?: string

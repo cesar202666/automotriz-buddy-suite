@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
   ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import { useApp } from "@/context/AppContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -73,6 +74,25 @@ function LoginScreen({ onLogin }: { onLogin: (clave: string) => boolean }) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { usuarioActual, setUsuarioActual, usuarios } = useApp();
+  const [newLeadsCount, setNewLeadsCount] = useState(0);
+
+  // ── Poll for new unassigned/new leads as notification badge ────────────────
+  useEffect(() => {
+    if (!usuarioActual) return;
+    const loadBadge = async () => {
+      const { count } = await supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("etapa", "contactado")
+        .is("primer_apertura_at", null);
+      setNewLeadsCount(count || 0);
+    };
+    loadBadge();
+    const ch = supabase.channel("leads-badge")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, loadBadge)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [usuarioActual]);
 
   const handleLogin = (clave: string): boolean => {
     const found = usuarios.find(u => u.clave === clave);
@@ -110,10 +130,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
+            const isCRM = item.path === "/conversaciones";
             return (
               <Link key={item.path} to={item.path} className={`sidebar-link${active ? " active" : ""}`}>
                 <Icon size={15} />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {isCRM && newLeadsCount > 0 && (
+                  <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full text-white text-xs flex items-center justify-center font-bold px-1"
+                    style={{ background: "#ef4444", fontSize: 10 }}>
+                    {newLeadsCount > 9 ? "9+" : newLeadsCount}
+                  </span>
+                )}
               </Link>
             );
           })}

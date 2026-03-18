@@ -34,6 +34,8 @@ interface Conversation {
   last_message_at: string;
   unread_count: number;
   assigned_to: string | null;
+  escalated?: boolean;
+  escalated_at?: string | null;
   created_at: string;
   contact?: Contact;
 }
@@ -65,6 +67,7 @@ interface Lead {
   vendedor_asignado: string;
   motivo_perdida: string;
   notas: string;
+  primer_apertura_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -177,6 +180,13 @@ function fmtFullTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
 }
 
+function fmtResponseTime(start: string, end: string): string {
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
 function ScoreBadge({ score }: { score: number }) {
   const color = score >= 71 ? "#22c55e" : score >= 41 ? "#f59e0b" : "#ef4444";
   const bg = score >= 71 ? "#dcfce7" : score >= 41 ? "#fef9c3" : "#fee2e2";
@@ -203,7 +213,6 @@ function TabMensajes() {
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [realtime, setRealtime] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const WEBHOOK_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/manychat-webhook`;
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
@@ -317,8 +326,18 @@ function TabMensajes() {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.4)" }}>{conv.last_message || "Sin mensajes"}</p>
-                      {conv.unread_count > 0 && <span className="flex-shrink-0 w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ background: cfg.color, fontSize: 10 }}>{conv.unread_count > 9 ? "9+" : conv.unread_count}</span>}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {conv.escalated && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#f97316", color: "white", fontSize: 9 }}>VENDEDOR</span>
+                        )}
+                        {conv.unread_count > 0 && <span className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ background: cfg.color, fontSize: 10 }}>{conv.unread_count > 9 ? "9+" : conv.unread_count}</span>}
+                      </div>
                     </div>
+                    {conv.assigned_to && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>👤 {conv.assigned_to}</span>
+                      </div>
+                    )}
                   </div>
                 </button>
               );
@@ -418,12 +437,7 @@ function TabMensajes() {
               <MessageSquare size={28} style={{ color: "hsl(var(--primary))" }} />
             </div>
             <h3 className="text-base font-semibold mb-1">Selecciona una conversación</h3>
-            <p className="text-sm mb-6" style={{ color: "hsl(var(--muted-foreground))" }}>Los mensajes de ManyChat aparecen aquí en tiempo real</p>
-            <div className="text-left rounded-xl p-4 border text-xs space-y-2" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-              <p className="font-semibold">📡 Webhook ManyChat</p>
-              <div className="rounded-lg p-2 font-mono break-all" style={{ background: "hsl(var(--muted))", color: "hsl(var(--primary))" }}>{WEBHOOK_URL}</div>
-              <button onClick={() => navigator.clipboard.writeText(WEBHOOK_URL)} className="w-full py-1.5 rounded-lg font-medium text-center" style={{ background: "hsl(var(--primary))", color: "white" }}>Copiar URL</button>
-            </div>
+            <p className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Los mensajes de WhatsApp, Instagram y Facebook aparecen aquí en tiempo real</p>
           </div>
         </div>
       )}
@@ -521,9 +535,15 @@ function TabLeads() {
     if (data) { setLeads(prev => [data as Lead, ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "" }); }
   };
 
-  const openLead = (lead: Lead) => {
+  const openLead = async (lead: Lead) => {
     setSelectedLead(lead);
     setEditLead({ nombre: lead.nombre, telefono: lead.telefono, email: lead.email, interes: lead.interes, presupuesto: lead.presupuesto, urgencia: lead.urgencia, etapa: lead.etapa, vendedor_asignado: lead.vendedor_asignado, score: lead.score, notas: lead.notas });
+    // Track first vendor open for response time metric
+    if (!lead.primer_apertura_at) {
+      const now = new Date().toISOString();
+      await supabase.from("leads").update({ primer_apertura_at: now } as Record<string, unknown>).eq("id", lead.id);
+      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, primer_apertura_at: now } : l));
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Cargando leads...</div></div>;
@@ -590,9 +610,14 @@ function TabLeads() {
                   {etapaLeads.map(lead => (
                     <div key={lead.id} draggable onDragStart={e => handleDragStart(e, lead.id)} onClick={() => openLead(lead)}
                       className="rounded-xl p-3 cursor-pointer hover:scale-[1.01] transition-all"
-                      style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                      style={{ background: !lead.primer_apertura_at && lead.etapa === "contactado" ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.07)", border: !lead.primer_apertura_at && lead.etapa === "contactado" ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(255,255,255,0.08)" }}>
                       <div className="flex items-start justify-between mb-2">
-                        <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                          {!lead.primer_apertura_at && lead.etapa === "contactado" && (
+                            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#ef4444", color: "white", fontSize: 9 }}>NUEVO</span>
+                          )}
+                        </div>
                         <UrgenciaDot urgencia={lead.urgencia} />
                       </div>
                       <div className="flex items-center gap-1.5 mb-2">
@@ -670,6 +695,23 @@ function TabLeads() {
             </div>
 
             <div className="px-5 py-4 space-y-3 flex-1">
+              {/* Response time metric */}
+              <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: "hsl(var(--muted)/0.5)" }}>
+                <p className="font-semibold mb-1">⏱ Tiempo de respuesta</p>
+                <div className="flex justify-between">
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Lead recibido</span>
+                  <span className="font-medium">{new Date(selectedLead.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Primera apertura</span>
+                  <span className="font-medium" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#f59e0b" }}>
+                    {selectedLead.primer_apertura_at
+                      ? fmtResponseTime(selectedLead.created_at, selectedLead.primer_apertura_at)
+                      : "Pendiente"}
+                  </span>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Nombre</label><input className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={editLead.nombre || ""} onChange={e => setEditLead(p => ({ ...p, nombre: e.target.value }))} /></div>
                 <div><label className="text-xs font-medium block mb-1">Teléfono</label><input className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={editLead.telefono || ""} onChange={e => setEditLead(p => ({ ...p, telefono: e.target.value }))} /></div>

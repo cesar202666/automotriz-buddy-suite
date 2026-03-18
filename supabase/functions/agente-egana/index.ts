@@ -28,6 +28,35 @@ function containsKeyword(text: string, keywords: string[]): boolean {
   return keywords.some(kw => lower.includes(kw.toLowerCase()))
 }
 
+/** Extract URLs from text */
+function extractUrls(text: string): string[] {
+  const urlRegex = /https?:\/\/[^\s]+/g
+  return text.match(urlRegex) || []
+}
+
+/** Fetch URL content for AI context (e.g. Yapo.cl listings) */
+async function fetchUrlContent(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EganaBot/1.0)' },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return ''
+    const html = await res.text()
+    // Strip HTML tags and extract meaningful text
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 2000) // Limit to 2000 chars for context
+    return text
+  } catch {
+    return ''
+  }
+}
+
 async function getVendedorAsignado(
   supabase: ReturnType<typeof createClient>,
   modo: string,
@@ -101,6 +130,30 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    // ── Check if conversation already escalated → agent stops responding ─────
+    if (conversationId) {
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('escalated')
+        .eq('id', conversationId)
+        .single()
+
+      if (conv?.escalated) {
+        // Save message to DB but don't reply with AI
+        await supabase.from('conversaciones').insert({
+          contact_id: contactId, nombre, apellido, telefono, canal,
+          mensaje_cliente: mensajeCliente,
+          respuesta_agente: '',
+          leido: false, notificado_vendedor: true, escalada: true,
+        })
+        // Return empty — conversation is now handled by human vendor
+        return new Response(
+          JSON.stringify({ messages: [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // ── Read configuration from configuracion_sistema ────────────────────────
     const { data: configRows } = await supabase
       .from('configuracion_sistema')
@@ -133,7 +186,6 @@ Deno.serve(async (req) => {
     if (horariosActivos && horariosConfig.length > 0) {
       const nowChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }))
       if (!isWithinSchedule(horariosConfig, nowChile)) {
-        // Save to DB and return out-of-hours message
         await supabase.from('conversaciones').insert({
           contact_id: contactId, nombre, apellido, telefono, canal,
           mensaje_cliente: mensajeCliente,
@@ -168,9 +220,22 @@ Deno.serve(async (req) => {
       escalateReason = 'keyword'
     }
 
+    // ── Fetch URL content if client sent a link (e.g. Yapo.cl) ───────────────
+    let urlContext = ''
+    const urls = extractUrls(mensajeCliente)
+    if (urls.length > 0) {
+      const contents = await Promise.all(urls.slice(0, 2).map(fetchUrlContent))
+      const validContents = contents.filter(Boolean)
+      if (validContents.length > 0) {
+        urlContext = `\n\nCONTENIDO DE URL ENVIADA POR EL CLIENTE:\n${validContents.join('\n---\n')}`
+      }
+    }
+
     // ── Call AI Gateway ──────────────────────────────────────────────────────
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY no configurado')
+
+    const fullPrompt = systemPrompt + (urlContext ? urlContext : '')
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -183,7 +248,7 @@ Deno.serve(async (req) => {
         max_tokens: 500,
         temperature,
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: fullPrompt },
           { role: 'user', content: `${nombre} dice: ${mensajeCliente}` }
         ]
       })
@@ -221,8 +286,21 @@ Deno.serve(async (req) => {
         respuesta = escalarMsg
       }
 
-      // Upsert lead in leads table
+      // ── Upsert lead (always create, even without conversationId) ──────────
+      const leadData = {
+        nombre,
+        telefono,
+        canal: canal === 'manychat' ? 'whatsapp' : canal,
+        etapa: 'contactado',
+        score,
+        urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
+        vendedor_asignado: vendedorAsignado,
+        notas: `Lead generado automáticamente por el agente IA. Razón de escalación: ${escalateReason}.`,
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+      }
+
       if (conversationId) {
+        // Check if lead already exists for this conversation
         const { data: existingLead } = await supabase
           .from('leads')
           .select('id')
@@ -230,26 +308,43 @@ Deno.serve(async (req) => {
           .single()
 
         if (!existingLead) {
-          await supabase.from('leads').insert({
-            nombre,
-            telefono,
-            canal: canal === 'manychat' ? 'whatsapp' : canal,
-            conversation_id: conversationId,
-            etapa: 'contactado',
-            score,
-            urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
-            vendedor_asignado: vendedorAsignado,
-            notas: `Lead generado automáticamente por el agente IA. Razón de escalación: ${escalateReason}.`,
-          })
+          await supabase.from('leads').insert(leadData)
         } else {
           await supabase
             .from('leads')
             .update({ score, vendedor_asignado: vendedorAsignado, etapa: 'contactado' })
             .eq('id', existingLead.id)
         }
+      } else {
+        // No conversationId — create lead using contact_id deduplication
+        const { data: existingByContact } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('nombre', nombre)
+          .eq('telefono', telefono)
+          .not('etapa', 'in', '("ganado","perdido")')
+          .limit(1)
+          .maybeSingle()
+
+        if (!existingByContact) {
+          await supabase.from('leads').insert(leadData)
+        } else {
+          await supabase
+            .from('leads')
+            .update({ score, vendedor_asignado: vendedorAsignado })
+            .eq('id', existingByContact.id)
+        }
       }
 
-      // Notify vendor (log for now — in production would call notification API)
+      // ── Mark conversation as escalated so agent stops responding ──────────
+      if (conversationId) {
+        await supabase
+          .from('conversations')
+          .update({ escalated: true, escalated_at: new Date().toISOString() })
+          .eq('id', conversationId)
+      }
+
+      // Notify vendor
       if (notificarVendedor && vendedorAsignado) {
         const msgNotif = (cfg.MENSAJE_NOTIFICACION_VENDEDOR || '')
           .replace('{{vendedor}}', vendedorAsignado)
@@ -275,6 +370,7 @@ Deno.serve(async (req) => {
       notificado_vendedor: shouldEscalate,
       vendedor_asignado: vendedorAsignado || null,
       urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
+      escalada: shouldEscalate,
     })
 
     if (dbError) console.error('DB insert error:', dbError)
@@ -287,6 +383,7 @@ Deno.serve(async (req) => {
           { field_name: 'ultimo_mensaje_agente', value: respuesta },
           { field_name: 'lead_score', value: String(score) },
           ...(vendedorAsignado ? [{ field_name: 'vendedor_asignado', value: vendedorAsignado }] : []),
+          ...(shouldEscalate ? [{ field_name: 'escalado', value: 'true' }] : []),
         ]
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
