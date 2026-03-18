@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Lock, Users, ShoppingCart, TrendingDown, TrendingUp, BarChart3, Plus, Edit2, Trash2, AlertTriangle } from "lucide-react";
 import { useApp, CuentaPagar, CuentaCobrar, Usuario, Venta } from "@/context/AppContext";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { supabase } from "@/integrations/supabase/client";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "$0";
 const CLAVE_ADMIN = "123cuatro";
