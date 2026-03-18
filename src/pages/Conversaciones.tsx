@@ -527,9 +527,15 @@ function TabLeads() {
     if (data) { setLeads(prev => [data as Lead, ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "" }); }
   };
 
-  const openLead = (lead: Lead) => {
+  const openLead = async (lead: Lead) => {
     setSelectedLead(lead);
     setEditLead({ nombre: lead.nombre, telefono: lead.telefono, email: lead.email, interes: lead.interes, presupuesto: lead.presupuesto, urgencia: lead.urgencia, etapa: lead.etapa, vendedor_asignado: lead.vendedor_asignado, score: lead.score, notas: lead.notas });
+    // Track first vendor open for response time metric
+    if (!lead.primer_apertura_at) {
+      const now = new Date().toISOString();
+      await supabase.from("leads").update({ primer_apertura_at: now } as Record<string, unknown>).eq("id", lead.id);
+      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, primer_apertura_at: now } : l));
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Cargando leads...</div></div>;
