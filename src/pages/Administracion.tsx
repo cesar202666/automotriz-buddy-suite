@@ -17,6 +17,28 @@ export default function Administracion() {
   const [claveError, setClaveError] = useState("");
   const [tab, setTab] = useState<AdminTab>("usuarios");
 
+  // Sync usuarios del ERP → tabla vendedores al montar
+  useEffect(() => {
+    const syncUsuarios = async () => {
+      for (const u of usuarios) {
+        if (!u.email) continue;
+        const nombreCompleto = `${u.nombre}${u.apellido ? " " + u.apellido : ""}`.trim();
+        const { data } = await supabase.from("vendedores").select("id").eq("email", u.email).maybeSingle();
+        if (!data) {
+          await supabase.from("vendedores").insert({
+            nombre: nombreCompleto,
+            email: u.email,
+            telefono: u.telefono || "",
+            sucursal: "Principal",
+            activo: true,
+          });
+        }
+      }
+    };
+    syncUsuarios();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Usuarios
   const [showUserModal, setShowUserModal] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
