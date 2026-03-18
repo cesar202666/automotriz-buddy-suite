@@ -180,6 +180,13 @@ function fmtFullTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
 }
 
+function fmtResponseTime(start: string, end: string): string {
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
 function ScoreBadge({ score }: { score: number }) {
   const color = score >= 71 ? "#22c55e" : score >= 41 ? "#f59e0b" : "#ef4444";
   const bg = score >= 71 ? "#dcfce7" : score >= 41 ? "#fef9c3" : "#fee2e2";
