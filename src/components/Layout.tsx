@@ -74,8 +74,25 @@ function LoginScreen({ onLogin }: { onLogin: (clave: string) => boolean }) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { usuarioActual, setUsuarioActual, usuarios } = useApp();
+  const [newLeadsCount, setNewLeadsCount] = useState(0);
 
-  const handleLogin = (clave: string): boolean => {
+  // ── Poll for new unassigned/new leads as notification badge ────────────────
+  useEffect(() => {
+    if (!usuarioActual) return;
+    const loadBadge = async () => {
+      const { count } = await supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("etapa", "contactado")
+        .is("primer_apertura_at", null);
+      setNewLeadsCount(count || 0);
+    };
+    loadBadge();
+    const ch = supabase.channel("leads-badge")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, loadBadge)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [usuarioActual]);
     const found = usuarios.find(u => u.clave === clave);
     if (found) { setUsuarioActual(found); return true; }
     return false;
