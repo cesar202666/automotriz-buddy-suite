@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lock, Users, ShoppingCart, TrendingDown, TrendingUp, BarChart3, Plus, Edit2, Trash2, AlertTriangle } from "lucide-react";
 import { useApp, CuentaPagar, CuentaCobrar, Usuario, Venta } from "@/context/AppContext";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { supabase } from "@/integrations/supabase/client";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "$0";
 const CLAVE_ADMIN = "123cuatro";
@@ -15,6 +16,28 @@ export default function Administracion() {
   const [clave, setClave] = useState("");
   const [claveError, setClaveError] = useState("");
   const [tab, setTab] = useState<AdminTab>("usuarios");
+
+  // Sync usuarios del ERP → tabla vendedores al montar
+  useEffect(() => {
+    const syncUsuarios = async () => {
+      for (const u of usuarios) {
+        if (!u.email) continue;
+        const nombreCompleto = `${u.nombre}${u.apellido ? " " + u.apellido : ""}`.trim();
+        const { data } = await supabase.from("vendedores").select("id").eq("email", u.email).maybeSingle();
+        if (!data) {
+          await supabase.from("vendedores").insert({
+            nombre: nombreCompleto,
+            email: u.email,
+            telefono: u.telefono || "",
+            sucursal: "Principal",
+            activo: true,
+          });
+        }
+      }
+    };
+    syncUsuarios();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Usuarios
   const [showUserModal, setShowUserModal] = useState(false);
@@ -101,11 +124,40 @@ export default function Administracion() {
   // === USUARIOS ===
   const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
   const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
-  const saveUser = () => {
+  const saveUser = async () => {
     if (!userForm.nombre.trim()) return alert("Nombre requerido");
-    if (editUserId) setUsuarios(usuarios.map(u => u.id === editUserId ? { ...u, ...userForm } : u));
-    else setUsuarios([...usuarios, { id: String(Date.now()), ...userForm }]);
+    const nombreCompleto = `${userForm.nombre}${userForm.apellido ? " " + userForm.apellido : ""}`.trim();
+    if (editUserId) {
+      setUsuarios(usuarios.map(u => u.id === editUserId ? { ...u, ...userForm } : u));
+      // Sync: actualizar en tabla vendedores por email o nombre
+      const usuarioActualizado = usuarios.find(u => u.id === editUserId);
+      if (usuarioActualizado) {
+        await supabase.from("vendedores").update({
+          nombre: nombreCompleto,
+          email: userForm.email,
+          telefono: userForm.telefono,
+          activo: true,
+        }).eq("email", usuarioActualizado.email);
+      }
+    } else {
+      const nuevoId = String(Date.now());
+      setUsuarios([...usuarios, { id: nuevoId, ...userForm }]);
+      // Sync: insertar en tabla vendedores
+      await supabase.from("vendedores").insert({
+        nombre: nombreCompleto,
+        email: userForm.email,
+        telefono: userForm.telefono,
+        sucursal: "Principal",
+        activo: true,
+      });
+    }
     setShowUserModal(false);
+  };
+
+  const deleteUser = async (u: Usuario) => {
+    setUsuarios(usuarios.filter(x => x.id !== u.id));
+    // Sync: desactivar en tabla vendedores (no eliminar para preservar historial)
+    await supabase.from("vendedores").update({ activo: false }).eq("email", u.email);
   };
 
   // === CUENTAS POR PAGAR ===
@@ -188,7 +240,7 @@ export default function Administracion() {
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <button onClick={() => openEditUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
-                        <button onClick={() => setUsuarios(usuarios.filter(x => x.id !== u.id))} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
+                        <button onClick={() => deleteUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
                       </div>
                     </td>
                   </tr>
