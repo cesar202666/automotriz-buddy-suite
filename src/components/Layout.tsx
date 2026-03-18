@@ -130,10 +130,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
+            const isCRM = item.path === "/conversaciones";
             return (
               <Link key={item.path} to={item.path} className={`sidebar-link${active ? " active" : ""}`}>
                 <Icon size={15} />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {isCRM && newLeadsCount > 0 && (
+                  <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full text-white text-xs flex items-center justify-center font-bold px-1"
+                    style={{ background: "#ef4444", fontSize: 10 }}>
+                    {newLeadsCount > 9 ? "9+" : newLeadsCount}
+                  </span>
+                )}
               </Link>
             );
           })}
