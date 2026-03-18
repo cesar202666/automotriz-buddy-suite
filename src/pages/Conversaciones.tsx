@@ -603,9 +603,14 @@ function TabLeads() {
                   {etapaLeads.map(lead => (
                     <div key={lead.id} draggable onDragStart={e => handleDragStart(e, lead.id)} onClick={() => openLead(lead)}
                       className="rounded-xl p-3 cursor-pointer hover:scale-[1.01] transition-all"
-                      style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                      style={{ background: !lead.primer_apertura_at && lead.etapa === "contactado" ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.07)", border: !lead.primer_apertura_at && lead.etapa === "contactado" ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(255,255,255,0.08)" }}>
                       <div className="flex items-start justify-between mb-2">
-                        <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                          {!lead.primer_apertura_at && lead.etapa === "contactado" && (
+                            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#ef4444", color: "white", fontSize: 9 }}>NUEVO</span>
+                          )}
+                        </div>
                         <UrgenciaDot urgencia={lead.urgencia} />
                       </div>
                       <div className="flex items-center gap-1.5 mb-2">
