@@ -205,7 +205,6 @@ function TabMensajes() {
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [realtime, setRealtime] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const WEBHOOK_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/manychat-webhook`;
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
