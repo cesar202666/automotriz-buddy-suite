@@ -687,7 +687,8 @@ function TabLeads() {
               <button onClick={() => setSelectedLead(null)}><X size={18} /></button>
             </div>
 
-               {/* Response time metric */}
+            <div className="px-5 py-4 space-y-3 flex-1">
+              {/* Response time metric */}
               <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: "hsl(var(--muted)/0.5)" }}>
                 <p className="font-semibold mb-1">⏱ Tiempo de respuesta</p>
                 <div className="flex justify-between">
