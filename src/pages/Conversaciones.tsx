@@ -687,7 +687,7 @@ function TabLeads() {
               <button onClick={() => setSelectedLead(null)}><X size={18} /></button>
             </div>
 
-              {/* Response time metric */}
+               {/* Response time metric */}
               <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: "hsl(var(--muted)/0.5)" }}>
                 <p className="font-semibold mb-1">⏱ Tiempo de respuesta</p>
                 <div className="flex justify-between">
@@ -698,11 +698,7 @@ function TabLeads() {
                   <span style={{ color: "hsl(var(--muted-foreground))" }}>Primera apertura</span>
                   <span className="font-medium" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#f59e0b" }}>
                     {selectedLead.primer_apertura_at
-                      ? (() => {
-                          const ms = new Date(selectedLead.primer_apertura_at).getTime() - new Date(selectedLead.created_at).getTime();
-                          const mins = Math.floor(ms / 60000);
-                          return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
-                        })()
+                      ? fmtResponseTime(selectedLead.created_at, selectedLead.primer_apertura_at)
                       : "Pendiente"}
                   </span>
                 </div>
