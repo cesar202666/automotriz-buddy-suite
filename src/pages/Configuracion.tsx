@@ -711,15 +711,50 @@ export default function Configuracion() {
 
         {/* ── Webhook URL ───────────────────────────────────────────────────── */}
         <div className="bg-card border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))" }}>
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-1">
             <Globe size={16} style={{ color: "hsl(var(--primary))" }} />
-            <h3 className="text-sm font-bold">URL del Webhook de Meta</h3>
+            <h3 className="text-sm font-bold">URLs de Webhooks</h3>
           </div>
-          <div className="rounded-lg p-3 font-mono text-xs break-all mb-2" style={{ background: "hsl(var(--muted))", color: "hsl(var(--primary))" }}>{webhookUrl}</div>
-          <button onClick={() => { navigator.clipboard.writeText(webhookUrl); alert("URL copiada"); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: "hsl(var(--border))" }}>
-            <Copy size={13} /> Copiar URL
-          </button>
-          <div className="mt-3 text-xs space-y-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+          <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>
+            Usa estas URLs en Meta for Developers y ManyChat para recibir mensajes.
+          </p>
+          <div className="space-y-4">
+            {/* Meta Webhook */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold">📡 Webhook Meta (WhatsApp / Instagram / Facebook)</span>
+              </div>
+              <div className="rounded-lg p-3 font-mono text-xs break-all mb-1.5" style={{ background: "hsl(var(--muted))", color: "hsl(var(--primary))" }}>{webhookUrl}</div>
+              <button onClick={() => { navigator.clipboard.writeText(webhookUrl); alert("URL copiada"); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: "hsl(var(--border))" }}>
+                <Copy size={13} /> Copiar URL Meta
+              </button>
+            </div>
+            {/* ManyChat Webhook */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold">💬 Webhook ManyChat</span>
+              </div>
+              <div className="rounded-lg p-3 font-mono text-xs break-all mb-1.5" style={{ background: "hsl(var(--muted))", color: "hsl(var(--primary))" }}>
+                {`https://${projectId}.supabase.co/functions/v1/manychat-webhook`}
+              </div>
+              <button onClick={() => { navigator.clipboard.writeText(`https://${projectId}.supabase.co/functions/v1/manychat-webhook`); alert("URL copiada"); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: "hsl(var(--border))" }}>
+                <Copy size={13} /> Copiar URL ManyChat
+              </button>
+            </div>
+            {/* Agente Webhook */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold">🤖 Agente IA (endpoint directo)</span>
+              </div>
+              <div className="rounded-lg p-3 font-mono text-xs break-all mb-1.5" style={{ background: "hsl(var(--muted))", color: "hsl(var(--primary))" }}>
+                {`https://${projectId}.supabase.co/functions/v1/agente-egana`}
+              </div>
+              <button onClick={() => { navigator.clipboard.writeText(`https://${projectId}.supabase.co/functions/v1/agente-egana`); alert("URL copiada"); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: "hsl(var(--border))" }}>
+                <Copy size={13} /> Copiar URL Agente
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 text-xs space-y-1" style={{ color: "hsl(var(--muted-foreground))" }}>
             <p className="font-semibold">Eventos a suscribir en Meta for Developers:</p>
             <p>• WhatsApp: <code>messages, message_deliveries, message_reads</code></p>
             <p>• Instagram: <code>messages, comments, story_mentions</code></p>
