@@ -110,6 +110,31 @@ Deno.serve(async (req) => {
       sent_at: new Date().toISOString(),
     })
 
+    // ── 3b. Auto-create lead if not exists ────────────────────────────────────
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('id, score')
+      .eq('contact_id', contactId)
+      .maybeSingle()
+
+    if (!existingLead) {
+      await supabase.from('leads').insert({
+        contact_id: contactId,
+        conversation_id: conversationId,
+        nombre: `${firstName}${lastName ? ' ' + lastName : ''}`.trim(),
+        telefono: phone,
+        email: email,
+        canal: channel,
+        etapa: 'nuevo',
+        score: 0,
+        urgencia: 'media',
+        interes: '',
+        presupuesto: '',
+        vendedor_asignado: '',
+        notas: messageText.substring(0, 200),
+      })
+    }
+
     // ── 4. Si la conversación ya fue escalada, guardar msg y NO responder con IA
     if (convData?.escalated) {
       // Solo guardar el mensaje entrante - el vendedor atiende ahora
