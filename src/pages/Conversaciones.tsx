@@ -500,7 +500,21 @@ function TabLeads() {
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
-    const ch = supabase.channel("leads-rt").on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => loadData()).subscribe();
+    const ch = supabase.channel("leads-rt").on("postgres_changes", { event: "*", schema: "public", table: "leads" }, (payload) => {
+      loadData();
+      if (payload.eventType === "INSERT") {
+        const newLead = payload.new as Lead;
+        toast(`Nuevo lead: ${newLead.nombre} vía ${newLead.canal || "web"}`, {
+          description: newLead.interes ? `Interés: ${newLead.interes}` : "Lead recién ingresado",
+          duration: 10000,
+          closeButton: true,
+          action: {
+            label: "Ver",
+            onClick: () => openLead(newLead),
+          },
+        });
+      }
+    }).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [loadData]);
 
