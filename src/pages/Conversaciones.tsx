@@ -651,7 +651,7 @@ function TabLeads() {
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
                           {!lead.primer_apertura_at && lead.etapa === "contactado" && (
-                            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#ef4444", color: "white", fontSize: 9 }}>NUEVO</span>
+                            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-bold animate-pulse" style={{ background: "#ef4444", color: "white", fontSize: 9 }}>NUEVO</span>
                           )}
                         </div>
                         <UrgenciaDot urgencia={lead.urgencia} />
