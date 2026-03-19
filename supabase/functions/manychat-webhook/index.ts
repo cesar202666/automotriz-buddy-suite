@@ -135,29 +135,23 @@ Deno.serve(async (req) => {
       })
     }
 
-    // ── 4. Si la conversación ya fue escalada, guardar msg y NO responder con IA
+    // ── 4. Si la conversación ya fue escalada, NO llamar al agente IA
     if (convData?.escalated) {
-      // Solo guardar el mensaje entrante - el vendedor atiende ahora
-      await supabase.from('conversaciones').insert({
-        contact_id: subscriberId,
-        nombre: firstName,
-        apellido: lastName || null,
-        telefono: phone || null,
-        canal: channel,
-        mensaje_cliente: messageText,
-        respuesta_agente: '',
-        leido: false,
-        notificado_vendedor: true,
-        escalada: true,
-      })
-
       return new Response(
         JSON.stringify({ messages: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // ── 5. Llamar al agente-egana con los IDs correctos ──────────────────────
+    // ── 5. Recuperar historial conversacional ───────────────────────────────
+    const { data: historialMensajes } = await supabase
+      .from('messages')
+      .select('direction, content, sent_at')
+      .eq('conversation_id', conversationId)
+      .order('sent_at', { ascending: true })
+      .limit(10)
+
+    // ── 6. Llamar al agente-egana con los IDs correctos ──────────────────────
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 
     const agentResponse = await fetch(`${supabaseUrl}/functions/v1/agente-egana`, {
@@ -167,17 +161,18 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
       },
       body: JSON.stringify({
-        contact_id: contactId,          // UUID real del contacto en Supabase
-        external_id: subscriberId,      // ID externo de ManyChat
+        contact_id: contactId,
+        external_id: subscriberId,
         first_name: firstName,
         last_name: lastName,
         phone,
         email,
         last_input_text: messageText,
         channel,
-        conversation_id: conversationId,  // UUID real de la conversación
+        conversation_id: conversationId,
         manychat_message_id: manychatMessageId,
         source: 'manychat',
+        conversation_history: historialMensajes || [],
       }),
     })
 
