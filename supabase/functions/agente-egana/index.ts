@@ -463,21 +463,6 @@ REGLAS:
         .eq('id', conversationId)
     }
 
-    // ── Guardar en tabla conversaciones (legado) ──────────────────────────────
-    await supabase.from('conversaciones').insert({
-      contact_id: externalId || contactId,
-      nombre,
-      apellido,
-      telefono,
-      canal,
-      mensaje_cliente: mensajeCliente,
-      respuesta_agente: respuesta,
-      leido: false,
-      notificado_vendedor: shouldEscalate,
-      vendedor_asignado: vendedorAsignado || null,
-      urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
-      escalada: shouldEscalate,
-    })
 
     // ── Enviar respuesta por Meta API si viene de WhatsApp/Meta ───────────────
     if (source === 'meta' && canal === 'whatsapp' && phoneNumberId && senderId && accessToken) {
