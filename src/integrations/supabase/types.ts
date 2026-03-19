@@ -181,6 +181,7 @@ export type Database = {
           created_at: string
           escalated: boolean
           escalated_at: string | null
+          escalated_to: string | null
           id: string
           last_message: string | null
           last_message_at: string | null
@@ -195,6 +196,7 @@ export type Database = {
           created_at?: string
           escalated?: boolean
           escalated_at?: string | null
+          escalated_to?: string | null
           id?: string
           last_message?: string | null
           last_message_at?: string | null
@@ -209,6 +211,7 @@ export type Database = {
           created_at?: string
           escalated?: boolean
           escalated_at?: string | null
+          escalated_to?: string | null
           id?: string
           last_message?: string | null
           last_message_at?: string | null
