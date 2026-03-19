@@ -135,22 +135,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    // ── 4. Si la conversación ya fue escalada, guardar msg y NO responder con IA
+    // ── 4. Si la conversación ya fue escalada, NO llamar al agente IA
     if (convData?.escalated) {
-      // Solo guardar el mensaje entrante - el vendedor atiende ahora
-      await supabase.from('conversaciones').insert({
-        contact_id: subscriberId,
-        nombre: firstName,
-        apellido: lastName || null,
-        telefono: phone || null,
-        canal: channel,
-        mensaje_cliente: messageText,
-        respuesta_agente: '',
-        leido: false,
-        notificado_vendedor: true,
-        escalada: true,
-      })
-
       return new Response(
         JSON.stringify({ messages: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
