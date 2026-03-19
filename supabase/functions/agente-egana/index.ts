@@ -149,7 +149,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // ── Si ya está escalada → guardar mensaje pero NO responder con IA ────────
     if (conversationId) {
       const { data: conv } = await supabase
         .from('conversations')
@@ -158,16 +157,6 @@ Deno.serve(async (req) => {
         .single()
 
       if (conv?.escalated) {
-        // El mensaje ya fue insertado por el webhook. Solo registrar en conversaciones legado.
-        await supabase.from('conversaciones').insert({
-          contact_id: externalId || contactId,
-          nombre, apellido, telefono, canal,
-          mensaje_cliente: mensajeCliente,
-          respuesta_agente: '',
-          leido: false,
-          notificado_vendedor: true,
-          escalada: true,
-        })
         return new Response(
           JSON.stringify({ messages: [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
