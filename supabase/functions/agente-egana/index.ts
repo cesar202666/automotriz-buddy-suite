@@ -258,20 +258,16 @@ Deno.serve(async (req) => {
     }
 
     // ── Escalamiento por horario y datos capturados ───────────────────────────
-    // DENTRO DEL HORARIO: escalar después de 2+ intercambios (el agente ya saludó y tiene datos básicos)
-    if (!shouldEscalate && dentroHorario && messageCount >= 2) {
+    // DENTRO DEL HORARIO: escalar inmediatamente
+    if (!shouldEscalate && dentroHorario) {
       shouldEscalate = true
       escalateReason = 'dentro_horario_datos_capturados'
     }
 
-    // FUERA DEL HORARIO: escalar cuando tenga nombre + teléfono y 4+ intercambios
+    // FUERA DEL HORARIO: escalar inmediatamente
     if (!shouldEscalate && !dentroHorario) {
-      const hasPhone = !!(telefono || mensajeCliente.match(/\+?56\s?\d{8,9}|\d{8,9}/))
-      const hasName = nombre !== 'Cliente'
-      if (hasPhone && hasName && messageCount >= 4) {
-        shouldEscalate = true
-        escalateReason = 'fuera_horario_datos_capturados'
-      }
+      shouldEscalate = true
+      escalateReason = 'fuera_horario_datos_capturados'
     }
 
     // ── Construir system prompt según horario ─────────────────────────────────
