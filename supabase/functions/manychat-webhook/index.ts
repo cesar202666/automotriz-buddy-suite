@@ -15,8 +15,8 @@ Deno.serve(async (req) => {
     const subscriberId: string = String(body.contact_id || body.id || body.subscriber_id || '')
     const firstName: string = body.first_name || body.name || 'Cliente'
     const lastName: string = body.last_name || ''
-    const phone: string = body.phone || ''
-    const email: string = body.email || ''
+    const phone: string = (body.phone || '').startsWith('{{') ? '' : (body.phone || '')
+    const email: string = (body.email || '').startsWith('{{') ? '' : (body.email || '')
     const channelRaw: string = (body.channel || body.platform || 'whatsapp').toLowerCase()
     const channel: string = ['whatsapp', 'instagram', 'facebook'].includes(channelRaw) ? channelRaw : 'whatsapp'
     const messageText: string = body.last_input_text || body.text || body.message || ''
@@ -109,6 +109,31 @@ Deno.serve(async (req) => {
       manychat_message_id: manychatMessageId,
       sent_at: new Date().toISOString(),
     })
+
+    // ── 3b. Auto-create lead if not exists ────────────────────────────────────
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('id, score')
+      .eq('contact_id', contactId)
+      .maybeSingle()
+
+    if (!existingLead) {
+      await supabase.from('leads').insert({
+        contact_id: contactId,
+        conversation_id: conversationId,
+        nombre: `${firstName}${lastName ? ' ' + lastName : ''}`.trim(),
+        telefono: phone,
+        email: email,
+        canal: channel,
+        etapa: 'nuevo',
+        score: 0,
+        urgencia: 'media',
+        interes: '',
+        presupuesto: '',
+        vendedor_asignado: '',
+        notas: messageText.substring(0, 200),
+      })
+    }
 
     // ── 4. Si la conversación ya fue escalada, guardar msg y NO responder con IA
     if (convData?.escalated) {

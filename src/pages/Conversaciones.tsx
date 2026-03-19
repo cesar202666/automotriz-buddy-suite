@@ -4,8 +4,9 @@ import {
   Phone, CheckCheck, Bot, User as UserIcon, Clock, Target,
   Users, BarChart3, Megaphone, Plus, X, ChevronRight, Edit3,
   Trash2, Send, Filter, GripVertical, AlertCircle, Info,
-  TrendingUp, DollarSign, Award, Zap
+  TrendingUp, DollarSign, Award, Zap, RefreshCw
 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -384,6 +385,27 @@ function TabMensajes() {
             </div>
           </div>
 
+          {/* Escalated banner */}
+          {selectedConv.escalated && (
+            <div className="px-5 py-2.5 flex items-center justify-between flex-shrink-0" style={{ background: "#fef3c7", borderBottom: "1px solid #fcd34d" }}>
+              <div className="flex items-center gap-2 text-sm" style={{ color: "#92400e" }}>
+                <AlertCircle size={16} />
+                <span className="font-medium">⚠️ Conversación escalada a vendedor — El agente IA no responde.</span>
+                {selectedConv.assigned_to && <span>Asignado a: <strong>{selectedConv.assigned_to}</strong></span>}
+              </div>
+              <button
+                onClick={async () => {
+                  await supabase.from("conversations").update({ escalated: false, escalated_at: null } as Record<string, unknown>).eq("id", selectedConv.id);
+                  setConversations((prev) => prev.map((c) => c.id === selectedConv.id ? { ...c, escalated: false, escalated_at: null } : c));
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border"
+                style={{ borderColor: "#92400e", color: "#92400e", background: "rgba(255,255,255,0.6)" }}
+              >
+                <RefreshCw size={12} />Reactivar bot
+              </button>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-5 space-y-3" style={{ background: "hsl(220 20% 97%)" }}>
             {messagesLoading ? (
               <div className="flex items-center justify-center h-full" style={{ color: "hsl(var(--muted-foreground))" }}>
@@ -478,7 +500,21 @@ function TabLeads() {
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
-    const ch = supabase.channel("leads-rt").on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => loadData()).subscribe();
+    const ch = supabase.channel("leads-rt").on("postgres_changes", { event: "*", schema: "public", table: "leads" }, (payload) => {
+      loadData();
+      if (payload.eventType === "INSERT") {
+        const newLead = payload.new as Lead;
+        toast(`Nuevo lead: ${newLead.nombre} vía ${newLead.canal || "web"}`, {
+          description: newLead.interes ? `Interés: ${newLead.interes}` : "Lead recién ingresado",
+          duration: 10000,
+          closeButton: true,
+          action: {
+            label: "Ver",
+            onClick: () => openLead(newLead),
+          },
+        });
+      }
+    }).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [loadData]);
 
@@ -615,7 +651,7 @@ function TabLeads() {
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
                           {!lead.primer_apertura_at && lead.etapa === "contactado" && (
-                            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#ef4444", color: "white", fontSize: 9 }}>NUEVO</span>
+                            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-bold animate-pulse" style={{ background: "#ef4444", color: "white", fontSize: 9 }}>NUEVO</span>
                           )}
                         </div>
                         <UrgenciaDot urgencia={lead.urgencia} />
