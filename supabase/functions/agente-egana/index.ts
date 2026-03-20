@@ -132,6 +132,7 @@ Deno.serve(async (req) => {
     const telefono: string = body.phone || ''
     const canal: string = body.channel || 'manychat'
     const conversationId: string = body.conversation_id || ''
+    const manychatMessageId: string = body.manychat_message_id || ''
     const phoneNumberId: string = body.phone_number_id || ''
     const senderId: string = body.sender_id || ''
     const accessToken: string = body.access_token || ''
@@ -159,20 +160,17 @@ Deno.serve(async (req) => {
       if (conv?.escalated) {
         const nowIso = new Date().toISOString()
 
-        const { data: lastInbound } = await supabase
-          .from('messages')
-          .select('content, sent_at')
-          .eq('conversation_id', conversationId)
-          .eq('direction', 'inbound')
-          .order('sent_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        let isDuplicate = false
+        if (manychatMessageId) {
+          const { data: existingMsgById } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('conversation_id', conversationId)
+            .eq('manychat_message_id', manychatMessageId)
+            .maybeSingle()
 
-        const sentAtMs = lastInbound?.sent_at ? new Date(lastInbound.sent_at).getTime() : 0
-        const isDuplicate =
-          !!lastInbound &&
-          lastInbound.content === mensajeCliente &&
-          Math.abs(Date.now() - sentAtMs) < 15000
+          isDuplicate = !!existingMsgById
+        }
 
         if (!isDuplicate) {
           await supabase.from('messages').insert({
@@ -181,6 +179,7 @@ Deno.serve(async (req) => {
             direction: 'inbound',
             content: mensajeCliente,
             channel: canal,
+            manychat_message_id: manychatMessageId || null,
             sent_at: nowIso,
           })
         }
