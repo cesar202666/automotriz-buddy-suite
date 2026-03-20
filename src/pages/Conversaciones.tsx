@@ -217,6 +217,28 @@ function TabMensajes() {
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
 
+  const handleSendReply = async () => {
+    if (!replyText.trim() || sending || !selectedConvId) return;
+    const conv = conversations.find((c) => c.id === selectedConvId);
+    if (!conv) return;
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manychat-send-message", {
+        body: { conversation_id: conv.id, contact_id: conv.contact_id, message: replyText.trim(), channel: conv.channel },
+      });
+      if (error || !data?.success) {
+        toast.error(data?.error || error?.message || "Error al enviar mensaje");
+      } else {
+        toast.success("Mensaje enviado al cliente");
+        setReplyText("");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Error al enviar mensaje");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const loadConversations = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.from("conversations").select("*, contact:contacts(*)").order("last_message_at", { ascending: false }).limit(200);
