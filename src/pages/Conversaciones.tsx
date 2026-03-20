@@ -477,9 +477,37 @@ function TabMensajes() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="px-5 py-2 border-t flex items-center gap-3 text-xs flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))" }}>
-            <Bot size={12} /><span>Respondido automáticamente por Agente IA Egaña</span><span>·</span><span>{messages.length} mensajes</span>
-          </div>
+          {selectedConv.escalated ? (
+            <div className="px-4 py-3 border-t flex items-center gap-2 flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+              <input
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && replyText.trim() && !sending) { e.preventDefault(); handleSendReply(); } }}
+                placeholder="Escribe una respuesta al cliente..."
+                disabled={sending}
+                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none border"
+                style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
+              />
+              <button
+                onClick={handleSendReply}
+                disabled={sending || !replyText.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                style={{
+                  background: sending || !replyText.trim() ? "hsl(var(--muted))" : "hsl(var(--primary))",
+                  color: sending || !replyText.trim() ? "hsl(var(--muted-foreground))" : "white",
+                  cursor: sending || !replyText.trim() ? "not-allowed" : "pointer",
+                  opacity: sending || !replyText.trim() ? 0.6 : 1,
+                }}
+              >
+                <Send size={14} />
+                {sending ? "Enviando..." : "Enviar"}
+              </button>
+            </div>
+          ) : (
+            <div className="px-5 py-2 border-t flex items-center gap-3 text-xs flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))" }}>
+              <Bot size={12} /><span>Respondido automáticamente por Agente IA Egaña</span><span>·</span><span>{messages.length} mensajes</span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center" style={{ background: "hsl(220 20% 97%)" }}>
