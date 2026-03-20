@@ -5,27 +5,122 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
+function extractString(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return ''
+}
+
+function cleanTemplateValue(value: unknown): string {
+  const str = extractString(value)
+  if (!str) return ''
+  return str.startsWith('{{') && str.endsWith('}}') ? '' : str
+}
+
+function extractMessageText(payload: Record<string, unknown>): string {
+  const queue: unknown[] = [
+    payload.last_input_text,
+    payload.last_text_input,
+    payload.text,
+    payload.message,
+    payload.content,
+    payload.body,
+    payload.input,
+    payload.last_message,
+    payload.data,
+  ]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current) continue
+
+    if (typeof current === 'string' || typeof current === 'number' || typeof current === 'boolean') {
+      const parsed = extractString(current)
+      if (parsed) return parsed
+      continue
+    }
+
+    if (Array.isArray(current)) {
+      queue.push(...current)
+      continue
+    }
+
+    if (typeof current === 'object') {
+      const obj = current as Record<string, unknown>
+      queue.push(
+        obj.text,
+        obj.body,
+        obj.message,
+        obj.content,
+        obj.caption,
+        obj.value,
+        obj.input,
+        obj.last_input_text,
+      )
+    }
+  }
+
+  return ''
+}
+
+function extractSubscriberId(payload: Record<string, unknown>, phone: string, email: string): string {
+  const candidate = [
+    payload.contact_id,
+    payload.subscriber_id,
+    payload.contactId,
+    payload.subscriberId,
+    (payload.contact as Record<string, unknown> | undefined)?.id,
+    (payload.subscriber as Record<string, unknown> | undefined)?.id,
+    (payload.sender as Record<string, unknown> | undefined)?.id,
+    (payload.from as Record<string, unknown> | undefined)?.id,
+    payload.id,
+  ]
+    .map(extractString)
+    .find(Boolean)
+
+  if (candidate) return candidate
+  if (phone) return `phone:${phone}`
+  if (email) return `email:${email}`
+  return ''
+}
+
+function extractManychatMessageId(payload: Record<string, unknown>): string {
+  return [
+    payload.message_id,
+    payload.event_id,
+    (payload.message as Record<string, unknown> | undefined)?.id,
+    (payload.last_message as Record<string, unknown> | undefined)?.id,
+  ]
+    .map(extractString)
+    .find(Boolean) || ''
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
-    const body = await req.json()
+    const body = await req.json() as Record<string, unknown>
 
     // ── Parse ManyChat payload ───────────────────────────────────────────────
-    const subscriberId: string = String(body.contact_id || body.id || body.subscriber_id || '')
-    const firstName: string = body.first_name || body.name || 'Cliente'
-    const lastName: string = body.last_name || ''
-    const phone: string = (body.phone || '').startsWith('{{') ? '' : (body.phone || '')
-    const email: string = (body.email || '').startsWith('{{') ? '' : (body.email || '')
-    const channelRaw: string = (body.channel || body.platform || 'whatsapp').toLowerCase()
+    const firstName: string = extractString(body.first_name) || extractString(body.name) || extractString((body.contact as Record<string, unknown> | undefined)?.first_name) || 'Cliente'
+    const lastName: string = extractString(body.last_name) || extractString((body.contact as Record<string, unknown> | undefined)?.last_name)
+    const phone: string = cleanTemplateValue(body.phone) || cleanTemplateValue((body.contact as Record<string, unknown> | undefined)?.phone)
+    const email: string = cleanTemplateValue(body.email) || cleanTemplateValue((body.contact as Record<string, unknown> | undefined)?.email)
+    const subscriberId: string = extractSubscriberId(body, phone, email)
+    const channelRaw: string = (extractString(body.channel) || extractString(body.platform) || 'whatsapp').toLowerCase()
     const channel: string = ['whatsapp', 'instagram', 'facebook'].includes(channelRaw) ? channelRaw : 'whatsapp'
-    const messageText: string = body.last_input_text || body.text || body.message || ''
-    const manychatMessageId: string = String(body.message_id || '')
+    const messageText: string = extractMessageText(body)
+    const manychatMessageId: string = extractManychatMessageId(body)
 
     if (!subscriberId || !messageText) {
+      console.error('manychat-webhook payload incompleto', {
+        subscriberId,
+        hasMessageText: Boolean(messageText),
+        bodyKeys: Object.keys(body || {}),
+      })
       return new Response(
-        JSON.stringify({ error: 'Faltan campos requeridos: contact_id y last_input_text' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ messages: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
