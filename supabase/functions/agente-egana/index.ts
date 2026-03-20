@@ -323,6 +323,15 @@ Deno.serve(async (req) => {
     const cfg: Record<string, string> = {}
     ;(configRows || []).forEach((r: { clave: string; valor: string }) => { cfg[r.clave] = r.valor })
 
+    // ── Check if agent is globally disabled ──────────────────────────────────
+    const agenteActivo = (cfg.AGENTE_ACTIVO || 'true') === 'true'
+    if (!agenteActivo) {
+      return new Response(
+        JSON.stringify({ messages: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const modoAsignacion = cfg.ASIGNACION_MODO || 'ORDENADO'
     const vendedorDefault = cfg.VENDEDOR_DEFAULT || ''
     const notificarVendedor = (cfg.NOTIFICAR_VENDEDOR || 'true') === 'true'

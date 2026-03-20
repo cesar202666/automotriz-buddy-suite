@@ -1397,6 +1397,49 @@ export default function Conversaciones() {
     { id: "campanas" as Tab, label: "Campañas", icon: Megaphone },
   ];
 
+  const [agenteActivo, setAgenteActivo] = useState(true);
+  const [loadingAgente, setLoadingAgente] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from("configuracion_sistema")
+      .select("valor")
+      .eq("clave", "AGENTE_ACTIVO")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setAgenteActivo(data.valor === "true");
+      });
+  }, []);
+
+  const toggleAgente = async () => {
+    const clave = prompt("Ingresa la clave de Admin Master para confirmar:");
+    if (clave !== "123cuatro") {
+      toast.error("Clave incorrecta");
+      return;
+    }
+    setLoadingAgente(true);
+    const nuevoValor = !agenteActivo;
+    const { data: existing } = await supabase
+      .from("configuracion_sistema")
+      .select("id")
+      .eq("clave", "AGENTE_ACTIVO")
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("configuracion_sistema")
+        .update({ valor: String(nuevoValor) })
+        .eq("clave", "AGENTE_ACTIVO");
+    } else {
+      await supabase
+        .from("configuracion_sistema")
+        .insert({ clave: "AGENTE_ACTIVO", valor: String(nuevoValor) });
+    }
+    setAgenteActivo(nuevoValor);
+    setLoadingAgente(false);
+    toast.success(nuevoValor ? "Agente IA activado" : "Agente IA desactivado");
+  };
+
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
       {/* Header */}
@@ -1410,6 +1453,19 @@ export default function Conversaciones() {
             <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Gestión de clientes y conversaciones</p>
           </div>
         </div>
+        <button
+          onClick={toggleAgente}
+          disabled={loadingAgente}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95"
+          style={{
+            background: agenteActivo ? "hsl(142 71% 45% / 0.15)" : "hsl(0 84% 60% / 0.15)",
+            color: agenteActivo ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)",
+            border: `1px solid ${agenteActivo ? "hsl(142 71% 45% / 0.3)" : "hsl(0 84% 60% / 0.3)"}`,
+          }}
+        >
+          <Bot size={14} />
+          {loadingAgente ? "..." : agenteActivo ? "Agente IA Activo" : "Agente IA Apagado"}
+        </button>
       </div>
 
       {/* Tabs */}
