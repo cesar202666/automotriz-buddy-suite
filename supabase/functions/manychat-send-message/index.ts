@@ -67,6 +67,7 @@ Deno.serve(async (req) => {
             messages: [{ type: 'text', text: message }]
           }
         },
+        message_tag: 'ACCOUNT_UPDATE',
       }),
     })
 
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
     try { mcResult = JSON.parse(mcText) } catch { mcResult = { raw: mcText } }
     console.log('ManyChat response:', JSON.stringify(mcResult))
 
-    if (!mcResponse.ok) {
+    if (!mcResponse.ok || mcResult?.status === 'error') {
       return new Response(JSON.stringify({ success: false, error: `ManyChat error: ${mcResult?.message || mcResponse.statusText}` }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
