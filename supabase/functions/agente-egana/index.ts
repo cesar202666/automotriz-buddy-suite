@@ -152,11 +152,49 @@ Deno.serve(async (req) => {
     if (conversationId) {
       const { data: conv } = await supabase
         .from('conversations')
-        .select('escalated')
+        .select('escalated, unread_count')
         .eq('id', conversationId)
         .single()
 
       if (conv?.escalated) {
+        const nowIso = new Date().toISOString()
+
+        const { data: lastInbound } = await supabase
+          .from('messages')
+          .select('content, sent_at')
+          .eq('conversation_id', conversationId)
+          .eq('direction', 'inbound')
+          .order('sent_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const sentAtMs = lastInbound?.sent_at ? new Date(lastInbound.sent_at).getTime() : 0
+        const isDuplicate =
+          !!lastInbound &&
+          lastInbound.content === mensajeCliente &&
+          Math.abs(Date.now() - sentAtMs) < 15000
+
+        if (!isDuplicate) {
+          await supabase.from('messages').insert({
+            conversation_id: conversationId,
+            contact_id: contactId || null,
+            direction: 'inbound',
+            content: mensajeCliente,
+            channel: canal,
+            sent_at: nowIso,
+          })
+        }
+
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: mensajeCliente,
+            last_message_at: nowIso,
+            unread_count: (conv.unread_count || 0) + (isDuplicate ? 0 : 1),
+            status: 'active',
+          })
+          .eq('id', conversationId)
+
         return new Response(
           JSON.stringify({ messages: [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
