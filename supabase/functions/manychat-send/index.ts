@@ -57,7 +57,6 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           subscriber_id: contacto.manychat_subscriber_id,
           data: { version: 'v2', content: { messages: [{ type: 'text', text: mensaje }] } },
-          message_tag: 'ACCOUNT_UPDATE',
         }),
       })
       enviados++
