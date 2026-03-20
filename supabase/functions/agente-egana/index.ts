@@ -238,14 +238,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Check if conversation is already escalated (cooldown 10 days) ─────────
     if (conversationId) {
       const { data: conv } = await supabase
         .from('conversations')
-        .select('escalated, unread_count')
+        .select('escalated, escalated_at, unread_count')
         .eq('id', conversationId)
         .single()
 
       if (conv?.escalated) {
+        // Check 10-day cooldown: if escalated less than 10 days ago, don't respond
+        const escalatedAt = conv.escalated_at ? new Date(conv.escalated_at) : null
+        const tenDaysMs = 10 * 24 * 60 * 60 * 1000
+        const withinCooldown = escalatedAt && (Date.now() - escalatedAt.getTime()) < tenDaysMs
+
+        // Always save inbound message
         const nowIso = new Date().toISOString()
         const insertedInbound = await ensureInboundMessage(supabase, {
           conversationId,
@@ -266,13 +273,23 @@ Deno.serve(async (req) => {
           })
           .eq('id', conversationId)
 
-        return new Response(
-          JSON.stringify({ messages: [] }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        if (withinCooldown) {
+          // Within 10-day cooldown: don't respond, vendor handles it
+          return new Response(
+            JSON.stringify({ messages: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } else {
+          // Cooldown expired: reset escalation, allow new interaction
+          await supabase
+            .from('conversations')
+            .update({ escalated: false, escalated_at: null })
+            .eq('id', conversationId)
+        }
       }
     }
 
+    // ── Save inbound message if not escalated ──────────────────────────────────
     if (conversationId) {
       const nowIso = new Date().toISOString()
       const insertedInbound = await ensureInboundMessage(supabase, {
@@ -298,7 +315,7 @@ Deno.serve(async (req) => {
         .eq('id', conversationId)
     }
 
-    // ── Leer configuración ─────────────────────────────────────────────────────
+    // ── Read config ────────────────────────────────────────────────────────────
     const { data: configRows } = await supabase
       .from('configuracion_sistema')
       .select('clave, valor')
@@ -306,273 +323,114 @@ Deno.serve(async (req) => {
     const cfg: Record<string, string> = {}
     ;(configRows || []).forEach((r: { clave: string; valor: string }) => { cfg[r.clave] = r.valor })
 
-    const modelRaw = cfg.AGENT_MODEL || 'google/gemini-2.5-flash'
-    const maxMessages = Number(cfg.AGENT_MAX_MESSAGES || '20')
-    const temperature = Number(cfg.AGENT_TEMPERATURE || '0.7')
-    const scoreMinimo = Number(cfg.SCORE_MINIMO_ESCALAR || '60')
     const modoAsignacion = cfg.ASIGNACION_MODO || 'ORDENADO'
     const vendedorDefault = cfg.VENDEDOR_DEFAULT || ''
     const notificarVendedor = (cfg.NOTIFICAR_VENDEDOR || 'true') === 'true'
-    const horariosActivos = (cfg.HORARIOS_ACTIVOS || 'true') === 'true'
-
-    let palabrasClave: string[] = []
-    try { palabrasClave = JSON.parse(cfg.PALABRAS_CLAVE_ESCALAR || '[]') } catch {}
 
     let asignacionPorCanal: Record<string, string> = {}
     try { asignacionPorCanal = JSON.parse(cfg.ASIGNACION_POR_CANAL || '{}') } catch {}
 
-    let horariosConfig: HorarioConfig[] = []
-    try { horariosConfig = JSON.parse(cfg.HORARIOS_CONFIG || '[]') } catch {}
+    // ── Determine channel type ─────────────────────────────────────────────────
+    const isWhatsApp = canal === 'whatsapp' || canal === 'manychat'
+    const isInstagramOrMessenger = canal === 'instagram' || canal === 'messenger' || canal === 'facebook'
 
-    // Horario por defecto si no hay configuración: Lun-Vie 09:30-19:00, Sáb 10:00-14:00
-    if (horariosConfig.length === 0) {
-      horariosConfig = [
-        { dia: 'Lunes',      activo: true,  inicio: '09:30', fin: '19:00' },
-        { dia: 'Martes',     activo: true,  inicio: '09:30', fin: '19:00' },
-        { dia: 'Miércoles',  activo: true,  inicio: '09:30', fin: '19:00' },
-        { dia: 'Jueves',     activo: true,  inicio: '09:30', fin: '19:00' },
-        { dia: 'Viernes',    activo: true,  inicio: '09:30', fin: '19:00' },
-        { dia: 'Sábado',     activo: true,  inicio: '10:00', fin: '14:00' },
-        { dia: 'Domingo',    activo: false, inicio: '00:00', fin: '00:00' },
-      ]
-    }
+    // ── Get assigned vendor ────────────────────────────────────────────────────
+    const vendedorAsignado = await getVendedorAsignado(supabase, modoAsignacion, canal, asignacionPorCanal, vendedorDefault)
 
-    // ── Horario Chile ─────────────────────────────────────────────────────────
-    const nowChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }))
-    const dentroHorario = horariosActivos
-      ? isWithinSchedule(horariosConfig, nowChile)
-      : true
+    // ── Build response based on channel ────────────────────────────────────────
+    let respuesta: string
+    let score = 0
 
-    const horaStr = nowChile.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
-    const fechaStr = nowChile.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })
-
-    // ── Obtener historial de conversación (memoria) ───────────────────────────
-    const history = await getConversationHistory(supabase, conversationId, 12)
-    const messageCount = history.length
-
-    // ── Detectar palabras clave de escalamiento ───────────────────────────────
-    let shouldEscalate = false
-    let escalateReason = ''
-
-    if (palabrasClave.length > 0 && containsKeyword(mensajeCliente, palabrasClave)) {
-      shouldEscalate = true
-      escalateReason = 'keyword'
-    }
-
-    // ── Verificar límite de mensajes ──────────────────────────────────────────
-    if (!shouldEscalate && messageCount >= maxMessages) {
-      shouldEscalate = true
-      escalateReason = 'max_messages'
-    }
-
-    // ── Obtener contenido de URLs si el cliente envió un link ─────────────────
-    let urlContext = ''
-    const urls = extractUrls(mensajeCliente)
-    if (urls.length > 0) {
-      const contents = await Promise.all(urls.slice(0, 2).map(fetchUrlContent))
-      const validContents = contents.filter(Boolean)
-      if (validContents.length > 0) {
-        urlContext = `\n\nCONTENIDO DE URL ENVIADA POR EL CLIENTE:\n${validContents.join('\n---\n')}`
-      }
-    }
-
-    // ── Score del lead ────────────────────────────────────────────────────────
-    let score = 20
-    const msgLower = mensajeCliente.toLowerCase()
-    if (msgLower.includes('presupuesto') || msgLower.includes('precio') || /\$\d|millones|mil\s/i.test(mensajeCliente)) score += 30
-    if (msgLower.includes('pronto') || msgLower.includes('urgente') || msgLower.includes('esta semana')) score += 25
-    if (msgLower.includes('marca') || msgLower.includes('modelo') || msgLower.includes('año')) score += 15
-    if (telefono) score += 10
-    score = Math.min(100, score)
-
-    // ── Escalamiento por score ────────────────────────────────────────────────
-    if (!shouldEscalate && score >= scoreMinimo) {
-      shouldEscalate = true
-      escalateReason = 'score'
-    }
-
-    // ── Escalamiento por horario y datos capturados ───────────────────────────
-    // DENTRO DEL HORARIO: escalar inmediatamente
-    if (!shouldEscalate && dentroHorario) {
-      shouldEscalate = true
-      escalateReason = 'dentro_horario_datos_capturados'
-    }
-
-    // FUERA DEL HORARIO: escalar inmediatamente
-    if (!shouldEscalate && !dentroHorario) {
-      shouldEscalate = true
-      escalateReason = 'fuera_horario_datos_capturados'
-    }
-
-    // ── Construir system prompt según horario ─────────────────────────────────
-    let systemPrompt: string
-
-    if (dentroHorario) {
-      systemPrompt = `Eres el asistente virtual de Egaña Automotriz, una automotora en Puerto Montt, Chile. Tu nombre es "Asistente Egaña". Atiendes por WhatsApp, Instagram y Facebook.
-
-HOY ES: ${fechaStr} a las ${horaStr} (horario Chile).
-ESTADO: DENTRO DE HORARIO DE ATENCIÓN (09:30 - 19:00 hrs).
-
-TU MISIÓN:
-1. Saluda al cliente amablemente por su nombre si lo conoces.
-2. Agradece su interés en Egaña Automotriz.
-3. Indícale que HAY VENDEDORES DISPONIBLES y que uno lo contactará DE INMEDIATO.
-4. Pídele SOLO lo necesario: nombre completo (si no lo tienes), teléfono de contacto, vehículo de interés.
-5. Una vez que tengas esos datos básicos, confirma que pasaste su contacto al equipo de ventas.
-
-REGLAS:
-- Máximo 3 líneas por respuesta.
-- Español chileno informal pero respetuoso (po, bacán, etc. si aplica).
-- NO des precios ni especificaciones técnicas, eso lo hace el vendedor.
-- Si el cliente ya dio sus datos, CONFIRMA el traspaso y no hagas más preguntas.
-- Ejemplo: "¡Hola [nombre]! Qué buena que nos escribes 😊 Tenemos vendedores disponibles ahora mismo. ¿Me confirmas tu nombre completo y el vehículo que te interesa para conectarte de inmediato?"
-`
+    if (isInstagramOrMessenger) {
+      // Instagram / Messenger: redirect to WhatsApp
+      const waLink = 'https://wa.me/message/QCXBGVU5I7MHM1'
+      respuesta = `¡Hola ${nombre}! 😊 Gracias por escribirnos a Egaña Automotriz. Para atenderte de la mejor forma, te invito a contactarnos por WhatsApp: ${waLink}\n\n${vendedorAsignado ? `Nuestro ejecutivo ${vendedorAsignado}` : 'Un ejecutivo'} te atenderá de inmediato por ahí 🙌`
     } else {
-      systemPrompt = `Eres el asistente virtual de Egaña Automotriz, una automotora en Puerto Montt, Chile. Tu nombre es "Asistente Egaña".
+      // WhatsApp: greet and assign vendor immediately
+      respuesta = `¡Perfecto ${nombre}! Ya pasé tus datos a uno de nuestros ejecutivos${vendedorAsignado ? ` (${vendedorAsignado})` : ''}. Te contactará de inmediato 🙌 ¡Cualquier consulta no dudes en escribirnos!`
 
-HOY ES: ${fechaStr} a las ${horaStr} (horario Chile).
-ESTADO: FUERA DE HORARIO. Atendemos Lunes a Viernes 09:30-19:00 hrs, Sábado 10:00-14:00 hrs.
-
-TU MISIÓN:
-1. Saluda e informa amablemente que estamos fuera de horario.
-2. Asegura que UN VENDEDOR LO CONTACTARÁ EN CUANTO ESTÉ DISPONIBLE.
-3. Recopila ESTOS DATOS de forma conversacional (uno por uno, no como formulario):
-   - Nombre completo
-   - Teléfono de contacto
-   - Vehículo de interés (marca, modelo, año aproximado)
-   - Medio de pago preferido (contado, crédito, permuta)
-   - Presupuesto aproximado (opcional)
-4. Cuando tengas nombre, teléfono y vehículo, confirma que dejaste el mensaje.
-
-REGLAS:
-- Máximo 3 líneas por respuesta.
-- Español chileno informal pero respetuoso.
-- Sé empático, valida la consulta del cliente.
-- Pide datos de a uno para que sea natural.
-- Ejemplo: "¡Hola! Gracias por escribirnos 😊 En este momento estamos fuera de horario, pero con gusto dejo tu mensaje para que un vendedor te contacte apenas abramos. ¿Me dices tu nombre completo para comenzar?"
-`
+      // ── Score lead (only WhatsApp) ─────────────────────────────────────────
+      score = 20
+      const msgLower = mensajeCliente.toLowerCase()
+      if (msgLower.includes('presupuesto') || msgLower.includes('precio') || /\$\d|millones|mil\s/i.test(mensajeCliente)) score += 30
+      if (msgLower.includes('pronto') || msgLower.includes('urgente') || msgLower.includes('esta semana')) score += 25
+      if (msgLower.includes('marca') || msgLower.includes('modelo') || msgLower.includes('año')) score += 15
+      if (telefono) score += 10
+      score = Math.min(100, score)
     }
 
-    systemPrompt += urlContext
-
-    // ── Llamar al AI Gateway ──────────────────────────────────────────────────
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY no configurado')
-
-    const aiMessages = [
-      { role: 'system', content: systemPrompt },
-      ...history,
-      { role: 'user', content: `${nombre} dice: ${mensajeCliente}` },
-    ]
-
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelRaw,
-        max_tokens: 500,
-        temperature,
-        messages: aiMessages,
-      }),
-    })
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text()
-      throw new Error(`AI Gateway error [${aiResponse.status}]: ${errText}`)
+    // ── Upsert lead ──────────────────────────────────────────────────────────
+    const leadData = {
+      nombre,
+      telefono,
+      canal: isWhatsApp ? 'whatsapp' : canal,
+      etapa: 'contactado',
+      score: isWhatsApp ? score : 0,
+      urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
+      vendedor_asignado: vendedorAsignado,
+      notas: `Lead generado por agente IA. Canal: ${canal}.${isInstagramOrMessenger ? ' Redirigido a WhatsApp.' : ''}`,
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(contactId ? { contact_id: contactId } : {}),
     }
 
-    const aiData = await aiResponse.json()
-    let respuesta: string = aiData.choices?.[0]?.message?.content || 'Hola, gracias por contactarnos. Un vendedor te atenderá pronto.'
+    let leadId: string | null = null
 
-    // ── Si debe escalar, obtener vendedor y armar mensaje de traspaso ─────────
-    let vendedorAsignado = ''
-    if (shouldEscalate) {
-      vendedorAsignado = await getVendedorAsignado(supabase, modoAsignacion, canal, asignacionPorCanal, vendedorDefault)
+    if (conversationId) {
+      const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .maybeSingle()
 
-      // Mensaje de traspaso al cliente
-      if (dentroHorario || escalateReason === 'keyword') {
-        respuesta = `¡Perfecto ${nombre}! Ya pasé tus datos a uno de nuestros ejecutivos${vendedorAsignado ? ` (${vendedorAsignado})` : ''}. Te contactará de inmediato 🙌 ¡Cualquier consulta no dudes en escribirnos!`
-      } else {
-        respuesta = `¡Listo ${nombre}! Ya dejé todos tus datos registrados para que${vendedorAsignado ? ` ${vendedorAsignado}` : ' un vendedor'} te contacte apenas estemos disponibles (Lun-Vie 09:30-19:00 hrs). ¡Gracias por tu interés en Egaña Automotriz! 🚗`
-      }
-
-      // ── Upsert lead ──────────────────────────────────────────────────────────
-      const leadData = {
-        nombre,
-        telefono,
-        canal: canal === 'manychat' ? 'whatsapp' : canal,
-        etapa: 'contactado',
-        score,
-        urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
-        vendedor_asignado: vendedorAsignado,
-        notas: `Lead generado por agente IA. Razón escalamiento: ${escalateReason}. Horario: ${dentroHorario ? 'dentro' : 'fuera'}.`,
-        ...(conversationId ? { conversation_id: conversationId } : {}),
-        ...(contactId ? { contact_id: contactId } : {}),
-      }
-
-      let leadId: string | null = null
-
-      // Buscar lead existente por conversation_id
-      if (conversationId) {
-        const { data: existingLead } = await supabase
-          .from('leads')
-          .select('id')
-          .eq('conversation_id', conversationId)
-          .maybeSingle()
-
-        if (!existingLead) {
-          const { data: newLead } = await supabase.from('leads').insert(leadData).select('id').single()
-          leadId = newLead?.id || null
-        } else {
-          leadId = existingLead.id
-          await supabase
-            .from('leads')
-            .update({ score, vendedor_asignado: vendedorAsignado, etapa: 'contactado' })
-            .eq('id', existingLead.id)
-        }
-      } else {
+      if (!existingLead) {
         const { data: newLead } = await supabase.from('leads').insert(leadData).select('id').single()
         leadId = newLead?.id || null
-      }
-
-      // ── Registrar actividad de traspaso para métricas ────────────────────────
-      if (leadId) {
-        const fechaHoraLegible = nowChile.toLocaleString('es-CL', {
-          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-        })
-        await supabase.from('lead_actividades').insert({
-          lead_id: leadId,
-          tipo: 'traspaso_vendedor',
-          descripcion: `🔔 Cliente traspasado a vendedor${vendedorAsignado ? ` "${vendedorAsignado}"` : ''}. Razón: ${escalateReason}. Horario: ${dentroHorario ? 'dentro de horario' : 'fuera de horario'}. Fecha: ${fechaHoraLegible}. Score: ${score}/100. Canal: ${canal}.`,
-          usuario: 'Agente IA',
-          created_at: new Date().toISOString(),
-        })
-      }
-
-      // ── Marcar conversación como escalada ─────────────────────────────────────
-      if (conversationId) {
+      } else {
+        leadId = existingLead.id
         await supabase
-          .from('conversations')
-          .update({
-            escalated: true,
-            escalated_at: new Date().toISOString(),
-            assigned_to: vendedorAsignado,
-          })
-          .eq('id', conversationId)
+          .from('leads')
+          .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado' })
+          .eq('id', existingLead.id)
       }
-
-      if (notificarVendedor && vendedorAsignado) {
-        console.log(`[NOTIFICACION VENDEDOR] Nuevo cliente "${nombre}" asignado a ${vendedorAsignado}. Canal: ${canal}. Score: ${score}. Tel: ${telefono || 'N/A'}`)
-      }
+    } else {
+      const { data: newLead } = await supabase.from('leads').insert(leadData).select('id').single()
+      leadId = newLead?.id || null
     }
 
-    // ── Guardar respuesta del agente en messages (outbound) ───────────────────
-    // NOTA: El mensaje inbound ya fue guardado por el webhook llamante.
-    // Aquí solo guardamos el outbound (respuesta del agente).
+    // ── Log activity ─────────────────────────────────────────────────────────
+    const nowChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }))
+    const fechaHoraLegible = nowChile.toLocaleString('es-CL', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
+
+    if (leadId) {
+      await supabase.from('lead_actividades').insert({
+        lead_id: leadId,
+        tipo: 'traspaso_vendedor',
+        descripcion: `🔔 Cliente traspasado a vendedor${vendedorAsignado ? ` "${vendedorAsignado}"` : ''}. Canal: ${canal}. Fecha: ${fechaHoraLegible}.${isInstagramOrMessenger ? ' Redirigido a WhatsApp.' : ''}`,
+        usuario: 'Agente IA',
+        created_at: new Date().toISOString(),
+      })
+    }
+
+    // ── Mark conversation as escalated (10-day cooldown starts) ──────────────
+    if (conversationId) {
+      await supabase
+        .from('conversations')
+        .update({
+          escalated: true,
+          escalated_at: new Date().toISOString(),
+          assigned_to: vendedorAsignado,
+        })
+        .eq('id', conversationId)
+    }
+
+    if (notificarVendedor && vendedorAsignado) {
+      console.log(`[NOTIFICACION VENDEDOR] Nuevo cliente "${nombre}" asignado a ${vendedorAsignado}. Canal: ${canal}. Score: ${score}. Tel: ${telefono || 'N/A'}`)
+    }
+
+    // ── Save outbound message ────────────────────────────────────────────────
     if (conversationId) {
       await supabase.from('messages').insert({
         conversation_id: conversationId,
@@ -583,7 +441,6 @@ REGLAS:
         sent_at: new Date().toISOString(),
       })
 
-      // Actualizar last_message de la conversación
       await supabase
         .from('conversations')
         .update({
@@ -593,8 +450,7 @@ REGLAS:
         .eq('id', conversationId)
     }
 
-
-    // ── Enviar respuesta por Meta API si viene de WhatsApp/Meta ───────────────
+    // ── Send via Meta API if WhatsApp/Meta source ────────────────────────────
     if (source === 'meta' && canal === 'whatsapp' && phoneNumberId && senderId && accessToken) {
       fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
         method: 'POST',
@@ -611,7 +467,7 @@ REGLAS:
       }).catch(e => console.error('Error enviando mensaje WhatsApp:', e))
     }
 
-    // ── Retornar respuesta compatible con ManyChat ────────────────────────────
+    // ── Return ManyChat-compatible response ──────────────────────────────────
     return new Response(
       JSON.stringify({
         messages: [{ type: 'text', text: respuesta }],
@@ -619,8 +475,7 @@ REGLAS:
           { field_name: 'ultimo_mensaje_agente', value: respuesta },
           { field_name: 'lead_score', value: String(score) },
           ...(vendedorAsignado ? [{ field_name: 'vendedor_asignado', value: vendedorAsignado }] : []),
-          ...(shouldEscalate ? [{ field_name: 'escalado', value: 'true' }] : []),
-          ...(dentroHorario ? [] : [{ field_name: 'fuera_horario', value: 'true' }]),
+          { field_name: 'escalado', value: 'true' },
         ],
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
