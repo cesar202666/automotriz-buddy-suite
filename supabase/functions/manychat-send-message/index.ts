@@ -67,11 +67,12 @@ Deno.serve(async (req) => {
             messages: [{ type: 'text', text: message }]
           }
         },
-        message_tag: 'ACCOUNT_UPDATE',
       }),
     })
 
-    const mcResult = await mcResponse.json()
+    let mcResult: any = null
+    const mcText = await mcResponse.text()
+    try { mcResult = JSON.parse(mcText) } catch { mcResult = { raw: mcText } }
     console.log('ManyChat response:', JSON.stringify(mcResult))
 
     if (!mcResponse.ok) {
