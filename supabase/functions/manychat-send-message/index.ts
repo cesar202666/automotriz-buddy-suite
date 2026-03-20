@@ -64,10 +64,10 @@ Deno.serve(async (req) => {
         data: {
           version: 'v2',
           content: {
+            type: (channel === 'whatsapp') ? 'whatsapp' : undefined,
             messages: [{ type: 'text', text: message }]
           }
         },
-        message_tag: 'ACCOUNT_UPDATE',
       }),
     })
 
