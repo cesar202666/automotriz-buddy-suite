@@ -227,7 +227,7 @@ function TabMensajes() {
         body: { conversation_id: conv.id, contact_id: conv.contact_id, message: replyText.trim(), channel: conv.channel },
       });
       if (error || !data?.success) {
-        toast.error(data?.error || error?.message || "Error al enviar mensaje");
+        toast.error(`Error completo: ${JSON.stringify(data || error)}`, { duration: 15000 });
       } else {
         toast.success("Mensaje enviado al cliente");
         setReplyText("");
