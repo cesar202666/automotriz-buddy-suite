@@ -214,6 +214,8 @@ function TabMensajes() {
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [realtime, setRealtime] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
