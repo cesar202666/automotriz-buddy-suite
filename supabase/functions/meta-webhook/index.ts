@@ -187,6 +187,7 @@ Deno.serve(async (req) => {
         last_input_text: messageText,
         channel,
         conversation_id: conversationId, // UUID real de la conversación
+        inbound_already_saved: true,
         phone_number_id: phoneNumberId,
         sender_id: senderId,
         access_token: accessToken,
