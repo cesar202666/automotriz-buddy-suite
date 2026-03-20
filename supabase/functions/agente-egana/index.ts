@@ -115,6 +115,46 @@ async function getConversationHistory(
   }))
 }
 
+async function ensureInboundMessage(
+  supabase: ReturnType<typeof createClient>,
+  params: {
+    conversationId: string
+    contactId: string
+    mensajeCliente: string
+    canal: string
+    manychatMessageId: string
+    sentAt: string
+  }
+): Promise<boolean> {
+  const { conversationId, contactId, mensajeCliente, canal, manychatMessageId, sentAt } = params
+
+  if (!conversationId || !mensajeCliente) return false
+
+  if (manychatMessageId) {
+    const { data: existingMsgById } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('manychat_message_id', manychatMessageId)
+      .eq('content', mensajeCliente)
+      .maybeSingle()
+
+    if (existingMsgById) return false
+  }
+
+  await supabase.from('messages').insert({
+    conversation_id: conversationId,
+    contact_id: contactId || null,
+    direction: 'inbound',
+    content: mensajeCliente,
+    channel: canal,
+    manychat_message_id: manychatMessageId || null,
+    sent_at: sentAt,
+  })
+
+  return true
+}
+
 // ── Main handler ───────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -131,12 +171,13 @@ Deno.serve(async (req) => {
     const apellido: string = body.last_name || ''
     const telefono: string = body.phone || ''
     const canal: string = body.channel || 'manychat'
-    const conversationId: string = body.conversation_id || ''
+    let conversationId: string = body.conversation_id || ''
     const manychatMessageId: string = body.manychat_message_id || ''
     const phoneNumberId: string = body.phone_number_id || ''
     const senderId: string = body.sender_id || ''
     const accessToken: string = body.access_token || ''
     const source: string = body.source || 'manychat' // 'manychat' | 'meta'
+    const inboundAlreadySaved: boolean = body.inbound_already_saved === true
 
     if (!mensajeCliente || !contactId) {
       return new Response(
@@ -150,6 +191,36 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    if (!conversationId && contactId) {
+      const { data: latestConv } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('contact_id', contactId)
+        .eq('channel', canal)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (latestConv?.id) {
+        conversationId = latestConv.id
+      } else {
+        const { data: newConv } = await supabase
+          .from('conversations')
+          .insert({
+            contact_id: contactId,
+            channel: canal,
+            status: 'active',
+            last_message: mensajeCliente,
+            last_message_at: new Date().toISOString(),
+            unread_count: 0,
+          })
+          .select('id')
+          .single()
+
+        if (newConv?.id) conversationId = newConv.id
+      }
+    }
+
     if (conversationId) {
       const { data: conv } = await supabase
         .from('conversations')
@@ -159,28 +230,16 @@ Deno.serve(async (req) => {
 
       if (conv?.escalated) {
         const nowIso = new Date().toISOString()
+        let insertedInbound = false
 
-        let isDuplicate = false
-        if (manychatMessageId) {
-          const { data: existingMsgById } = await supabase
-            .from('messages')
-            .select('id')
-            .eq('conversation_id', conversationId)
-            .eq('manychat_message_id', manychatMessageId)
-            .maybeSingle()
-
-          isDuplicate = !!existingMsgById
-        }
-
-        if (!isDuplicate) {
-          await supabase.from('messages').insert({
-            conversation_id: conversationId,
-            contact_id: contactId || null,
-            direction: 'inbound',
-            content: mensajeCliente,
-            channel: canal,
-            manychat_message_id: manychatMessageId || null,
-            sent_at: nowIso,
+        if (!inboundAlreadySaved) {
+          insertedInbound = await ensureInboundMessage(supabase, {
+            conversationId,
+            contactId,
+            mensajeCliente,
+            canal,
+            manychatMessageId,
+            sentAt: nowIso,
           })
         }
 
@@ -189,7 +248,7 @@ Deno.serve(async (req) => {
           .update({
             last_message: mensajeCliente,
             last_message_at: nowIso,
-            unread_count: (conv.unread_count || 0) + (isDuplicate ? 0 : 1),
+            unread_count: (conv.unread_count || 0) + (insertedInbound ? 1 : 0),
             status: 'active',
           })
           .eq('id', conversationId)
@@ -199,6 +258,31 @@ Deno.serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+    }
+
+    if (conversationId && !inboundAlreadySaved) {
+      const nowIso = new Date().toISOString()
+      const insertedInbound = await ensureInboundMessage(supabase, {
+        conversationId,
+        contactId,
+        mensajeCliente,
+        canal,
+        manychatMessageId,
+        sentAt: nowIso,
+      })
+
+      if (insertedInbound) {
+        await supabase.rpc('increment_unread', { conv_id: conversationId })
+      }
+
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: mensajeCliente,
+          last_message_at: nowIso,
+          status: 'active',
+        })
+        .eq('id', conversationId)
     }
 
     // ── Leer configuración ─────────────────────────────────────────────────────
