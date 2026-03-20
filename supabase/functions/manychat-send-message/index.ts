@@ -53,6 +53,21 @@ Deno.serve(async (req) => {
     }
 
     // Send via ManyChat API
+    const normalizedChannel = String(channel || '').toLowerCase()
+    const contentType =
+      normalizedChannel === 'whatsapp'
+        ? 'whatsapp'
+        : normalizedChannel === 'instagram'
+          ? 'instagram'
+          : normalizedChannel === 'messenger' || normalizedChannel === 'facebook'
+            ? 'facebook'
+            : undefined
+
+    const contentPayload: Record<string, unknown> = {
+      messages: [{ type: 'text', text: message }],
+    }
+    if (contentType) contentPayload.type = contentType
+
     const mcResponse = await fetch('https://api.manychat.com/fb/sending/sendContent', {
       method: 'POST',
       headers: {
@@ -63,10 +78,7 @@ Deno.serve(async (req) => {
         subscriber_id: contact.manychat_subscriber_id,
         data: {
           version: 'v2',
-          content: {
-            type: (channel === 'whatsapp') ? 'whatsapp' : undefined,
-            messages: [{ type: 'text', text: message }]
-          }
+          content: contentPayload,
         },
       }),
     })
@@ -77,8 +89,18 @@ Deno.serve(async (req) => {
     console.log('ManyChat response:', JSON.stringify(mcResult))
 
     if (!mcResponse.ok || mcResult?.status === 'error') {
-      return new Response(JSON.stringify({ success: false, error: `ManyChat error: ${mcResult?.message || mcResponse.statusText}` }), {
-        status: 502,
+      const manychatMessage = mcResult?.message || mcResponse.statusText || 'Error desconocido'
+      const isWindowRestriction =
+        mcResult?.code === 3011 || String(manychatMessage).toLowerCase().includes('over 24 hours')
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: isWindowRestriction
+          ? 'ManyChat bloqueó el envío: el cliente está fuera de la ventana de mensajería permitida y debe volver a escribir para reabrir el chat.'
+          : `ManyChat error: ${manychatMessage}`,
+        details: mcResult,
+      }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
