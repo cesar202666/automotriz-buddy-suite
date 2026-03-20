@@ -132,6 +132,7 @@ Deno.serve(async (req) => {
     const telefono: string = body.phone || ''
     const canal: string = body.channel || 'manychat'
     const conversationId: string = body.conversation_id || ''
+    const manychatMessageId: string = body.manychat_message_id || ''
     const phoneNumberId: string = body.phone_number_id || ''
     const senderId: string = body.sender_id || ''
     const accessToken: string = body.access_token || ''
@@ -152,11 +153,47 @@ Deno.serve(async (req) => {
     if (conversationId) {
       const { data: conv } = await supabase
         .from('conversations')
-        .select('escalated')
+        .select('escalated, unread_count')
         .eq('id', conversationId)
         .single()
 
       if (conv?.escalated) {
+        const nowIso = new Date().toISOString()
+
+        let isDuplicate = false
+        if (manychatMessageId) {
+          const { data: existingMsgById } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('conversation_id', conversationId)
+            .eq('manychat_message_id', manychatMessageId)
+            .maybeSingle()
+
+          isDuplicate = !!existingMsgById
+        }
+
+        if (!isDuplicate) {
+          await supabase.from('messages').insert({
+            conversation_id: conversationId,
+            contact_id: contactId || null,
+            direction: 'inbound',
+            content: mensajeCliente,
+            channel: canal,
+            manychat_message_id: manychatMessageId || null,
+            sent_at: nowIso,
+          })
+        }
+
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: mensajeCliente,
+            last_message_at: nowIso,
+            unread_count: (conv.unread_count || 0) + (isDuplicate ? 0 : 1),
+            status: 'active',
+          })
+          .eq('id', conversationId)
+
         return new Response(
           JSON.stringify({ messages: [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
