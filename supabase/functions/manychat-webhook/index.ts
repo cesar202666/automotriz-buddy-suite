@@ -172,6 +172,7 @@ Deno.serve(async (req) => {
         conversation_id: conversationId,
         manychat_message_id: manychatMessageId,
         source: 'manychat',
+        inbound_already_saved: true,
         conversation_history: historialMensajes || [],
       }),
     })
