@@ -136,10 +136,26 @@ async function ensureInboundMessage(
       .select('id')
       .eq('conversation_id', conversationId)
       .eq('manychat_message_id', manychatMessageId)
-      .eq('content', mensajeCliente)
       .maybeSingle()
 
     if (existingMsgById) return false
+  } else {
+    const sentAtDate = new Date(sentAt)
+    const windowStart = new Date(sentAtDate.getTime() - 90 * 1000).toISOString()
+    const windowEnd = new Date(sentAtDate.getTime() + 90 * 1000).toISOString()
+
+    const { data: recentDuplicate } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('direction', 'inbound')
+      .eq('content', mensajeCliente)
+      .gte('sent_at', windowStart)
+      .lte('sent_at', windowEnd)
+      .limit(1)
+      .maybeSingle()
+
+    if (recentDuplicate) return false
   }
 
   await supabase.from('messages').insert({
@@ -178,6 +194,7 @@ Deno.serve(async (req) => {
     const accessToken: string = body.access_token || ''
     const source: string = body.source || 'manychat' // 'manychat' | 'meta'
     const inboundAlreadySaved: boolean = body.inbound_already_saved === true
+    const inboundSentAt: string = body.sent_at || new Date().toISOString()
 
     if (!mensajeCliente || !contactId) {
       return new Response(
@@ -230,18 +247,14 @@ Deno.serve(async (req) => {
 
       if (conv?.escalated) {
         const nowIso = new Date().toISOString()
-        let insertedInbound = false
-
-        if (!inboundAlreadySaved) {
-          insertedInbound = await ensureInboundMessage(supabase, {
-            conversationId,
-            contactId,
-            mensajeCliente,
-            canal,
-            manychatMessageId,
-            sentAt: nowIso,
-          })
-        }
+        const insertedInbound = await ensureInboundMessage(supabase, {
+          conversationId,
+          contactId,
+          mensajeCliente,
+          canal,
+          manychatMessageId,
+          sentAt: inboundSentAt,
+        })
 
         await supabase
           .from('conversations')
@@ -260,7 +273,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (conversationId && !inboundAlreadySaved) {
+    if (conversationId) {
       const nowIso = new Date().toISOString()
       const insertedInbound = await ensureInboundMessage(supabase, {
         conversationId,
@@ -268,7 +281,7 @@ Deno.serve(async (req) => {
         mensajeCliente,
         canal,
         manychatMessageId,
-        sentAt: nowIso,
+        sentAt: inboundSentAt,
       })
 
       if (insertedInbound) {

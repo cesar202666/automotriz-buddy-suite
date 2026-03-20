@@ -224,17 +224,29 @@ function TabMensajes() {
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
-  const loadMessages = useCallback(async (convId: string) => {
+  const loadMessages = useCallback(async (convId: string, contactId?: string | null, channel?: string) => {
     setMessagesLoading(true);
-    const { data, error } = await supabase.from("messages").select("*").eq("conversation_id", convId).order("sent_at", { ascending: true }).limit(500);
+    let query = supabase.from("messages").select("*").order("sent_at", { ascending: true }).limit(500);
+
+    if (contactId) {
+      query = query.eq("contact_id", contactId);
+      if (channel) query = query.eq("channel", channel);
+    } else {
+      query = query.eq("conversation_id", convId);
+    }
+
+    const { data, error } = await query;
     if (!error && data) setMessages(data as Message[]);
     setMessagesLoading(false);
   }, []);
 
   useEffect(() => {
-    if (selectedConvId) loadMessages(selectedConvId);
+    if (selectedConvId) {
+      const selected = conversations.find((c) => c.id === selectedConvId);
+      loadMessages(selectedConvId, selected?.contact_id, selected?.channel);
+    }
     else setMessages([]);
-  }, [selectedConvId, loadMessages]);
+  }, [selectedConvId, conversations, loadMessages]);
 
   const markRead = async (convId: string) => {
     await supabase.from("conversations").update({ unread_count: 0 }).eq("id", convId);
@@ -246,12 +258,27 @@ function TabMensajes() {
     const convChannel = supabase.channel("conv-rt").on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, async () => { await loadConversations(); }).subscribe();
     const msgChannel = supabase.channel("msg-rt").on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
       const newMsg = payload.new as Message;
-      if (newMsg.conversation_id === selectedConvId) {
-        setMessages((prev) => prev.find((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]);
+      const selected = conversations.find((c) => c.id === selectedConvId);
+      if (!selected) return;
+
+      const sameConversation = newMsg.conversation_id === selectedConvId;
+      const sameContact = newMsg.contact_id && selected.contact_id && newMsg.contact_id === selected.contact_id;
+      const sameChannel = !selected.channel || newMsg.channel === selected.channel;
+
+      if ((sameConversation || sameContact) && sameChannel) {
+        setMessages((prev) => {
+          if (prev.find((m) => m.id === newMsg.id)) return prev;
+          const ordered = [...prev, newMsg].sort((a, b) => {
+            const aTs = new Date(a.sent_at || a.created_at).getTime();
+            const bTs = new Date(b.sent_at || b.created_at).getTime();
+            return aTs - bTs;
+          });
+          return ordered;
+        });
       }
     }).subscribe();
     return () => { supabase.removeChannel(convChannel); supabase.removeChannel(msgChannel); };
-  }, [realtime, loadConversations, selectedConvId]);
+  }, [realtime, loadConversations, selectedConvId, conversations]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
