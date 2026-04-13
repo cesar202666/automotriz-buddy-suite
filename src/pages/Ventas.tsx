@@ -416,7 +416,6 @@ export default function Ventas() {
                 </div>
               )}
 
-              {/* Step 2: Vehículo */}
               {wizardStep === "vehiculo" && (
                 <div className="space-y-3">
                   <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>ESPECIFICACIONES DE VEHÍCULO</div>
@@ -447,10 +446,6 @@ export default function Ventas() {
                     <div>
                       <label className="block text-xs font-medium mb-1">Kilometraje</label>
                       <input type="number" className={inp} style={bd} value={form.kilometrajeVehiculo} onChange={e => setForm(f => ({ ...f, kilometrajeVehiculo: Number(e.target.value) }))} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Precio Retoma</label>
-                      <input type="number" className={inp} style={bd} value={form.precioRetoma || ""} onChange={e => updatePrecio("precioRetoma", Number(e.target.value))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio Publicado</label>
