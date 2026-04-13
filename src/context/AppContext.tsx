@@ -29,7 +29,7 @@ export interface Vehiculo {
   marca: string;
   modelo: string;
   anio: string;
-  estado: "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO";
+  estado: "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO" | "RETIRADO";
   precioVenta: number;
   precioCosto: number;
   sucursal: string;
