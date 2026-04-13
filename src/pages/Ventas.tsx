@@ -282,7 +282,7 @@ export default function Ventas() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
-              {["ID","Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","P. Retoma","P. Venta","Margen","N° Crédito","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación"].map(h => (
+              {["ID","Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","Color","Km","P. Publicado","P. Venta","Margen","N° Crédito","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación"].map(h => (
                 <th key={h} className="px-3 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -310,7 +310,9 @@ export default function Ventas() {
                 <td className="px-3 py-2 font-semibold">{v.patente}</td>
                 <td className="px-3 py-2">{v.marca}</td>
                 <td className="px-3 py-2">{v.modelo}</td>
-                <td className="px-3 py-2">{fmt(v.precioRetoma)}</td>
+                <td className="px-3 py-2">{v.colorVehiculo || "—"}</td>
+                <td className="px-3 py-2">{v.kilometrajeVehiculo ? v.kilometrajeVehiculo.toLocaleString("es-CL") : "—"}</td>
+                <td className="px-3 py-2">{fmt(v.precioPublicado)}</td>
                 <td className="px-3 py-2 font-semibold">{fmt(v.precioVenta)}</td>
                 <td className="px-3 py-2" style={{ color: "hsl(var(--chart-2))" }}>{fmt(v.margenBruto)}</td>
                 <td className="px-3 py-2">{v.nCredito || "—"}</td>
@@ -338,7 +340,7 @@ export default function Ventas() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={21} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay ventas registradas</td></tr>
+              <tr><td colSpan={23} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay ventas registradas</td></tr>
             )}
           </tbody>
         </table>
