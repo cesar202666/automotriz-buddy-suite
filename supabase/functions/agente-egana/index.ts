@@ -417,75 +417,77 @@ Deno.serve(async (req) => {
       shouldEscalate = true
     }
 
-    // ── Upsert lead ──────────────────────────────────────────────────────────
-    const leadData = {
-      nombre,
-      telefono,
-      canal: isWhatsApp ? 'whatsapp' : canal,
-      etapa: 'contactado',
-      score: isWhatsApp ? score : 0,
-      urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
-      vendedor_asignado: vendedorAsignado,
-      notas: `Lead generado por agente IA. Canal: ${canal}.${isInstagramOrMessenger ? ' Redirigido a WhatsApp.' : ''}`,
-      ...(conversationId ? { conversation_id: conversationId } : {}),
-      ...(contactId ? { contact_id: contactId } : {}),
-    }
-
+    // ── Upsert lead (only when escalating) ─────────────────────────────────────
     let leadId: string | null = null
 
-    if (conversationId) {
-      const { data: existingLead } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('conversation_id', conversationId)
-        .maybeSingle()
+    if (shouldEscalate) {
+      const leadData = {
+        nombre: nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente',
+        telefono: telefono || extractedPhone,
+        canal: isWhatsApp ? 'whatsapp' : canal,
+        etapa: 'contactado',
+        score: isWhatsApp ? score : 0,
+        urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
+        vendedor_asignado: vendedorAsignado,
+        notas: `Lead generado por agente IA. Canal: ${canal}.${clienteCreado ? ' Cliente creado automáticamente.' : ''}`,
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+        ...(contactId ? { contact_id: contactId } : {}),
+      }
 
-      if (!existingLead) {
+      if (conversationId) {
+        const { data: existingLead } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('conversation_id', conversationId)
+          .maybeSingle()
+
+        if (!existingLead) {
+          const { data: newLead } = await supabase.from('leads').insert(leadData).select('id').single()
+          leadId = newLead?.id || null
+        } else {
+          leadId = existingLead.id
+          await supabase
+            .from('leads')
+            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado' })
+            .eq('id', existingLead.id)
+        }
+      } else {
         const { data: newLead } = await supabase.from('leads').insert(leadData).select('id').single()
         leadId = newLead?.id || null
-      } else {
-        leadId = existingLead.id
-        await supabase
-          .from('leads')
-          .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado' })
-          .eq('id', existingLead.id)
       }
-    } else {
-      const { data: newLead } = await supabase.from('leads').insert(leadData).select('id').single()
-      leadId = newLead?.id || null
-    }
 
-    // ── Log activity ─────────────────────────────────────────────────────────
-    const nowChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }))
-    const fechaHoraLegible = nowChile.toLocaleString('es-CL', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
-
-    if (leadId) {
-      await supabase.from('lead_actividades').insert({
-        lead_id: leadId,
-        tipo: 'traspaso_vendedor',
-        descripcion: `🔔 Cliente traspasado a vendedor${vendedorAsignado ? ` "${vendedorAsignado}"` : ''}. Canal: ${canal}. Fecha: ${fechaHoraLegible}.${isInstagramOrMessenger ? ' Redirigido a WhatsApp.' : ''}`,
-        usuario: 'Agente IA',
-        created_at: new Date().toISOString(),
+      // ── Log activity ─────────────────────────────────────────────────────────
+      const nowChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }))
+      const fechaHoraLegible = nowChile.toLocaleString('es-CL', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
       })
-    }
 
-    // ── Mark conversation as escalated (10-day cooldown starts) ──────────────
-    if (conversationId) {
-      await supabase
-        .from('conversations')
-        .update({
-          escalated: true,
-          escalated_at: new Date().toISOString(),
-          assigned_to: vendedorAsignado,
+      if (leadId) {
+        await supabase.from('lead_actividades').insert({
+          lead_id: leadId,
+          tipo: 'traspaso_vendedor',
+          descripcion: `🔔 Cliente traspasado a vendedor${vendedorAsignado ? ` "${vendedorAsignado}"` : ''}. Canal: ${canal}. Fecha: ${fechaHoraLegible}.${clienteCreado ? ' Cliente registrado por agente IA.' : ''}`,
+          usuario: 'Agente IA',
+          created_at: new Date().toISOString(),
         })
-        .eq('id', conversationId)
-    }
+      }
 
-    if (notificarVendedor && vendedorAsignado) {
-      console.log(`[NOTIFICACION VENDEDOR] Nuevo cliente "${nombre}" asignado a ${vendedorAsignado}. Canal: ${canal}. Score: ${score}. Tel: ${telefono || 'N/A'}`)
+      // ── Mark conversation as escalated ──────────────────────────────────────
+      if (conversationId) {
+        await supabase
+          .from('conversations')
+          .update({
+            escalated: true,
+            escalated_at: new Date().toISOString(),
+            assigned_to: vendedorAsignado,
+          })
+          .eq('id', conversationId)
+      }
+
+      if (notificarVendedor && vendedorAsignado) {
+        console.log(`[NOTIFICACION VENDEDOR] Nuevo cliente asignado a ${vendedorAsignado}. Canal: ${canal}. Score: ${score}.`)
+      }
     }
 
     // ── Save outbound message ────────────────────────────────────────────────
