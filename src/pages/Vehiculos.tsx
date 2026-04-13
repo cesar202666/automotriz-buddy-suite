@@ -4,7 +4,7 @@ import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 
-type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO";
+type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
 interface FotoSlot { label: string; file: File | null; preview: string | null; }
 
@@ -13,22 +13,23 @@ const FOTO_SLOTS = [
   "TRASERA", "ASIENTOS DELANTEROS", "ASIENTOS TRASEROS",
   "MALETERO / CAJA CARGA", "INTERIOR FRONTAL", "FOTOS ESPECIALES"
 ];
-const TRANSMISIONES = [
-  "Transmisión Manual", "Transmisión Automática", "Transmisión CVT",
-  "Transmisión Automática de Doble Embrague", "Transmisión Secuencial"
-];
+const TRANSMISIONES = ["Manual", "Automático"];
 const TRACCIONES = ["Tracción Delantera", "Tracción Trasera", "Tracción 4x4", "Tracción Integral"];
+const TIPOS_VEHICULO = ["Camioneta", "Sedan", "Hatchback", "SUV / 3C", "Furgon", "Coupe", "Camion", "Station Wagon", "Van"];
+const ESTADOS_VEHICULO: VehiculoEstado[] = ["DISPONIBLE", "RESERVADO", "VENDIDO", "RETIRADO"];
+const PROCEDENCIAS = ["Propio", "Consignado"];
 
 const MASTER_PASS = "123cuatro";
 
 const DEFAULT_BG_PROMPT = "Keep the car exactly as it is — do not modify the vehicle at all. Only replace the background. Place the car on a professional automotive studio floor: light grey polished concrete, subtle reflection under the car, clean white seamless background wall. The car should occupy about 70% of the frame centered, leaving visible floor space below and sides. Soft even studio lighting, no harsh shadows, photorealistic, high quality dealership photo.";
 
-const emptyVehiculo = (): Partial<Vehiculo> => ({
-  folio: "", patente: "", tipo: "AUTOMOVIL", marca: "", modelo: "", anio: "2026",
-  estado: "DISPONIBLE", precioVenta: 0, precioCosto: 0, sucursal: "", usuarioAsignado: "",
+const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: string; consignatarioId: string }> => ({
+  folio: "", patente: "", tipo: "Sedan", marca: "", modelo: "", anio: "2026",
+  estado: "DISPONIBLE", precioVenta: 0, precioCosto: 0, sucursal: "", usuarioAsignado,
   combustible: "Bencina", nMotor: "", vin: "", color: "", kilometraje: 0, ubicacion: "",
   comentarios: "", transmision: "", traccion: "", aireAcondicionado: false,
-  equipamientoExtra: [], fotos: []
+  equipamientoExtra: [], fotos: [],
+  procedencia: "Propio", consignatarioId: "",
 });
 
 const fmt = (n: number) => "$" + n.toLocaleString("es-CL");
@@ -68,13 +69,13 @@ function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel:
 }
 
 export default function Vehiculos() {
-  const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo } = useApp();
+  const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo, clientes, usuarioActual } = useApp();
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("DISPONIBLE");
   const [showModal, setShowModal] = useState(false);
   const [tab, setTab] = useState("general");
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<Vehiculo>>(emptyVehiculo());
+  const [form, setForm] = useState<Partial<Vehiculo & { procedencia: string; consignatarioId: string }>>(emptyVehiculo(usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : ""));
   const [fotoSlots, setFotoSlots] = useState<FotoSlot[]>(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
   const [nuevoEquipamiento, setNuevoEquipamiento] = useState("");
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -142,7 +143,8 @@ export default function Vehiculos() {
   });
 
   const openCreate = () => {
-    setForm(emptyVehiculo());
+    const ua = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+    setForm(emptyVehiculo(ua));
     setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
     setEditId(null); setTab("general"); setShowModal(true);
   };
@@ -278,10 +280,7 @@ export default function Vehiculos() {
         <select className="border rounded px-3 py-2 text-sm bg-card" style={{ borderColor: "hsl(var(--border))" }}
           value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
           <option value="TODOS">Todos</option>
-          <option value="DISPONIBLE">Disponible</option>
-          <option value="VENDIDO">Vendido</option>
-          <option value="RESERVADO">Reservado</option>
-          <option value="EN PROCESO">En Proceso</option>
+          {ESTADOS_VEHICULO.map(e => <option key={e} value={e}>{e.charAt(0) + e.slice(1).toLowerCase()}</option>)}
         </select>
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "hsl(var(--muted-foreground))" }} />
@@ -369,7 +368,7 @@ export default function Vehiculos() {
                     <div><label className="block text-xs font-medium mb-1">Tipo</label>
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.tipo || ""} onChange={e => setForm({ ...form, tipo: e.target.value })}>
-                        {["AUTOMOVIL","SUV","PICKUP","FURGON","CAMION","MOTO"].map(o => <option key={o}>{o}</option>)}
+                        {TIPOS_VEHICULO.map(o => <option key={o}>{o}</option>)}
                       </select></div>
                     <div><label className="block text-xs font-medium mb-1">Año</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
@@ -377,7 +376,7 @@ export default function Vehiculos() {
                     <div><label className="block text-xs font-medium mb-1">Estado</label>
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.estado || "DISPONIBLE"} onChange={e => setForm({ ...form, estado: e.target.value as VehiculoEstado })}>
-                        {["DISPONIBLE","VENDIDO","RESERVADO","EN PROCESO"].map(o => <option key={o}>{o}</option>)}
+                        {ESTADOS_VEHICULO.map(o => <option key={o} value={o}>{o.charAt(0) + o.slice(1).toLowerCase()}</option>)}
                       </select></div>
                   </div>
                   <div className="grid grid-cols-4 gap-3 mb-4">
@@ -407,23 +406,43 @@ export default function Vehiculos() {
                       <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.kilometraje || 0} onChange={e => setForm({ ...form, kilometraje: Number(e.target.value) })} /></div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Precio Venta</label>
                       <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.precioVenta || 0} onChange={e => setForm({ ...form, precioVenta: Number(e.target.value) })} /></div>
-                    <div><label className="block text-xs font-medium mb-1">Precio Costo</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioCosto || 0} onChange={e => setForm({ ...form, precioCosto: Number(e.target.value) })} /></div>
                     <div><label className="block text-xs font-medium mb-1">Sucursal</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.sucursal || ""} onChange={e => setForm({ ...form, sucursal: e.target.value })} /></div>
-                    <div><label className="block text-xs font-medium mb-1">Usuario Asignado</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.usuarioAsignado || ""} onChange={e => setForm({ ...form, usuarioAsignado: e.target.value })} /></div>
                     <div><label className="block text-xs font-medium mb-1">Ubicación</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.ubicacion || ""} onChange={e => setForm({ ...form, ubicacion: e.target.value })} /></div>
                   </div>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div><label className="block text-xs font-medium mb-1">Transmisión</label>
+                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.transmision || ""} onChange={e => setForm({ ...form, transmision: e.target.value })}>
+                        <option value="">— Seleccionar —</option>
+                        {TRANSMISIONES.map(o => <option key={o}>{o}</option>)}
+                      </select></div>
+                    <div><label className="block text-xs font-medium mb-1">Usuario Asignado</label>
+                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/40" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.usuarioAsignado || ""} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Procedencia</label>
+                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={(form as any).procedencia || "Propio"} onChange={e => setForm({ ...form, procedencia: e.target.value, consignatarioId: e.target.value === "Propio" ? "" : (form as any).consignatarioId || "" } as any)}>
+                        {PROCEDENCIAS.map(o => <option key={o}>{o}</option>)}
+                      </select></div>
+                  </div>
+                  {(form as any).procedencia === "Consignado" && (
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium mb-1">Cliente Consignatario *</label>
+                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={(form as any).consignatarioId || ""} onChange={e => setForm({ ...form, consignatarioId: e.target.value } as any)}>
+                        <option value="">— Seleccionar Cliente —</option>
+                        {clientes.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos} {c.rut ? `(${c.rut})` : ""}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
 
