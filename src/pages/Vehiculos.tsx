@@ -4,7 +4,7 @@ import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 
-type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO";
+type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
 interface FotoSlot { label: string; file: File | null; preview: string | null; }
 
@@ -13,22 +13,23 @@ const FOTO_SLOTS = [
   "TRASERA", "ASIENTOS DELANTEROS", "ASIENTOS TRASEROS",
   "MALETERO / CAJA CARGA", "INTERIOR FRONTAL", "FOTOS ESPECIALES"
 ];
-const TRANSMISIONES = [
-  "Transmisión Manual", "Transmisión Automática", "Transmisión CVT",
-  "Transmisión Automática de Doble Embrague", "Transmisión Secuencial"
-];
+const TRANSMISIONES = ["Manual", "Automático"];
 const TRACCIONES = ["Tracción Delantera", "Tracción Trasera", "Tracción 4x4", "Tracción Integral"];
+const TIPOS_VEHICULO = ["Camioneta", "Sedan", "Hatchback", "SUV / 3C", "Furgon", "Coupe", "Camion", "Station Wagon", "Van"];
+const ESTADOS_VEHICULO: VehiculoEstado[] = ["DISPONIBLE", "RESERVADO", "VENDIDO", "RETIRADO"];
+const PROCEDENCIAS = ["Propio", "Consignado"];
 
 const MASTER_PASS = "123cuatro";
 
 const DEFAULT_BG_PROMPT = "Keep the car exactly as it is — do not modify the vehicle at all. Only replace the background. Place the car on a professional automotive studio floor: light grey polished concrete, subtle reflection under the car, clean white seamless background wall. The car should occupy about 70% of the frame centered, leaving visible floor space below and sides. Soft even studio lighting, no harsh shadows, photorealistic, high quality dealership photo.";
 
-const emptyVehiculo = (): Partial<Vehiculo> => ({
-  folio: "", patente: "", tipo: "AUTOMOVIL", marca: "", modelo: "", anio: "2026",
-  estado: "DISPONIBLE", precioVenta: 0, precioCosto: 0, sucursal: "", usuarioAsignado: "",
+const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: string; consignatarioId: string }> => ({
+  folio: "", patente: "", tipo: "Sedan", marca: "", modelo: "", anio: "2026",
+  estado: "DISPONIBLE", precioVenta: 0, precioCosto: 0, sucursal: "", usuarioAsignado,
   combustible: "Bencina", nMotor: "", vin: "", color: "", kilometraje: 0, ubicacion: "",
   comentarios: "", transmision: "", traccion: "", aireAcondicionado: false,
-  equipamientoExtra: [], fotos: []
+  equipamientoExtra: [], fotos: [],
+  procedencia: "Propio", consignatarioId: "",
 });
 
 const fmt = (n: number) => "$" + n.toLocaleString("es-CL");
