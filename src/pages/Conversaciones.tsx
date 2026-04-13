@@ -446,7 +446,7 @@ function TabMensajes() {
               </div>
               <button
                 onClick={async () => {
-                  await supabase.from("conversations").update({ escalated: false, escalated_at: null } as Record<string, unknown>).eq("id", selectedConv.id);
+                  await supabase.from("conversations").update({ escalated: false, escalated_at: null }).eq("id", selectedConv.id);
                   setConversations((prev) => prev.map((c) => c.id === selectedConv.id ? { ...c, escalated: false, escalated_at: null } : c));
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border"
@@ -656,7 +656,7 @@ function TabLeads() {
     // Track first vendor open for response time metric
     if (!lead.primer_apertura_at) {
       const now = new Date().toISOString();
-      await supabase.from("leads").update({ primer_apertura_at: now } as Record<string, unknown>).eq("id", lead.id);
+      await supabase.from("leads").update({ primer_apertura_at: now }).eq("id", lead.id);
       setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, primer_apertura_at: now } : l));
     }
   };
