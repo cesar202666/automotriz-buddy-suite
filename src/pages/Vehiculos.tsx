@@ -69,13 +69,13 @@ function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel:
 }
 
 export default function Vehiculos() {
-  const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo } = useApp();
+  const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo, clientes, usuarioActual } = useApp();
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("DISPONIBLE");
   const [showModal, setShowModal] = useState(false);
   const [tab, setTab] = useState("general");
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<Vehiculo>>(emptyVehiculo());
+  const [form, setForm] = useState<Partial<Vehiculo & { procedencia: string; consignatarioId: string }>>(emptyVehiculo(usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : ""));
   const [fotoSlots, setFotoSlots] = useState<FotoSlot[]>(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
   const [nuevoEquipamiento, setNuevoEquipamiento] = useState("");
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -143,7 +143,8 @@ export default function Vehiculos() {
   });
 
   const openCreate = () => {
-    setForm(emptyVehiculo());
+    const ua = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+    setForm(emptyVehiculo(ua));
     setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
     setEditId(null); setTab("general"); setShowModal(true);
   };
