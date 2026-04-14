@@ -132,6 +132,20 @@ const ETAPA_COLORS: Record<string, string> = {
   propuesta: "#f59e0b", negociacion: "#f97316", ganado: "#22c55e", perdido: "#ef4444"
 };
 
+const CALIFICACION_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  frio: { label: "❄️ Frío", color: "#3b82f6", bg: "#dbeafe" },
+  tibio: { label: "🌤 Tibio", color: "#f59e0b", bg: "#fef9c3" },
+  caliente: { label: "🔥 Caliente", color: "#ef4444", bg: "#fee2e2" },
+};
+
+type LeadCategory = "pendiente_vendedor" | "contactados" | "cerrados";
+
+const LEAD_CATEGORIES: { id: LeadCategory; label: string; color: string; icon: string }[] = [
+  { id: "pendiente_vendedor", label: "Pendiente Vendedor", color: "#ef4444", icon: "🔴" },
+  { id: "contactados", label: "Contactados", color: "#22c55e", icon: "🟢" },
+  { id: "cerrados", label: "Cerrados", color: "#6b7280", icon: "⬛" },
+];
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function getChannelConfig(channel: string) {
   return CHANNEL_CONFIG[channel as keyof typeof CHANNEL_CONFIG] || CHANNEL_CONFIG.whatsapp;
