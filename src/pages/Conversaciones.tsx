@@ -776,9 +776,14 @@ function TabLeads() {
                         </div>
                         <UrgenciaDot urgencia={lead.urgencia} />
                       </div>
-                      <div className="flex items-center gap-1.5 mb-2">
+                      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                         <ChannelBadge channel={lead.canal} />
                         <ScoreBadge score={lead.score} />
+                        {lead.calificacion && CALIFICACION_BADGE[lead.calificacion] && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: CALIFICACION_BADGE[lead.calificacion].bg, color: CALIFICACION_BADGE[lead.calificacion].color }}>
+                            {CALIFICACION_BADGE[lead.calificacion].label}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{fmtTime(lead.created_at)}</span>
