@@ -857,12 +857,37 @@ function TabLeads() {
                 </select>
               </div>
 
-              <div><label className="text-xs font-medium block mb-1">Score (0-100)</label>
-                <div className="flex items-center gap-3">
-                  <input type="range" min="0" max="100" className="flex-1" value={editLead.score ?? 0} onChange={e => setEditLead(p => ({ ...p, score: parseInt(e.target.value) }))} />
-                  <ScoreBadge score={editLead.score ?? 0} />
+              <div><label className="text-xs font-medium block mb-1">Calificación</label>
+                <div className="flex gap-2">
+                  {[{ val: "frio", label: "❄️ Frío", color: "#3b82f6" }, { val: "tibio", label: "🌤 Tibio", color: "#f59e0b" }, { val: "caliente", label: "🔥 Caliente", color: "#ef4444" }].map(opt => (
+                    <button key={opt.val} onClick={() => setEditLead(p => ({ ...p, calificacion: opt.val }))} className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-all" style={{ borderColor: editLead.calificacion === opt.val ? opt.color : "hsl(var(--border))", background: editLead.calificacion === opt.val ? `${opt.color}20` : "transparent", color: editLead.calificacion === opt.val ? opt.color : "hsl(var(--muted-foreground))" }}>
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              <div><label className="text-xs font-medium block mb-1">Observaciones del vendedor</label>
+                <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={2} placeholder='Ej: "Cliente interesado en camioneta XX, evaluando crédito."' value={editLead.observaciones_vendedor || ""} onChange={e => setEditLead(p => ({ ...p, observaciones_vendedor: e.target.value }))} />
+              </div>
+
+              <div><label className="text-xs font-medium block mb-1">Estado de cierre</label>
+                <select className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={editLead.estado_cierre || ""} onChange={e => setEditLead(p => ({ ...p, estado_cierre: e.target.value }))}>
+                  <option value="">Sin cerrar</option>
+                  <option value="venta_realizada">✅ Venta realizada</option>
+                  <option value="no_contesta">📵 No contesta</option>
+                  <option value="sin_interes">❌ Sin interés</option>
+                  <option value="compro_otro_lugar">🏪 Compró en otro lugar</option>
+                  <option value="no_cumple_credito">🚫 No cumple requisitos de crédito</option>
+                  <option value="precio_alto">💰 Precio alto</option>
+                </select>
+              </div>
+
+              {editLead.estado_cierre && (
+                <div><label className="text-xs font-medium block mb-1">Detalle adicional</label>
+                  <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={2} placeholder="Describe el motivo con más detalle..." value={editLead.detalle_cierre || ""} onChange={e => setEditLead(p => ({ ...p, detalle_cierre: e.target.value }))} />
+                </div>
+              )}
 
               <div><label className="text-xs font-medium block mb-1">Notas</label>
                 <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={3} value={editLead.notas || ""} onChange={e => setEditLead(p => ({ ...p, notas: e.target.value }))} />
