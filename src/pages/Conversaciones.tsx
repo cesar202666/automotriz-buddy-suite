@@ -926,15 +926,28 @@ function TabLeads() {
               <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: "hsl(var(--muted)/0.5)" }}>
                 <p className="font-semibold mb-1">⏱ Tiempo de respuesta</p>
                 <div className="flex justify-between">
-                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Lead recibido</span>
-                  <span className="font-medium">{new Date(selectedLead.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Último mensaje del cliente</span>
+                  <span className="font-medium">
+                    {selectedLead.conversation_id && lastMessages[selectedLead.conversation_id]
+                      ? new Date(lastMessages[selectedLead.conversation_id]).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                      : new Date(selectedLead.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Primera apertura</span>
-                  <span className="font-medium" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#f59e0b" }}>
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Respuesta del vendedor</span>
+                  <span className="font-medium" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#ef4444" }}>
                     {selectedLead.primer_apertura_at
-                      ? fmtResponseTime(selectedLead.created_at, selectedLead.primer_apertura_at)
-                      : "Pendiente"}
+                      ? fmtResponseTime(
+                          selectedLead.conversation_id && lastMessages[selectedLead.conversation_id] ? lastMessages[selectedLead.conversation_id] : selectedLead.created_at,
+                          selectedLead.primer_apertura_at
+                        )
+                      : "🔴 Pendiente"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Estado</span>
+                  <span className="font-semibold" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#ef4444" }}>
+                    {selectedLead.estado_cierre ? "⬛ Cerrado" : selectedLead.primer_apertura_at ? "🟢 Contactado" : "🔴 Pendiente"}
                   </span>
                 </div>
               </div>
