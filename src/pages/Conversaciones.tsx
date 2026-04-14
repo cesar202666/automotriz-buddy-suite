@@ -953,6 +953,15 @@ function TabLeads() {
                   {vendedores.map(v => <option key={v.id} value={v.nombre}>{v.nombre}</option>)}
                 </select>
               </div>
+              <div className="col-span-2"><label className="text-xs font-medium block mb-1">Calificación</label>
+                <div className="flex gap-2">
+                  {[{ val: "frio", label: "❄️ Frío" }, { val: "tibio", label: "🌤 Tibio" }, { val: "caliente", label: "🔥 Caliente" }].map(opt => (
+                    <button key={opt.val} type="button" onClick={() => setNewLead(p => ({ ...p, calificacion: opt.val }))} className="flex-1 py-2 rounded-lg text-xs font-semibold border" style={{ borderColor: newLead.calificacion === opt.val ? "hsl(var(--primary))" : "hsl(var(--border))", background: newLead.calificacion === opt.val ? "hsl(var(--primary)/0.1)" : "transparent" }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="col-span-2"><label className="text-xs font-medium block mb-1">Notas</label><textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={2} value={newLead.notas} onChange={e => setNewLead(p => ({ ...p, notas: e.target.value }))} /></div>
             </div>
             <div className="flex gap-2 mt-4">
