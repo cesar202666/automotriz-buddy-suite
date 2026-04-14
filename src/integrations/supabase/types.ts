@@ -266,17 +266,21 @@ export type Database = {
       }
       leads: {
         Row: {
+          calificacion: string | null
           canal: string | null
           contact_id: string | null
           conversation_id: string | null
           created_at: string
+          detalle_cierre: string | null
           email: string | null
+          estado_cierre: string | null
           etapa: string | null
           id: string
           interes: string | null
           motivo_perdida: string | null
           nombre: string
           notas: string | null
+          observaciones_vendedor: string | null
           presupuesto: string | null
           primer_apertura_at: string | null
           score: number | null
@@ -286,17 +290,21 @@ export type Database = {
           vendedor_asignado: string | null
         }
         Insert: {
+          calificacion?: string | null
           canal?: string | null
           contact_id?: string | null
           conversation_id?: string | null
           created_at?: string
+          detalle_cierre?: string | null
           email?: string | null
+          estado_cierre?: string | null
           etapa?: string | null
           id?: string
           interes?: string | null
           motivo_perdida?: string | null
           nombre?: string
           notas?: string | null
+          observaciones_vendedor?: string | null
           presupuesto?: string | null
           primer_apertura_at?: string | null
           score?: number | null
@@ -306,17 +314,21 @@ export type Database = {
           vendedor_asignado?: string | null
         }
         Update: {
+          calificacion?: string | null
           canal?: string | null
           contact_id?: string | null
           conversation_id?: string | null
           created_at?: string
+          detalle_cierre?: string | null
           email?: string | null
+          estado_cierre?: string | null
           etapa?: string | null
           id?: string
           interes?: string | null
           motivo_perdida?: string | null
           nombre?: string
           notas?: string | null
+          observaciones_vendedor?: string | null
           presupuesto?: string | null
           primer_apertura_at?: string | null
           score?: number | null

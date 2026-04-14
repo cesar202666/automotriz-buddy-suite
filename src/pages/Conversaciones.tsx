@@ -69,6 +69,10 @@ interface Lead {
   motivo_perdida: string;
   notas: string;
   primer_apertura_at: string | null;
+  calificacion: string;
+  observaciones_vendedor: string;
+  estado_cierre: string;
+  detalle_cierre: string;
   created_at: string;
   updated_at: string;
 }
@@ -561,7 +565,7 @@ function TabLeads() {
   const [searchLeads, setSearchLeads] = useState("");
   const [showNewLead, setShowNewLead] = useState(false);
   const [dragOverEtapa, setDragOverEtapa] = useState<string | null>(null);
-  const [newLead, setNewLead] = useState({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "" });
+  const [newLead, setNewLead] = useState({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" });
   const [editLead, setEditLead] = useState<Partial<Lead>>({});
   const [savingLead, setSavingLead] = useState(false);
 
@@ -647,12 +651,12 @@ function TabLeads() {
   const handleCreateLead = async () => {
     if (!newLead.nombre.trim()) return;
     const { data } = await supabase.from("leads").insert(newLead).select().single();
-    if (data) { setLeads(prev => [data as Lead, ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "" }); }
+    if (data) { setLeads(prev => [data as Lead, ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" }); }
   };
 
   const openLead = async (lead: Lead) => {
     setSelectedLead(lead);
-    setEditLead({ nombre: lead.nombre, telefono: lead.telefono, email: lead.email, interes: lead.interes, presupuesto: lead.presupuesto, urgencia: lead.urgencia, etapa: lead.etapa, vendedor_asignado: lead.vendedor_asignado, score: lead.score, notas: lead.notas });
+    setEditLead({ nombre: lead.nombre, telefono: lead.telefono, email: lead.email, interes: lead.interes, presupuesto: lead.presupuesto, urgencia: lead.urgencia, etapa: lead.etapa, vendedor_asignado: lead.vendedor_asignado, score: lead.score, notas: lead.notas, calificacion: lead.calificacion || 'frio', observaciones_vendedor: lead.observaciones_vendedor || '', estado_cierre: lead.estado_cierre || '', detalle_cierre: lead.detalle_cierre || '' });
     // Track first vendor open for response time metric
     if (!lead.primer_apertura_at) {
       const now = new Date().toISOString();
@@ -853,12 +857,37 @@ function TabLeads() {
                 </select>
               </div>
 
-              <div><label className="text-xs font-medium block mb-1">Score (0-100)</label>
-                <div className="flex items-center gap-3">
-                  <input type="range" min="0" max="100" className="flex-1" value={editLead.score ?? 0} onChange={e => setEditLead(p => ({ ...p, score: parseInt(e.target.value) }))} />
-                  <ScoreBadge score={editLead.score ?? 0} />
+              <div><label className="text-xs font-medium block mb-1">Calificación</label>
+                <div className="flex gap-2">
+                  {[{ val: "frio", label: "❄️ Frío", color: "#3b82f6" }, { val: "tibio", label: "🌤 Tibio", color: "#f59e0b" }, { val: "caliente", label: "🔥 Caliente", color: "#ef4444" }].map(opt => (
+                    <button key={opt.val} onClick={() => setEditLead(p => ({ ...p, calificacion: opt.val }))} className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-all" style={{ borderColor: editLead.calificacion === opt.val ? opt.color : "hsl(var(--border))", background: editLead.calificacion === opt.val ? `${opt.color}20` : "transparent", color: editLead.calificacion === opt.val ? opt.color : "hsl(var(--muted-foreground))" }}>
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              <div><label className="text-xs font-medium block mb-1">Observaciones del vendedor</label>
+                <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={2} placeholder='Ej: "Cliente interesado en camioneta XX, evaluando crédito."' value={editLead.observaciones_vendedor || ""} onChange={e => setEditLead(p => ({ ...p, observaciones_vendedor: e.target.value }))} />
+              </div>
+
+              <div><label className="text-xs font-medium block mb-1">Estado de cierre</label>
+                <select className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={editLead.estado_cierre || ""} onChange={e => setEditLead(p => ({ ...p, estado_cierre: e.target.value }))}>
+                  <option value="">Sin cerrar</option>
+                  <option value="venta_realizada">✅ Venta realizada</option>
+                  <option value="no_contesta">📵 No contesta</option>
+                  <option value="sin_interes">❌ Sin interés</option>
+                  <option value="compro_otro_lugar">🏪 Compró en otro lugar</option>
+                  <option value="no_cumple_credito">🚫 No cumple requisitos de crédito</option>
+                  <option value="precio_alto">💰 Precio alto</option>
+                </select>
+              </div>
+
+              {editLead.estado_cierre && (
+                <div><label className="text-xs font-medium block mb-1">Detalle adicional</label>
+                  <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={2} placeholder="Describe el motivo con más detalle..." value={editLead.detalle_cierre || ""} onChange={e => setEditLead(p => ({ ...p, detalle_cierre: e.target.value }))} />
+                </div>
+              )}
 
               <div><label className="text-xs font-medium block mb-1">Notas</label>
                 <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={3} value={editLead.notas || ""} onChange={e => setEditLead(p => ({ ...p, notas: e.target.value }))} />
@@ -923,6 +952,15 @@ function TabLeads() {
                   <option value="">Sin asignar</option>
                   {vendedores.map(v => <option key={v.id} value={v.nombre}>{v.nombre}</option>)}
                 </select>
+              </div>
+              <div className="col-span-2"><label className="text-xs font-medium block mb-1">Calificación</label>
+                <div className="flex gap-2">
+                  {[{ val: "frio", label: "❄️ Frío" }, { val: "tibio", label: "🌤 Tibio" }, { val: "caliente", label: "🔥 Caliente" }].map(opt => (
+                    <button key={opt.val} type="button" onClick={() => setNewLead(p => ({ ...p, calificacion: opt.val }))} className="flex-1 py-2 rounded-lg text-xs font-semibold border" style={{ borderColor: newLead.calificacion === opt.val ? "hsl(var(--primary))" : "hsl(var(--border))", background: newLead.calificacion === opt.val ? "hsl(var(--primary)/0.1)" : "transparent" }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="col-span-2"><label className="text-xs font-medium block mb-1">Notas</label><textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }} rows={2} value={newLead.notas} onChange={e => setNewLead(p => ({ ...p, notas: e.target.value }))} /></div>
             </div>

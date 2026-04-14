@@ -365,6 +365,17 @@ Deno.serve(async (req) => {
     let score = 0
     let shouldEscalate = false
     let clienteCreado = false
+    let calificacion = 'frio' // default
+
+    // ── Auto-classify based on message content ─────────────────────────────────
+    const hotKeywords = ['comprar', 'quiero', 'necesito', 'urgente', 'hoy', 'ahora', 'precio', 'crédito', 'credito', 'reservar', 'disponible']
+    const warmKeywords = ['interesa', 'consulta', 'información', 'informacion', 'ver', 'cotizar', 'modelo', 'cuánto', 'cuanto', 'financiamiento']
+    
+    if (containsKeyword(allUserMessages, hotKeywords)) {
+      calificacion = 'caliente'
+    } else if (containsKeyword(allUserMessages, warmKeywords)) {
+      calificacion = 'tibio'
+    }
 
     if (isWhatsApp) {
       if (isFirstContact) {
@@ -417,6 +428,20 @@ Deno.serve(async (req) => {
       shouldEscalate = true
     }
 
+    // ── Reclassify existing lead on every message ───────────────────────────────
+    if (conversationId && !shouldEscalate) {
+      const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id, calificacion')
+        .eq('conversation_id', conversationId)
+        .maybeSingle()
+
+      if (existingLead && existingLead.calificacion !== calificacion) {
+        await supabase.from('leads').update({ calificacion }).eq('id', existingLead.id)
+        console.log(`[RECLASIFICACION] Lead ${existingLead.id}: ${existingLead.calificacion} → ${calificacion}`)
+      }
+    }
+
     // ── Upsert lead (only when escalating) ─────────────────────────────────────
     let leadId: string | null = null
 
@@ -429,6 +454,7 @@ Deno.serve(async (req) => {
         score: isWhatsApp ? score : 0,
         urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
         vendedor_asignado: vendedorAsignado,
+        calificacion,
         notas: `Lead generado por agente IA. Canal: ${canal}.${clienteCreado ? ' Cliente creado automáticamente.' : ''}`,
         ...(conversationId ? { conversation_id: conversationId } : {}),
         ...(contactId ? { contact_id: contactId } : {}),
@@ -448,7 +474,7 @@ Deno.serve(async (req) => {
           leadId = existingLead.id
           await supabase
             .from('leads')
-            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado' })
+            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado', calificacion })
             .eq('id', existingLead.id)
         }
       } else {
