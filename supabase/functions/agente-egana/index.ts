@@ -463,9 +463,13 @@ Deno.serve(async (req) => {
     let leadId: string | null = null
 
     if (shouldEscalate) {
+      // Use the captured name (from conversation) or fallback
+      const leadNombre = capturedClientName || nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente'
+      const leadTelefono = capturedClientPhone || telefono || extractedPhone
+
       const leadData = {
-        nombre: nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente',
-        telefono: telefono || extractedPhone,
+        nombre: leadNombre,
+        telefono: leadTelefono,
         canal: isWhatsApp ? 'whatsapp' : canal,
         etapa: 'contactado',
         score: isWhatsApp ? score : 0,
