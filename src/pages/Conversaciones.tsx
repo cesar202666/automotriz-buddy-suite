@@ -264,10 +264,14 @@ function TabMensajes() {
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("conversations").select("*, contact:contacts(*)").order("last_message_at", { ascending: false }).limit(200);
+    let query = supabase.from("conversations").select("*, contact:contacts(*)").order("last_message_at", { ascending: false }).limit(200);
+    if (isVendedor && vendedorName) {
+      query = query.eq("assigned_to", vendedorName);
+    }
+    const { data, error } = await query;
     if (!error && data) setConversations(data as Conversation[]);
     setLoading(false);
-  }, []);
+  }, [isVendedor, vendedorName]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
