@@ -6,6 +6,7 @@ import {
   Trash2, Send, Filter, GripVertical, AlertCircle, Info,
   TrendingUp, DollarSign, Award, Zap, RefreshCw
 } from "lucide-react";
+import { useApp } from "@/context/AppContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
