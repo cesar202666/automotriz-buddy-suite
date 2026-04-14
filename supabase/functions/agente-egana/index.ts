@@ -440,6 +440,7 @@ Deno.serve(async (req) => {
         score: isWhatsApp ? score : 0,
         urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
         vendedor_asignado: vendedorAsignado,
+        calificacion,
         notas: `Lead generado por agente IA. Canal: ${canal}.${clienteCreado ? ' Cliente creado automáticamente.' : ''}`,
         ...(conversationId ? { conversation_id: conversationId } : {}),
         ...(contactId ? { contact_id: contactId } : {}),
@@ -459,7 +460,7 @@ Deno.serve(async (req) => {
           leadId = existingLead.id
           await supabase
             .from('leads')
-            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado' })
+            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado', calificacion })
             .eq('id', existingLead.id)
         }
       } else {
