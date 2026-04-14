@@ -654,7 +654,6 @@ function TabLeads() {
   const filteredLeads = leads.filter(l => {
     if (filterVendedor !== "all" && l.vendedor_asignado !== filterVendedor) return false;
     if (filterCanal !== "all" && l.canal !== filterCanal) return false;
-    if (filterUrgencia !== "all" && l.urgencia !== filterUrgencia) return false;
     if (searchLeads && !l.nombre.toLowerCase().includes(searchLeads.toLowerCase())) return false;
     return true;
   });
