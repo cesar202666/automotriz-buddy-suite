@@ -899,8 +899,9 @@ function TabLeads() {
                       <Trash2 size={13} />
                     </button>
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {filteredLeads.length === 0 && (
