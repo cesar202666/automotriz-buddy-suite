@@ -365,6 +365,17 @@ Deno.serve(async (req) => {
     let score = 0
     let shouldEscalate = false
     let clienteCreado = false
+    let calificacion = 'frio' // default
+
+    // ── Auto-classify based on message content ─────────────────────────────────
+    const hotKeywords = ['comprar', 'quiero', 'necesito', 'urgente', 'hoy', 'ahora', 'precio', 'crédito', 'credito', 'reservar', 'disponible']
+    const warmKeywords = ['interesa', 'consulta', 'información', 'informacion', 'ver', 'cotizar', 'modelo', 'cuánto', 'cuanto', 'financiamiento']
+    
+    if (containsKeyword(allUserMessages, hotKeywords)) {
+      calificacion = 'caliente'
+    } else if (containsKeyword(allUserMessages, warmKeywords)) {
+      calificacion = 'tibio'
+    }
 
     if (isWhatsApp) {
       if (isFirstContact) {
