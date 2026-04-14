@@ -567,33 +567,61 @@ function TabMensajes() {
 
 // ── PESTAÑA LEADS ─────────────────────────────────────────────────────────────
 function TabLeads() {
+  const { usuarioActual } = useApp();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [actividades, setActividades] = useState<LeadActividad[]>([]);
   const [newNota, setNewNota] = useState("");
-  const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
+  const [viewMode, setViewMode] = useState<"kanban" | "lista" | "categorias">("categorias");
   const [filterVendedor, setFilterVendedor] = useState("all");
   const [filterCanal, setFilterCanal] = useState("all");
-  const [filterUrgencia, setFilterUrgencia] = useState("all");
   const [searchLeads, setSearchLeads] = useState("");
   const [showNewLead, setShowNewLead] = useState(false);
   const [dragOverEtapa, setDragOverEtapa] = useState<string | null>(null);
   const [newLead, setNewLead] = useState({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" });
   const [editLead, setEditLead] = useState<Partial<Lead>>({});
   const [savingLead, setSavingLead] = useState(false);
+  const [lastMessages, setLastMessages] = useState<Record<string, string>>({});
+
+  const isVendedor = usuarioActual?.rol === "vendedor";
+  const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    let leadsQuery = supabase.from("leads").select("*").order("created_at", { ascending: false });
+    // Vendedores only see their assigned leads
+    if (isVendedor && vendedorName) {
+      leadsQuery = leadsQuery.eq("vendedor_asignado", vendedorName);
+    }
     const [leadsRes, vendRes] = await Promise.all([
-      supabase.from("leads").select("*").order("created_at", { ascending: false }),
+      leadsQuery,
       supabase.from("vendedores").select("*").eq("activo", true)
     ]);
-    if (leadsRes.data) setLeads(leadsRes.data as Lead[]);
+    if (leadsRes.data) {
+      setLeads(leadsRes.data as Lead[]);
+      // Load last inbound message time for each lead's conversation
+      const convIds = (leadsRes.data as Lead[]).filter(l => l.conversation_id).map(l => l.conversation_id!);
+      if (convIds.length > 0) {
+        const { data: msgs } = await supabase
+          .from("messages")
+          .select("conversation_id, sent_at")
+          .in("conversation_id", convIds)
+          .eq("direction", "inbound")
+          .order("sent_at", { ascending: false });
+        if (msgs) {
+          const map: Record<string, string> = {};
+          msgs.forEach((m: any) => {
+            if (!map[m.conversation_id]) map[m.conversation_id] = m.sent_at;
+          });
+          setLastMessages(map);
+        }
+      }
+    }
     if (vendRes.data) setVendedores(vendRes.data as Vendedor[]);
     setLoading(false);
-  }, []);
+  }, [isVendedor, vendedorName]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
