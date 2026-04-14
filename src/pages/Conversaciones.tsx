@@ -565,7 +565,7 @@ function TabLeads() {
   const [searchLeads, setSearchLeads] = useState("");
   const [showNewLead, setShowNewLead] = useState(false);
   const [dragOverEtapa, setDragOverEtapa] = useState<string | null>(null);
-  const [newLead, setNewLead] = useState({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "" });
+  const [newLead, setNewLead] = useState({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" });
   const [editLead, setEditLead] = useState<Partial<Lead>>({});
   const [savingLead, setSavingLead] = useState(false);
 
@@ -651,7 +651,7 @@ function TabLeads() {
   const handleCreateLead = async () => {
     if (!newLead.nombre.trim()) return;
     const { data } = await supabase.from("leads").insert(newLead).select().single();
-    if (data) { setLeads(prev => [data as Lead, ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "" }); }
+    if (data) { setLeads(prev => [data as Lead, ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" }); }
   };
 
   const openLead = async (lead: Lead) => {
