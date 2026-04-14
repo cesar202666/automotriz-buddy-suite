@@ -6,6 +6,7 @@ import {
   Trash2, Send, Filter, GripVertical, AlertCircle, Info,
   TrendingUp, DollarSign, Award, Zap, RefreshCw
 } from "lucide-react";
+import { useApp } from "@/context/AppContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -131,6 +132,20 @@ const ETAPA_COLORS: Record<string, string> = {
   propuesta: "#f59e0b", negociacion: "#f97316", ganado: "#22c55e", perdido: "#ef4444"
 };
 
+const CALIFICACION_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  frio: { label: "❄️ Frío", color: "#3b82f6", bg: "#dbeafe" },
+  tibio: { label: "🌤 Tibio", color: "#f59e0b", bg: "#fef9c3" },
+  caliente: { label: "🔥 Caliente", color: "#ef4444", bg: "#fee2e2" },
+};
+
+type LeadCategory = "pendiente_vendedor" | "contactados" | "cerrados";
+
+const LEAD_CATEGORIES: { id: LeadCategory; label: string; color: string; icon: string }[] = [
+  { id: "pendiente_vendedor", label: "Pendiente Vendedor", color: "#ef4444", icon: "🔴" },
+  { id: "contactados", label: "Contactados", color: "#22c55e", icon: "🟢" },
+  { id: "cerrados", label: "Cerrados", color: "#6b7280", icon: "⬛" },
+];
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function getChannelConfig(channel: string) {
   return CHANNEL_CONFIG[channel as keyof typeof CHANNEL_CONFIG] || CHANNEL_CONFIG.whatsapp;
@@ -209,6 +224,10 @@ function UrgenciaDot({ urgencia }: { urgencia: string }) {
 
 // ── PESTAÑA MENSAJES ──────────────────────────────────────────────────────────
 function TabMensajes() {
+  const { usuarioActual } = useApp();
+  const isVendedor = usuarioActual?.rol === "vendedor";
+  const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
@@ -245,10 +264,14 @@ function TabMensajes() {
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("conversations").select("*, contact:contacts(*)").order("last_message_at", { ascending: false }).limit(200);
+    let query = supabase.from("conversations").select("*, contact:contacts(*)").order("last_message_at", { ascending: false }).limit(200);
+    if (isVendedor && vendedorName) {
+      query = query.eq("assigned_to", vendedorName);
+    }
+    const { data, error } = await query;
     if (!error && data) setConversations(data as Conversation[]);
     setLoading(false);
-  }, []);
+  }, [isVendedor, vendedorName]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
@@ -552,33 +575,61 @@ function TabMensajes() {
 
 // ── PESTAÑA LEADS ─────────────────────────────────────────────────────────────
 function TabLeads() {
+  const { usuarioActual } = useApp();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [actividades, setActividades] = useState<LeadActividad[]>([]);
   const [newNota, setNewNota] = useState("");
-  const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
+  const [viewMode, setViewMode] = useState<"kanban" | "lista" | "categorias">("categorias");
   const [filterVendedor, setFilterVendedor] = useState("all");
   const [filterCanal, setFilterCanal] = useState("all");
-  const [filterUrgencia, setFilterUrgencia] = useState("all");
   const [searchLeads, setSearchLeads] = useState("");
   const [showNewLead, setShowNewLead] = useState(false);
   const [dragOverEtapa, setDragOverEtapa] = useState<string | null>(null);
   const [newLead, setNewLead] = useState({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" });
   const [editLead, setEditLead] = useState<Partial<Lead>>({});
   const [savingLead, setSavingLead] = useState(false);
+  const [lastMessages, setLastMessages] = useState<Record<string, string>>({});
+
+  const isVendedor = usuarioActual?.rol === "vendedor";
+  const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    let leadsQuery = supabase.from("leads").select("*").order("created_at", { ascending: false });
+    // Vendedores only see their assigned leads
+    if (isVendedor && vendedorName) {
+      leadsQuery = leadsQuery.eq("vendedor_asignado", vendedorName);
+    }
     const [leadsRes, vendRes] = await Promise.all([
-      supabase.from("leads").select("*").order("created_at", { ascending: false }),
+      leadsQuery,
       supabase.from("vendedores").select("*").eq("activo", true)
     ]);
-    if (leadsRes.data) setLeads(leadsRes.data as Lead[]);
+    if (leadsRes.data) {
+      setLeads(leadsRes.data as Lead[]);
+      // Load last inbound message time for each lead's conversation
+      const convIds = (leadsRes.data as Lead[]).filter(l => l.conversation_id).map(l => l.conversation_id!);
+      if (convIds.length > 0) {
+        const { data: msgs } = await supabase
+          .from("messages")
+          .select("conversation_id, sent_at")
+          .in("conversation_id", convIds)
+          .eq("direction", "inbound")
+          .order("sent_at", { ascending: false });
+        if (msgs) {
+          const map: Record<string, string> = {};
+          msgs.forEach((m: any) => {
+            if (!map[m.conversation_id]) map[m.conversation_id] = m.sent_at;
+          });
+          setLastMessages(map);
+        }
+      }
+    }
     if (vendRes.data) setVendedores(vendRes.data as Vendedor[]);
     setLoading(false);
-  }, []);
+  }, [isVendedor, vendedorName]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -611,7 +662,6 @@ function TabLeads() {
   const filteredLeads = leads.filter(l => {
     if (filterVendedor !== "all" && l.vendedor_asignado !== filterVendedor) return false;
     if (filterCanal !== "all" && l.canal !== filterCanal) return false;
-    if (filterUrgencia !== "all" && l.urgencia !== filterUrgencia) return false;
     if (searchLeads && !l.nombre.toLowerCase().includes(searchLeads.toLowerCase())) return false;
     return true;
   });
@@ -686,13 +736,8 @@ function TabLeads() {
           <option value="facebook">Facebook</option>
           <option value="presencial">Presencial</option>
         </select>
-        <select value={filterUrgencia} onChange={e => setFilterUrgencia(e.target.value)} className="text-sm border rounded-lg px-3 py-2 bg-background" style={{ borderColor: "hsl(var(--border))" }}>
-          <option value="all">Toda urgencia</option>
-          <option value="alta">Alta</option>
-          <option value="media">Media</option>
-          <option value="baja">Baja</option>
-        </select>
         <div className="flex border rounded-lg overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
+          <button onClick={() => setViewMode("categorias")} className="px-3 py-2 text-xs font-medium transition-colors" style={{ background: viewMode === "categorias" ? "hsl(var(--primary))" : "hsl(var(--background))", color: viewMode === "categorias" ? "white" : "hsl(var(--foreground))" }}>Panel</button>
           <button onClick={() => setViewMode("kanban")} className="px-3 py-2 text-xs font-medium transition-colors" style={{ background: viewMode === "kanban" ? "hsl(var(--primary))" : "hsl(var(--background))", color: viewMode === "kanban" ? "white" : "hsl(var(--foreground))" }}>Kanban</button>
           <button onClick={() => setViewMode("lista")} className="px-3 py-2 text-xs font-medium transition-colors" style={{ background: viewMode === "lista" ? "hsl(var(--primary))" : "hsl(var(--background))", color: viewMode === "lista" ? "white" : "hsl(var(--foreground))" }}>Lista</button>
         </div>
@@ -739,9 +784,14 @@ function TabLeads() {
                         </div>
                         <UrgenciaDot urgencia={lead.urgencia} />
                       </div>
-                      <div className="flex items-center gap-1.5 mb-2">
+                      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                         <ChannelBadge channel={lead.canal} />
                         <ScoreBadge score={lead.score} />
+                        {lead.calificacion && CALIFICACION_BADGE[lead.calificacion] && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: CALIFICACION_BADGE[lead.calificacion].bg, color: CALIFICACION_BADGE[lead.calificacion].color }}>
+                            {CALIFICACION_BADGE[lead.calificacion].label}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{fmtTime(lead.created_at)}</span>
@@ -760,35 +810,106 @@ function TabLeads() {
         </div>
       )}
 
-      {/* Lista */}
+      {/* Categorias panel */}
+      {viewMode === "categorias" && (() => {
+        // Categorize leads
+        const closedStatuses = ["venta_realizada", "no_contesta", "sin_interes", "compro_otro_lugar", "no_cumple_credito", "precio_alto"];
+        const pendienteVendedor = filteredLeads.filter(l => !l.estado_cierre && !l.primer_apertura_at);
+        const contactados = filteredLeads.filter(l => !l.estado_cierre && l.primer_apertura_at);
+        const cerrados = filteredLeads.filter(l => l.estado_cierre && closedStatuses.includes(l.estado_cierre));
+
+        const categories = [
+          { ...LEAD_CATEGORIES[0], leads: pendienteVendedor },
+          { ...LEAD_CATEGORIES[1], leads: contactados },
+          { ...LEAD_CATEGORIES[2], leads: cerrados },
+        ];
+
+        return (
+          <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "500px" }}>
+            {categories.map(cat => (
+              <div key={cat.id} className="flex-shrink-0 w-80 flex flex-col rounded-xl overflow-hidden" style={{ background: "hsl(220 25% 10%)" }}>
+                <div className="px-3 py-2.5 flex items-center justify-between" style={{ borderBottom: `2px solid ${cat.color}30` }}>
+                  <div className="flex items-center gap-2">
+                    <span>{cat.icon}</span>
+                    <span className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.9)" }}>{cat.label}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: cat.color + "33", color: cat.color }}>{cat.leads.length}</span>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {cat.leads.map(lead => {
+                    const lastClientMsg = lead.conversation_id ? lastMessages[lead.conversation_id] : null;
+                    const calif = CALIFICACION_BADGE[lead.calificacion] || CALIFICACION_BADGE.frio;
+                    return (
+                      <div key={lead.id} onClick={() => openLead(lead)} className="rounded-xl p-3 cursor-pointer hover:scale-[1.01] transition-all"
+                        style={{ background: cat.id === "pendiente_vendedor" ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.07)", border: cat.id === "pendiente_vendedor" ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(255,255,255,0.08)" }}>
+                        <div className="flex items-start justify-between mb-1.5">
+                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                          <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ background: cat.id === "pendiente_vendedor" ? "#ef4444" : cat.id === "contactados" ? "#22c55e" : "#6b7280" }} />
+                        </div>
+                        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                          <ChannelBadge channel={lead.canal} />
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: calif.bg, color: calif.color }}>{calif.label}</span>
+                        </div>
+                        {lastClientMsg && (
+                          <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.4)" }}>
+                            ⏱ Último msg cliente: {fmtTime(lastClientMsg)}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{fmtTime(lead.created_at)}</span>
+                          {lead.vendedor_asignado && (
+                            <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>👤 {lead.vendedor_asignado}</span>
+                          )}
+                        </div>
+                        {cat.id === "cerrados" && lead.estado_cierre && (
+                          <div className="mt-1.5 text-xs px-2 py-1 rounded" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)" }}>
+                            {lead.estado_cierre === "venta_realizada" ? "✅ Venta realizada" : lead.estado_cierre === "no_contesta" ? "📵 No contesta" : lead.estado_cierre === "sin_interes" ? "❌ Sin interés" : lead.estado_cierre === "compro_otro_lugar" ? "🏪 Compró en otro lugar" : lead.estado_cierre === "no_cumple_credito" ? "🚫 No cumple crédito" : "💰 Precio alto"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {cat.leads.length === 0 && <div className="text-center py-8 text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Sin leads</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {viewMode === "lista" && (
         <div className="border rounded-xl overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
           <table className="w-full text-sm">
             <thead style={{ background: "hsl(var(--muted)/0.5)" }}>
               <tr>
-                {["Nombre", "Canal", "Score", "Etapa", "Vendedor", "Presupuesto", "Urgencia", "Fecha", ""].map(h => (
+                {["Nombre", "Canal", "Calificación", "Estado", "Etapa", "Vendedor", "Fecha", ""].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.slice(0, 20).map(lead => (
+              {filteredLeads.slice(0, 20).map(lead => {
+                const calif = CALIFICACION_BADGE[lead.calificacion] || CALIFICACION_BADGE.frio;
+                const statusColor = lead.estado_cierre ? "#6b7280" : lead.primer_apertura_at ? "#22c55e" : "#ef4444";
+                const statusLabel = lead.estado_cierre ? "Cerrado" : lead.primer_apertura_at ? "Contactado" : "Pendiente";
+                return (
                 <tr key={lead.id} className="border-t hover:bg-muted/30 cursor-pointer" style={{ borderColor: "hsl(var(--border))" }} onClick={() => openLead(lead)}>
                   <td className="px-4 py-3 font-medium">{lead.nombre}</td>
                   <td className="px-4 py-3"><ChannelBadge channel={lead.canal} /></td>
-                  <td className="px-4 py-3"><ScoreBadge score={lead.score} /></td>
+                  <td className="px-4 py-3"><span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: calif.bg, color: calif.color }}>{calif.label}</span></td>
+                  <td className="px-4 py-3"><span className="inline-flex items-center gap-1 text-xs font-semibold"><span className="w-2 h-2 rounded-full" style={{ background: statusColor }} />{statusLabel}</span></td>
                   <td className="px-4 py-3"><span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: ETAPA_COLORS[lead.etapa] + "20", color: ETAPA_COLORS[lead.etapa] }}>{ETAPA_LABELS[lead.etapa] || lead.etapa}</span></td>
                   <td className="px-4 py-3 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>{lead.vendedor_asignado || "-"}</td>
-                  <td className="px-4 py-3 text-sm">{lead.presupuesto || "-"}</td>
-                  <td className="px-4 py-3"><UrgenciaDot urgencia={lead.urgencia} /></td>
+                  <td className="px-4 py-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>{new Date(lead.created_at).toLocaleDateString("es-CL")}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>{new Date(lead.created_at).toLocaleDateString("es-CL")}</td>
                   <td className="px-4 py-3">
                     <button onClick={async (e) => { e.stopPropagation(); if (confirm("¿Eliminar lead?")) { await supabase.from("leads").delete().eq("id", lead.id); setLeads(prev => prev.filter(l => l.id !== lead.id)); } }} className="text-xs px-2 py-1 rounded hover:bg-red-50" style={{ color: "#ef4444" }}>
                       <Trash2 size={13} />
                     </button>
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {filteredLeads.length === 0 && (
@@ -818,15 +939,28 @@ function TabLeads() {
               <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: "hsl(var(--muted)/0.5)" }}>
                 <p className="font-semibold mb-1">⏱ Tiempo de respuesta</p>
                 <div className="flex justify-between">
-                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Lead recibido</span>
-                  <span className="font-medium">{new Date(selectedLead.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Último mensaje del cliente</span>
+                  <span className="font-medium">
+                    {selectedLead.conversation_id && lastMessages[selectedLead.conversation_id]
+                      ? new Date(lastMessages[selectedLead.conversation_id]).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                      : new Date(selectedLead.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Primera apertura</span>
-                  <span className="font-medium" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#f59e0b" }}>
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Respuesta del vendedor</span>
+                  <span className="font-medium" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#ef4444" }}>
                     {selectedLead.primer_apertura_at
-                      ? fmtResponseTime(selectedLead.created_at, selectedLead.primer_apertura_at)
-                      : "Pendiente"}
+                      ? fmtResponseTime(
+                          selectedLead.conversation_id && lastMessages[selectedLead.conversation_id] ? lastMessages[selectedLead.conversation_id] : selectedLead.created_at,
+                          selectedLead.primer_apertura_at
+                        )
+                      : "🔴 Pendiente"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Estado</span>
+                  <span className="font-semibold" style={{ color: selectedLead.primer_apertura_at ? "#22c55e" : "#ef4444" }}>
+                    {selectedLead.estado_cierre ? "⬛ Cerrado" : selectedLead.primer_apertura_at ? "🟢 Contactado" : "🔴 Pendiente"}
                   </span>
                 </div>
               </div>

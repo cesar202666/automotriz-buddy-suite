@@ -377,49 +377,66 @@ Deno.serve(async (req) => {
       calificacion = 'tibio'
     }
 
+    // Helper: check if name was already captured in previous messages
+    const alreadyEscalated = outboundMessages.some(m => m.content.includes('te contactará'))
+
+    // Helper: try to find previously captured name from history
+    const findCapturedName = (): string => {
+      const userMsgs = history.filter(m => m.role === 'user').map(m => m.content)
+      for (const msg of userMsgs) {
+        const trimmed = msg.trim()
+        if (/^[a-záéíóúñA-ZÁÉÍÓÚÑ]+\s+[a-záéíóúñA-ZÁÉÍÓÚÑ]+/i.test(trimmed) && trimmed.split(/\s+/).length >= 2 && trimmed.length < 60) {
+          return trimmed
+        }
+      }
+      return ''
+    }
+
+    let capturedClientName = ''
+    let capturedClientPhone = ''
+
     if (isWhatsApp) {
       if (isFirstContact) {
-        // First message: greet and ask for full name
         respuesta = `¡Hola! 😊 Bienvenido/a a Egaña Automotriz. Para atenderte de la mejor forma, ¿podrías indicarme tu nombre completo y apellido por favor?`
-      } else if (looksLikeName && !outboundMessages.some(m => m.content.includes('te contactará'))) {
-        // Client provided name — extract and create client
+      } else if (looksLikeName && !alreadyEscalated) {
         const parts = mensajeCliente.trim().split(/\s+/)
+        capturedClientName = mensajeCliente.trim()
         const clienteNombre = parts[0] || nombre
-        const clienteApellido = parts.slice(1).join(' ') || apellido
 
-        // Create client record
-        await supabase.from('contacts').update({ name: `${clienteNombre} ${clienteApellido}`.trim() }).eq('id', contactId)
+        // Update contact name
+        await supabase.from('contacts').update({ name: capturedClientName }).eq('id', contactId)
 
         respuesta = `¡Perfecto ${clienteNombre}! 🙌 Ya registré tus datos. Nuestro ejecutivo${vendedorAsignado ? ` ${vendedorAsignado}` : ''} te contactará de inmediato. ¡Cualquier consulta no dudes en escribirnos!`
         shouldEscalate = true
         clienteCreado = true
 
-        // Score lead
         score = 20
         if (allUserMessages.includes('presupuesto') || allUserMessages.includes('precio') || /\$\d|millones|mil\s/i.test(allUserMessages)) score += 30
         if (allUserMessages.includes('pronto') || allUserMessages.includes('urgente')) score += 25
         if (telefono) score += 10
         score = Math.min(100, score)
       } else {
-        // Default: still waiting for name or already escalated
         respuesta = `Para poder derivarte con un ejecutivo, necesito tu nombre completo y apellido 😊`
       }
     } else if (isInstagramOrMessenger) {
       if (isFirstContact) {
         respuesta = `¡Hola! 😊 Gracias por escribirnos a Egaña Automotriz. Para contactarte, ¿podrías indicarme tu nombre y número de teléfono?`
-      } else if (looksLikePhone && !outboundMessages.some(m => m.content.includes('te contactará'))) {
-        // Client provided phone
+      } else if (looksLikePhone && !alreadyEscalated) {
+        // Client provided phone — also find name from earlier messages
         const phoneToSave = extractedPhone.startsWith('+') ? extractedPhone : `+56${extractedPhone}`
-        await supabase.from('contacts').update({ phone: phoneToSave, name: nombre || 'Cliente IG' }).eq('id', contactId)
+        capturedClientPhone = phoneToSave
+        capturedClientName = findCapturedName() || nombre || 'Cliente IG'
+
+        await supabase.from('contacts').update({ phone: phoneToSave, name: capturedClientName }).eq('id', contactId)
 
         const waLink = 'https://wa.me/message/QCXBGVU5I7MHM1'
-        respuesta = `¡Gracias ${nombre}! 🙌 Ya registré tus datos. Nuestro ejecutivo${vendedorAsignado ? ` ${vendedorAsignado}` : ''} te contactará de inmediato. También puedes escribirnos por WhatsApp: ${waLink}`
+        respuesta = `¡Gracias ${capturedClientName.split(/\s+/)[0]}! 🙌 Ya registré tus datos. Nuestro ejecutivo${vendedorAsignado ? ` ${vendedorAsignado}` : ''} te contactará de inmediato. También puedes escribirnos por WhatsApp: ${waLink}`
         shouldEscalate = true
         clienteCreado = true
       } else if (looksLikeName && !looksLikePhone) {
+        capturedClientName = mensajeCliente.trim()
         respuesta = `¡Gracias ${mensajeCliente.split(/\s+/)[0]}! ¿Podrías también darme tu número de teléfono para que un ejecutivo te contacte? 📱`
-        // Update name
-        await supabase.from('contacts').update({ name: mensajeCliente.trim() }).eq('id', contactId)
+        await supabase.from('contacts').update({ name: capturedClientName }).eq('id', contactId)
       } else {
         respuesta = `Para derivarte con un ejecutivo, necesito tu nombre y número de teléfono 😊`
       }
@@ -446,9 +463,13 @@ Deno.serve(async (req) => {
     let leadId: string | null = null
 
     if (shouldEscalate) {
+      // Use the captured name (from conversation) or fallback
+      const leadNombre = capturedClientName || nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente'
+      const leadTelefono = capturedClientPhone || telefono || extractedPhone
+
       const leadData = {
-        nombre: nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente',
-        telefono: telefono || extractedPhone,
+        nombre: leadNombre,
+        telefono: leadTelefono,
         canal: isWhatsApp ? 'whatsapp' : canal,
         etapa: 'contactado',
         score: isWhatsApp ? score : 0,
