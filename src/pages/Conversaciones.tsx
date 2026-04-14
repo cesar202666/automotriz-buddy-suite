@@ -874,21 +874,25 @@ function TabLeads() {
           <table className="w-full text-sm">
             <thead style={{ background: "hsl(var(--muted)/0.5)" }}>
               <tr>
-                {["Nombre", "Canal", "Score", "Etapa", "Vendedor", "Presupuesto", "Urgencia", "Fecha", ""].map(h => (
+                {["Nombre", "Canal", "Calificación", "Estado", "Etapa", "Vendedor", "Fecha", ""].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.slice(0, 20).map(lead => (
+              {filteredLeads.slice(0, 20).map(lead => {
+                const calif = CALIFICACION_BADGE[lead.calificacion] || CALIFICACION_BADGE.frio;
+                const statusColor = lead.estado_cierre ? "#6b7280" : lead.primer_apertura_at ? "#22c55e" : "#ef4444";
+                const statusLabel = lead.estado_cierre ? "Cerrado" : lead.primer_apertura_at ? "Contactado" : "Pendiente";
+                return (
                 <tr key={lead.id} className="border-t hover:bg-muted/30 cursor-pointer" style={{ borderColor: "hsl(var(--border))" }} onClick={() => openLead(lead)}>
                   <td className="px-4 py-3 font-medium">{lead.nombre}</td>
                   <td className="px-4 py-3"><ChannelBadge channel={lead.canal} /></td>
-                  <td className="px-4 py-3"><ScoreBadge score={lead.score} /></td>
+                  <td className="px-4 py-3"><span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: calif.bg, color: calif.color }}>{calif.label}</span></td>
+                  <td className="px-4 py-3"><span className="inline-flex items-center gap-1 text-xs font-semibold"><span className="w-2 h-2 rounded-full" style={{ background: statusColor }} />{statusLabel}</span></td>
                   <td className="px-4 py-3"><span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: ETAPA_COLORS[lead.etapa] + "20", color: ETAPA_COLORS[lead.etapa] }}>{ETAPA_LABELS[lead.etapa] || lead.etapa}</span></td>
                   <td className="px-4 py-3 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>{lead.vendedor_asignado || "-"}</td>
-                  <td className="px-4 py-3 text-sm">{lead.presupuesto || "-"}</td>
-                  <td className="px-4 py-3"><UrgenciaDot urgencia={lead.urgencia} /></td>
+                  <td className="px-4 py-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>{new Date(lead.created_at).toLocaleDateString("es-CL")}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>{new Date(lead.created_at).toLocaleDateString("es-CL")}</td>
                   <td className="px-4 py-3">
                     <button onClick={async (e) => { e.stopPropagation(); if (confirm("¿Eliminar lead?")) { await supabase.from("leads").delete().eq("id", lead.id); setLeads(prev => prev.filter(l => l.id !== lead.id)); } }} className="text-xs px-2 py-1 rounded hover:bg-red-50" style={{ color: "#ef4444" }}>
