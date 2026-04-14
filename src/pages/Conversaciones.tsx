@@ -728,13 +728,8 @@ function TabLeads() {
           <option value="facebook">Facebook</option>
           <option value="presencial">Presencial</option>
         </select>
-        <select value={filterUrgencia} onChange={e => setFilterUrgencia(e.target.value)} className="text-sm border rounded-lg px-3 py-2 bg-background" style={{ borderColor: "hsl(var(--border))" }}>
-          <option value="all">Toda urgencia</option>
-          <option value="alta">Alta</option>
-          <option value="media">Media</option>
-          <option value="baja">Baja</option>
-        </select>
         <div className="flex border rounded-lg overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
+          <button onClick={() => setViewMode("categorias")} className="px-3 py-2 text-xs font-medium transition-colors" style={{ background: viewMode === "categorias" ? "hsl(var(--primary))" : "hsl(var(--background))", color: viewMode === "categorias" ? "white" : "hsl(var(--foreground))" }}>Panel</button>
           <button onClick={() => setViewMode("kanban")} className="px-3 py-2 text-xs font-medium transition-colors" style={{ background: viewMode === "kanban" ? "hsl(var(--primary))" : "hsl(var(--background))", color: viewMode === "kanban" ? "white" : "hsl(var(--foreground))" }}>Kanban</button>
           <button onClick={() => setViewMode("lista")} className="px-3 py-2 text-xs font-medium transition-colors" style={{ background: viewMode === "lista" ? "hsl(var(--primary))" : "hsl(var(--background))", color: viewMode === "lista" ? "white" : "hsl(var(--foreground))" }}>Lista</button>
         </div>
