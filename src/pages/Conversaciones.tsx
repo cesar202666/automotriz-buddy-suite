@@ -69,6 +69,10 @@ interface Lead {
   motivo_perdida: string;
   notas: string;
   primer_apertura_at: string | null;
+  calificacion: string;
+  observaciones_vendedor: string;
+  estado_cierre: string;
+  detalle_cierre: string;
   created_at: string;
   updated_at: string;
 }
@@ -652,7 +656,7 @@ function TabLeads() {
 
   const openLead = async (lead: Lead) => {
     setSelectedLead(lead);
-    setEditLead({ nombre: lead.nombre, telefono: lead.telefono, email: lead.email, interes: lead.interes, presupuesto: lead.presupuesto, urgencia: lead.urgencia, etapa: lead.etapa, vendedor_asignado: lead.vendedor_asignado, score: lead.score, notas: lead.notas });
+    setEditLead({ nombre: lead.nombre, telefono: lead.telefono, email: lead.email, interes: lead.interes, presupuesto: lead.presupuesto, urgencia: lead.urgencia, etapa: lead.etapa, vendedor_asignado: lead.vendedor_asignado, score: lead.score, notas: lead.notas, calificacion: lead.calificacion || 'frio', observaciones_vendedor: lead.observaciones_vendedor || '', estado_cierre: lead.estado_cierre || '', detalle_cierre: lead.detalle_cierre || '' });
     // Track first vendor open for response time metric
     if (!lead.primer_apertura_at) {
       const now = new Date().toISOString();
