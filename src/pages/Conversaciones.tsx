@@ -802,7 +802,73 @@ function TabLeads() {
         </div>
       )}
 
-      {/* Lista */}
+      {/* Categorias panel */}
+      {viewMode === "categorias" && (() => {
+        // Categorize leads
+        const closedStatuses = ["venta_realizada", "no_contesta", "sin_interes", "compro_otro_lugar", "no_cumple_credito", "precio_alto"];
+        const pendienteVendedor = filteredLeads.filter(l => !l.estado_cierre && !l.primer_apertura_at);
+        const contactados = filteredLeads.filter(l => !l.estado_cierre && l.primer_apertura_at);
+        const cerrados = filteredLeads.filter(l => l.estado_cierre && closedStatuses.includes(l.estado_cierre));
+
+        const categories = [
+          { ...LEAD_CATEGORIES[0], leads: pendienteVendedor },
+          { ...LEAD_CATEGORIES[1], leads: contactados },
+          { ...LEAD_CATEGORIES[2], leads: cerrados },
+        ];
+
+        return (
+          <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "500px" }}>
+            {categories.map(cat => (
+              <div key={cat.id} className="flex-shrink-0 w-80 flex flex-col rounded-xl overflow-hidden" style={{ background: "hsl(220 25% 10%)" }}>
+                <div className="px-3 py-2.5 flex items-center justify-between" style={{ borderBottom: `2px solid ${cat.color}30` }}>
+                  <div className="flex items-center gap-2">
+                    <span>{cat.icon}</span>
+                    <span className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.9)" }}>{cat.label}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: cat.color + "33", color: cat.color }}>{cat.leads.length}</span>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {cat.leads.map(lead => {
+                    const lastClientMsg = lead.conversation_id ? lastMessages[lead.conversation_id] : null;
+                    const calif = CALIFICACION_BADGE[lead.calificacion] || CALIFICACION_BADGE.frio;
+                    return (
+                      <div key={lead.id} onClick={() => openLead(lead)} className="rounded-xl p-3 cursor-pointer hover:scale-[1.01] transition-all"
+                        style={{ background: cat.id === "pendiente_vendedor" ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.07)", border: cat.id === "pendiente_vendedor" ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(255,255,255,0.08)" }}>
+                        <div className="flex items-start justify-between mb-1.5">
+                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                          <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ background: cat.id === "pendiente_vendedor" ? "#ef4444" : cat.id === "contactados" ? "#22c55e" : "#6b7280" }} />
+                        </div>
+                        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                          <ChannelBadge channel={lead.canal} />
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: calif.bg, color: calif.color }}>{calif.label}</span>
+                        </div>
+                        {lastClientMsg && (
+                          <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.4)" }}>
+                            ⏱ Último msg cliente: {fmtTime(lastClientMsg)}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{fmtTime(lead.created_at)}</span>
+                          {lead.vendedor_asignado && (
+                            <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>👤 {lead.vendedor_asignado}</span>
+                          )}
+                        </div>
+                        {cat.id === "cerrados" && lead.estado_cierre && (
+                          <div className="mt-1.5 text-xs px-2 py-1 rounded" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)" }}>
+                            {lead.estado_cierre === "venta_realizada" ? "✅ Venta realizada" : lead.estado_cierre === "no_contesta" ? "📵 No contesta" : lead.estado_cierre === "sin_interes" ? "❌ Sin interés" : lead.estado_cierre === "compro_otro_lugar" ? "🏪 Compró en otro lugar" : lead.estado_cierre === "no_cumple_credito" ? "🚫 No cumple crédito" : "💰 Precio alto"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {cat.leads.length === 0 && <div className="text-center py-8 text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Sin leads</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {viewMode === "lista" && (
         <div className="border rounded-xl overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
           <table className="w-full text-sm">
