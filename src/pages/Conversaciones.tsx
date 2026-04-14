@@ -224,6 +224,10 @@ function UrgenciaDot({ urgencia }: { urgencia: string }) {
 
 // ── PESTAÑA MENSAJES ──────────────────────────────────────────────────────────
 function TabMensajes() {
+  const { usuarioActual } = useApp();
+  const isVendedor = usuarioActual?.rol === "vendedor";
+  const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
