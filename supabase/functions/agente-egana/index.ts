@@ -428,6 +428,20 @@ Deno.serve(async (req) => {
       shouldEscalate = true
     }
 
+    // ── Reclassify existing lead on every message ───────────────────────────────
+    if (conversationId && !shouldEscalate) {
+      const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id, calificacion')
+        .eq('conversation_id', conversationId)
+        .maybeSingle()
+
+      if (existingLead && existingLead.calificacion !== calificacion) {
+        await supabase.from('leads').update({ calificacion }).eq('id', existingLead.id)
+        console.log(`[RECLASIFICACION] Lead ${existingLead.id}: ${existingLead.calificacion} → ${calificacion}`)
+      }
+    }
+
     // ── Upsert lead (only when escalating) ─────────────────────────────────────
     let leadId: string | null = null
 
