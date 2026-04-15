@@ -388,9 +388,11 @@ export default function Administracion() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold">Usuarios del Sistema</h2>
-            <button onClick={openCreateUser} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
-              <Plus size={15} /> Nuevo Usuario
-            </button>
+            {usuarioActual?.rol === "master" && (
+              <button onClick={openCreateUser} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
+                <Plus size={15} /> Nuevo Usuario
+              </button>
+            )}
           </div>
           <div className="bg-card rounded-lg border overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
             <table className="w-full text-sm">
@@ -417,10 +419,12 @@ export default function Administracion() {
                       {u.rol === "master" ? "Todo" : u.rol === "administracion" ? "Todo excepto Validar" : "Ventas/Clientes/Vehículos (sin Validar, sin Admin/Gerencia)"}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button onClick={() => openEditUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
-                        <button onClick={() => deleteUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
-                      </div>
+                      {usuarioActual?.rol === "master" && (
+                        <div className="flex gap-2">
+                          <button onClick={() => openEditUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
+                          <button onClick={() => deleteUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -22,8 +22,8 @@ const navItems = [
 ];
 
 // Roles que pueden ver admin/gerencia
-const ADMIN_ROUTES = ["/administracion", "/gerencia"];
 const VENDEDOR_HIDDEN = ["/administracion", "/gerencia"];
+const ADMIN_HIDDEN = ["/gerencia"];
 
 type BackendLoginRow = {
   id: string;
@@ -196,6 +196,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const rolUsuario = usuarioActual.rol;
   const visibleNavItems = navItems.filter(item => {
     if (rolUsuario === "vendedor" && VENDEDOR_HIDDEN.includes(item.path)) return false;
+    if (rolUsuario === "administracion" && ADMIN_HIDDEN.includes(item.path)) return false;
     return true;
   });
 
