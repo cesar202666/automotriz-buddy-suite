@@ -40,7 +40,7 @@ const INVALID_NAME_WORDS = new Set([
   'quiero', 'comprar', 'auto', 'autos', 'vehiculo', 'vehiculos', 'necesito',
   'consulta', 'consultar', 'informacion', 'precio', 'credito', 'financiamiento',
   'ejecutivo', 'vendedor', 'contacto', 'telefono', 'numero', 'whatsapp',
-  'instagram', 'facebook', 'messenger', 'derivarte', 'atencion', 'atenderte',
+  'instagram', 'facebook', 'messenger', 'derivarte', 'atencion', 'atenderte', 'y',
 ])
 
 function normalizeToken(token: string): string {
@@ -64,7 +64,7 @@ function normalizePhoneNumber(phone: string): string {
 
 function sanitizeNameCandidate(text: string): string {
   const cleaned = text
-    .replace(/\b(hola|buenas|buenos|dias|días|tardes|noches|soy|me|llamo|mi|nombre|es|telefono|teléfono|fono|celular|numero|número|contacto|por|favor|gracias)\b/giu, ' ')
+    .replace(/\b(hola|buenas|buenos|dias|días|tardes|noches|soy|me|llamo|mi|nombre|es|telefono|teléfono|fono|celular|numero|número|contacto|por|favor|gracias|y)\b/giu, ' ')
     .replace(/[^\p{L}\s]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
