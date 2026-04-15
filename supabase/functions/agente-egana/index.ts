@@ -414,11 +414,20 @@ Deno.serve(async (req) => {
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         } else {
-          // Cooldown expired: reset escalation, allow new interaction
-          await supabase
+          // Cooldown expired: create a NEW conversation so agent starts fresh
+          const { data: newConv } = await supabase
             .from("conversations")
-            .update({ escalated: false, escalated_at: null })
-            .eq("id", conversationId);
+            .insert({
+              contact_id: contactId,
+              channel: canal,
+              status: "active",
+              last_message: mensajeCliente,
+              last_message_at: new Date().toISOString(),
+              unread_count: 0,
+            })
+            .select("id")
+            .single();
+          if (newConv?.id) conversationId = newConv.id;
         }
       }
     }
