@@ -294,6 +294,7 @@ function mergeUsuariosWithVendedores(baseUsuarios: Usuario[], vendedores: Vended
         telefono: existing.telefono || restoredUser.telefono,
         email: existing.email || restoredUser.email,
         clave: existing.clave || restoredUser.clave,
+        rol: restoredUser.rol !== "vendedor" ? restoredUser.rol : existing.rol,
       };
 
       merged[matchedIndex] = mergedUser;
