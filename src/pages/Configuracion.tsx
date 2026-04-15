@@ -263,11 +263,27 @@ export default function Configuracion() {
       if (map.HORARIOS_ACTIVOS !== undefined) setHorariosActivos(map.HORARIOS_ACTIVOS === "true");
       if (map.HORARIOS_CONFIG) { try { setHorariosConfig(JSON.parse(map.HORARIOS_CONFIG)); } catch {} }
       if (map.MENSAJE_FUERA_HORARIO) setMsgFueraHorario(map.MENSAJE_FUERA_HORARIO);
+      if (map.ROTACION_VENDEDORES) {
+        try { setRotacionVendedores(JSON.parse(map.ROTACION_VENDEDORES)); } catch {}
+      }
     })();
 
     (async () => {
       const { data } = await supabase.from("vendedores").select("id, nombre, sucursal").eq("activo", true);
-      if (data) setVendedores(data as Vendedor[]);
+      if (data) {
+        setVendedores(data as Vendedor[]);
+        // Initialize rotation list if empty — will be populated after config loads
+        setRotacionVendedores(prev => {
+          if (prev.length > 0) return prev;
+          return (data as Vendedor[]).map(v => ({
+            vendedor_id: v.id,
+            nombre: v.nombre,
+            sucursal: v.sucursal || "",
+            activo: true,
+            consecutivos: 1,
+          }));
+        });
+      }
     })();
   }, [authenticated]);
 
