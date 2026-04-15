@@ -146,9 +146,47 @@ const LEAD_CATEGORIES: { id: LeadCategory; label: string; color: string; icon: s
   { id: "cerrados", label: "Cerrados", color: "#6b7280", icon: "⬛" },
 ];
 
+function normalizeLeadName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return name.trim();
+
+  const normalizeToken = (token: string) => token.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const firstToken = normalizeToken(parts[0]);
+  let nextIndex = 1;
+
+  while (nextIndex < parts.length && normalizeToken(parts[nextIndex]) === firstToken) {
+    nextIndex += 1;
+  }
+
+  return [parts[0], ...parts.slice(nextIndex)].join(" ");
+}
+
+function normalizeLeadRecord<T extends { nombre: string }>(lead: T): T {
+  return { ...lead, nombre: normalizeLeadName(lead.nombre || "") };
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function getChannelConfig(channel: string) {
   return CHANNEL_CONFIG[channel as keyof typeof CHANNEL_CONFIG] || CHANNEL_CONFIG.whatsapp;
+}
+
+function getMetricsChannelMeta(channel: string) {
+  const normalizedChannel = channel === "manychat" ? "whatsapp" : channel === "messenger" ? "facebook" : channel || "sin_origen";
+
+  if (normalizedChannel === "sin_origen") {
+    return {
+      key: normalizedChannel,
+      label: "Sin origen",
+      color: "hsl(var(--muted-foreground))",
+    };
+  }
+
+  const config = getChannelConfig(normalizedChannel);
+  return {
+    key: normalizedChannel,
+    label: config.label,
+    color: config.color,
+  };
 }
 
 function ChannelIcon({ channel, size = 14 }: { channel: string; size?: number }) {
@@ -608,9 +646,10 @@ function TabLeads() {
       supabase.from("vendedores").select("*").eq("activo", true)
     ]);
     if (leadsRes.data) {
-      setLeads(leadsRes.data as Lead[]);
+      const normalizedLeads = (leadsRes.data as Lead[]).map(normalizeLeadRecord);
+      setLeads(normalizedLeads);
       // Load last inbound message time for each lead's conversation
-      const convIds = (leadsRes.data as Lead[]).filter(l => l.conversation_id).map(l => l.conversation_id!);
+      const convIds = normalizedLeads.filter(l => l.conversation_id).map(l => l.conversation_id!);
       if (convIds.length > 0) {
         const { data: msgs } = await supabase
           .from("messages")
@@ -637,7 +676,7 @@ function TabLeads() {
     const ch = supabase.channel("leads-rt").on("postgres_changes", { event: "*", schema: "public", table: "leads" }, (payload) => {
       loadData();
       if (payload.eventType === "INSERT") {
-        const newLead = payload.new as Lead;
+        const newLead = normalizeLeadRecord(payload.new as Lead);
         toast(`Nuevo lead: ${newLead.nombre} vía ${newLead.canal || "web"}`, {
           description: newLead.interes ? `Interés: ${newLead.interes}` : "Lead recién ingresado",
           duration: 10000,
@@ -685,9 +724,13 @@ function TabLeads() {
   const handleSaveLead = async () => {
     if (!selectedLead) return;
     setSavingLead(true);
-    await supabase.from("leads").update(editLead).eq("id", selectedLead.id);
-    setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, ...editLead } : l));
-    setSelectedLead(prev => prev ? { ...prev, ...editLead } : null);
+    const payload: Partial<Lead> = {
+      ...editLead,
+      ...(editLead.nombre ? { nombre: normalizeLeadName(editLead.nombre) } : {}),
+    };
+    await supabase.from("leads").update(payload).eq("id", selectedLead.id);
+    setLeads(prev => prev.map(l => l.id === selectedLead.id ? normalizeLeadRecord({ ...l, ...payload }) : l));
+    setSelectedLead(prev => prev ? normalizeLeadRecord({ ...prev, ...payload }) : null);
     setSavingLead(false);
   };
 
@@ -700,18 +743,20 @@ function TabLeads() {
 
   const handleCreateLead = async () => {
     if (!newLead.nombre.trim()) return;
-    const { data } = await supabase.from("leads").insert(newLead).select().single();
-    if (data) { setLeads(prev => [data as Lead, ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" }); }
+    const payload = { ...newLead, nombre: normalizeLeadName(newLead.nombre) };
+    const { data } = await supabase.from("leads").insert(payload).select().single();
+    if (data) { setLeads(prev => [normalizeLeadRecord(data as Lead), ...prev]); setShowNewLead(false); setNewLead({ nombre: "", telefono: "", email: "", canal: "whatsapp", interes: "", presupuesto: "", urgencia: "media", vendedor_asignado: "", notas: "", calificacion: "frio" }); }
   };
 
   const openLead = async (lead: Lead) => {
-    setSelectedLead(lead);
-    setEditLead({ nombre: lead.nombre, telefono: lead.telefono, email: lead.email, interes: lead.interes, presupuesto: lead.presupuesto, urgencia: lead.urgencia, etapa: lead.etapa, vendedor_asignado: lead.vendedor_asignado, score: lead.score, notas: lead.notas, calificacion: lead.calificacion || 'frio', observaciones_vendedor: lead.observaciones_vendedor || '', estado_cierre: lead.estado_cierre || '', detalle_cierre: lead.detalle_cierre || '' });
+    const normalizedLead = normalizeLeadRecord(lead);
+    setSelectedLead(normalizedLead);
+    setEditLead({ nombre: normalizedLead.nombre, telefono: normalizedLead.telefono, email: normalizedLead.email, interes: normalizedLead.interes, presupuesto: normalizedLead.presupuesto, urgencia: normalizedLead.urgencia, etapa: normalizedLead.etapa, vendedor_asignado: normalizedLead.vendedor_asignado, score: normalizedLead.score, notas: normalizedLead.notas, calificacion: normalizedLead.calificacion || 'frio', observaciones_vendedor: normalizedLead.observaciones_vendedor || '', estado_cierre: normalizedLead.estado_cierre || '', detalle_cierre: normalizedLead.detalle_cierre || '' });
     // Track first vendor open for response time metric
-    if (!lead.primer_apertura_at) {
+    if (!normalizedLead.primer_apertura_at) {
       const now = new Date().toISOString();
-      await supabase.from("leads").update({ primer_apertura_at: now }).eq("id", lead.id);
-      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, primer_apertura_at: now } : l));
+      await supabase.from("leads").update({ primer_apertura_at: now }).eq("id", normalizedLead.id);
+      setLeads(prev => prev.map(l => l.id === normalizedLead.id ? { ...l, primer_apertura_at: now } : l));
     }
   };
 
@@ -777,7 +822,7 @@ function TabLeads() {
                       style={{ background: !lead.primer_apertura_at && lead.etapa === "contactado" ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.07)", border: !lead.primer_apertura_at && lead.etapa === "contactado" ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(255,255,255,0.08)" }}>
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{normalizeLeadName(lead.nombre)}</span>
                           {!lead.primer_apertura_at && lead.etapa === "contactado" && (
                             <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-bold animate-pulse" style={{ background: "#ef4444", color: "white", fontSize: 9 }}>NUEVO</span>
                           )}
@@ -843,7 +888,7 @@ function TabLeads() {
                       <div key={lead.id} onClick={() => openLead(lead)} className="rounded-xl p-3 cursor-pointer hover:scale-[1.01] transition-all"
                         style={{ background: cat.id === "pendiente_vendedor" ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.07)", border: cat.id === "pendiente_vendedor" ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(255,255,255,0.08)" }}>
                         <div className="flex items-start justify-between mb-1.5">
-                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{lead.nombre}</span>
+                          <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{normalizeLeadName(lead.nombre)}</span>
                           <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ background: cat.id === "pendiente_vendedor" ? "#ef4444" : cat.id === "contactados" ? "#22c55e" : "#6b7280" }} />
                         </div>
                         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -894,7 +939,7 @@ function TabLeads() {
                 const statusLabel = lead.estado_cierre ? "Cerrado" : lead.primer_apertura_at ? "Contactado" : "Pendiente";
                 return (
                 <tr key={lead.id} className="border-t hover:bg-muted/30 cursor-pointer" style={{ borderColor: "hsl(var(--border))" }} onClick={() => openLead(lead)}>
-                  <td className="px-4 py-3 font-medium">{lead.nombre}</td>
+                  <td className="px-4 py-3 font-medium">{normalizeLeadName(lead.nombre)}</td>
                   <td className="px-4 py-3"><ChannelBadge channel={lead.canal} /></td>
                   <td className="px-4 py-3"><span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: calif.bg, color: calif.color }}>{calif.label}</span></td>
                   <td className="px-4 py-3"><span className="inline-flex items-center gap-1 text-xs font-semibold"><span className="w-2 h-2 rounded-full" style={{ background: statusColor }} />{statusLabel}</span></td>
@@ -928,7 +973,7 @@ function TabLeads() {
           <div className="w-96 h-full overflow-y-auto border-l flex flex-col" style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }} onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b flex items-center justify-between sticky top-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
               <div>
-                <h3 className="font-bold text-base">{selectedLead.nombre}</h3>
+                <h3 className="font-bold text-base">{normalizeLeadName(selectedLead.nombre)}</h3>
                 <div className="flex items-center gap-2 mt-1"><ChannelBadge channel={selectedLead.canal} /><ScoreBadge score={selectedLead.score} /></div>
               </div>
               <button onClick={() => setSelectedLead(null)}><X size={18} /></button>
@@ -1249,74 +1294,72 @@ function TabContactos() {
 
 // ── PESTAÑA MÉTRICAS ──────────────────────────────────────────────────────────
 function TabMetricas() {
+  const { usuarioActual } = useApp();
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [messages, setMessages] = useState<{ direction: string; created_at: string; channel: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState("este_mes");
 
+  const isVendedor = usuarioActual?.rol === "vendedor";
+  const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+
   useEffect(() => {
-    setLoading(true);
-    const now = new Date();
-    let desde = new Date();
-    if (periodo === "este_mes") desde = new Date(now.getFullYear(), now.getMonth(), 1);
-    else if (periodo === "mes_anterior") { desde = new Date(now.getFullYear(), now.getMonth() - 1, 1); }
-    else if (periodo === "90_dias") { desde = new Date(now.getTime() - 90 * 86400000); }
+    const loadMetricas = async () => {
+      setLoading(true);
+      const now = new Date();
+      let desde = new Date();
+      if (periodo === "este_mes") desde = new Date(now.getFullYear(), now.getMonth(), 1);
+      else if (periodo === "mes_anterior") desde = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      else if (periodo === "90_dias") desde = new Date(now.getTime() - 90 * 86400000);
 
-    Promise.all([
-      supabase.from("leads").select("*").gte("created_at", desde.toISOString()),
-      supabase.from("messages").select("direction, created_at, channel").gte("created_at", desde.toISOString()).limit(5000)
-    ]).then(([leadsRes, msgsRes]) => {
-      if (leadsRes.data) setLeads(leadsRes.data as Lead[]);
-      if (msgsRes.data) setMessages(msgsRes.data as { direction: string; created_at: string; channel: string }[]);
+      let query = supabase.from("leads").select("*").gte("created_at", desde.toISOString()).order("created_at", { ascending: false });
+      if (isVendedor && vendedorName) query = query.eq("vendedor_asignado", vendedorName);
+
+      const { data } = await query;
+      setLeads(((data || []) as Lead[]).map(normalizeLeadRecord));
       setLoading(false);
-    });
-  }, [periodo]);
+    };
 
-  const totalMsgs = messages.filter(m => m.direction === "inbound").length;
-  const totalLeads = leads.length;
-  const ganados = leads.filter(l => l.etapa === "ganado").length;
-  const tasa = totalLeads > 0 ? ((ganados / totalLeads) * 100).toFixed(1) : "0";
-  const scoreAvg = totalLeads > 0 ? Math.round(leads.reduce((a, l) => a + l.score, 0) / totalLeads) : 0;
+    loadMetricas();
+  }, [periodo, isVendedor, vendedorName]);
 
-  // Leads por canal
-  const leadsPorCanal = Object.entries(
-    leads.reduce((acc, l) => { acc[l.canal] = (acc[l.canal] || 0) + 1; return acc; }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value, color: getChannelConfig(name).color }));
+  const calificados = leads.filter((lead) => ["frio", "tibio", "caliente"].includes((lead.calificacion || "").toLowerCase()));
 
-  // Embudo
-  const embudo = [
-    { name: "Mensajes", value: totalMsgs },
-    { name: "Leads", value: totalLeads },
-    { name: "Calificados", value: leads.filter(l => ["calificado", "propuesta", "negociacion", "ganado"].includes(l.etapa)).length },
-    { name: "Propuesta", value: leads.filter(l => ["propuesta", "negociacion", "ganado"].includes(l.etapa)).length },
-    { name: "Ganados", value: ganados },
+  const tipoCalificacionData = [
+    { name: "Frío", value: calificados.filter((lead) => lead.calificacion === "frio").length, fill: "hsl(210 90% 56%)" },
+    { name: "Tibio", value: calificados.filter((lead) => lead.calificacion === "tibio").length, fill: "hsl(42 96% 56%)" },
+    { name: "Caliente", value: calificados.filter((lead) => lead.calificacion === "caliente").length, fill: "hsl(2 84% 60%)" },
   ];
 
-  // Leads por día (últimos 14 días)
-  const dayMap: Record<string, number> = {};
-  const today = new Date();
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(today.getTime() - i * 86400000);
-    const key = d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
-    dayMap[key] = 0;
-  }
-  leads.forEach(l => {
-    const key = new Date(l.created_at).toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
-    if (key in dayMap) dayMap[key]++;
-  });
-  const leadsPorDia = Object.entries(dayMap).map(([fecha, cantidad]) => ({ fecha, cantidad }));
+  const origenData = Object.values(
+    calificados.reduce((acc, lead) => {
+      const meta = getMetricsChannelMeta(lead.canal);
+      if (!acc[meta.key]) acc[meta.key] = { name: meta.label, value: 0, fill: meta.color };
+      acc[meta.key].value += 1;
+      return acc;
+    }, {} as Record<string, { name: string; value: number; fill: string }>)
+  ).sort((a, b) => b.value - a.value);
 
-  // Distribución scores
-  const scoreGroups = [{ label: "0-20", min: 0, max: 20 }, { label: "21-40", min: 21, max: 40 }, { label: "41-60", min: 41, max: 60 }, { label: "61-80", min: 61, max: 80 }, { label: "81-100", min: 81, max: 100 }];
-  const scoreData = scoreGroups.map(g => ({ label: g.label, count: leads.filter(l => l.score >= g.min && l.score <= g.max).length, color: g.min >= 81 ? "#16a34a" : g.min >= 61 ? "#22c55e" : g.min >= 41 ? "#eab308" : g.min >= 21 ? "#f97316" : "#ef4444" }));
+  const vendedorData = Object.values(
+    leads.reduce((acc, lead) => {
+      const vendedor = lead.vendedor_asignado?.trim() || "Sin asignar";
+      if (!acc[vendedor]) acc[vendedor] = { vendedor, asignados: 0, respondidos: 0 };
+      acc[vendedor].asignados += 1;
+      if (lead.primer_apertura_at) acc[vendedor].respondidos += 1;
+      return acc;
+    }, {} as Record<string, { vendedor: string; asignados: number; respondidos: number }>)
+  ).sort((a, b) => b.asignados - a.asignados);
+
+  const leadsRecientes = calificados.slice(0, 8);
+  const totalRespondidos = vendedorData.reduce((acc, vendedor) => acc + vendedor.respondidos, 0);
+  const origenPrincipal = origenData[0]?.name || "Sin origen";
 
   const KPIS = [
-    { label: "Mensajes recibidos", value: totalMsgs, icon: MessageSquare, color: "#3b82f6" },
-    { label: "Leads generados", value: totalLeads, icon: Target, color: "#8b5cf6" },
-    { label: "Leads ganados", value: ganados, icon: Award, color: "#22c55e" },
-    { label: "Tasa de conversión", value: `${tasa}%`, icon: TrendingUp, color: "#f59e0b" },
-    { label: "Score promedio", value: scoreAvg, icon: Zap, color: "#06b6d4" },
-    { label: "Canal más activo", value: leadsPorCanal.sort((a, b) => b.value - a.value)[0]?.name || "-", icon: BarChart3, color: "#ec4899" },
+    { label: "Clientes calificados", value: calificados.length, icon: Target, color: "hsl(var(--primary))" },
+    { label: "Fríos", value: tipoCalificacionData[0].value, icon: Users, color: "hsl(210 90% 56%)" },
+    { label: "Tibios", value: tipoCalificacionData[1].value, icon: TrendingUp, color: "hsl(42 96% 56%)" },
+    { label: "Calientes", value: tipoCalificacionData[2].value, icon: Zap, color: "hsl(2 84% 60%)" },
+    { label: "Origen principal", value: origenPrincipal, icon: BarChart3, color: "hsl(var(--warning))" },
+    { label: "Respondidos", value: totalRespondidos, icon: CheckCheck, color: "hsl(var(--success))" },
   ];
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-sm animate-pulse" style={{ color: "hsl(var(--muted-foreground))" }}>Cargando métricas...</div></div>;
@@ -1350,64 +1393,94 @@ function TabMetricas() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Embudo */}
+        {/* Origen */}
         <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-          <h3 className="text-sm font-bold mb-4">Embudo de conversión</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={embudo} layout="vertical" margin={{ left: 60 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <h3 className="text-sm font-bold mb-4">Clientes calificados por origen</h3>
+          {origenData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={origenData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                  {origenData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <div className="flex items-center justify-center h-60 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Sin clientes calificados en el período</div>}
         </div>
 
-        {/* Leads por canal */}
+        {/* Tipo de calificación */}
         <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-          <h3 className="text-sm font-bold mb-4">Leads por canal</h3>
-          {leadsPorCanal.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
+          <h3 className="text-sm font-bold mb-4">Tipo de calificación</h3>
+          {tipoCalificacionData.some((item) => item.value > 0) ? (
+            <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={leadsPorCanal} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={11}>
-                  {leadsPorCanal.map((entry, index) => <Cell key={index} fill={entry.color} />)}
+                <Pie data={tipoCalificacionData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={78} label={({ name, value }) => `${name} (${value})`} labelLine={false} fontSize={11}>
+                  {tipoCalificacionData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                 </Pie>
                 <Tooltip />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
-          ) : <div className="flex items-center justify-center h-48 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Sin datos</div>}
+          ) : <div className="flex items-center justify-center h-60 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Sin clientes calificados en el período</div>}
         </div>
+      </div>
 
-        {/* Leads por día */}
-        <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-          <h3 className="text-sm font-bold mb-4">Leads por día (últimos 14 días)</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={leadsPorDia}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 11 }} />
+      <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <h3 className="text-sm font-bold mb-4">Clientes direccionados por vendedor vs respondidos</h3>
+        {vendedorData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(280, vendedorData.length * 56)}>
+            <BarChart data={vendedorData} layout="vertical" margin={{ left: 32, right: 12 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="vendedor" width={140} tick={{ fontSize: 11 }} tickFormatter={(value) => value.length > 18 ? `${value.slice(0, 18)}…` : value} />
               <Tooltip />
-              <Line type="monotone" dataKey="cantidad" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Distribución scores */}
-        <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-          <h3 className="text-sm font-bold mb-4">Distribución de scores</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={scoreData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {scoreData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-              </Bar>
+              <Legend />
+              <Bar dataKey="asignados" name="Direccionados" fill="hsl(var(--primary))" radius={[0, 8, 8, 0]} />
+              <Bar dataKey="respondidos" name="Respondidos" fill="hsl(var(--success))" radius={[0, 8, 8, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        ) : <div className="flex items-center justify-center h-60 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vendedores con leads asignados</div>}
+      </div>
+
+      <div className="border rounded-xl overflow-hidden" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <div className="px-5 py-4 border-b" style={{ borderColor: "hsl(var(--border))" }}>
+          <h3 className="text-sm font-bold">Últimos clientes calificados</h3>
         </div>
+        {leadsRecientes.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead style={{ background: "hsl(var(--muted)/0.45)" }}>
+                <tr>
+                  {['Nombre', 'Origen', 'Calificación', 'Vendedor', 'Estado'].map((header) => (
+                    <th key={header} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {leadsRecientes.map((lead) => {
+                  const calif = CALIFICACION_BADGE[lead.calificacion] || CALIFICACION_BADGE.frio;
+                  return (
+                    <tr key={lead.id} className="border-t" style={{ borderColor: "hsl(var(--border))" }}>
+                      <td className="px-4 py-3 font-medium">{normalizeLeadName(lead.nombre)}</td>
+                      <td className="px-4 py-3"><ChannelBadge channel={getMetricsChannelMeta(lead.canal).key === 'sin_origen' ? 'whatsapp' : getMetricsChannelMeta(lead.canal).key} /></td>
+                      <td className="px-4 py-3"><span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: calif.bg, color: calif.color }}>{calif.label}</span></td>
+                      <td className="px-4 py-3" style={{ color: "hsl(var(--muted-foreground))" }}>{lead.vendedor_asignado || 'Sin asignar'}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: lead.primer_apertura_at ? "hsl(var(--success))" : "hsl(var(--destructive))" }}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: lead.primer_apertura_at ? "hsl(var(--success))" : "hsl(var(--destructive))" }} />
+                          {lead.primer_apertura_at ? 'Respondido' : 'Pendiente'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="flex items-center justify-center h-40 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>No hay clientes calificados aún</div>}
       </div>
     </div>
   );
