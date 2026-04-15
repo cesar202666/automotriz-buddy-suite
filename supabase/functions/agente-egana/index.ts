@@ -163,6 +163,13 @@ async function fetchUrlContent(url: string): Promise<string> {
   }
 }
 
+interface RotacionVendedor {
+  vendedor_id: string;
+  nombre: string;
+  activo: boolean;
+  consecutivos: number;
+}
+
 async function getVendedorAsignado(
   supabase: ReturnType<typeof createClient>,
   modo: string,
@@ -175,6 +182,74 @@ async function getVendedorAsignado(
     return asignacionPorCanal[canal] || vendedorDefault || "";
   }
 
+  // ── Check for rotation config first ──────────────────────────────────────
+  const { data: rotacionRow } = await supabase
+    .from("configuracion_sistema")
+    .select("valor")
+    .eq("clave", "ROTACION_VENDEDORES")
+    .maybeSingle();
+
+  let rotacionList: RotacionVendedor[] = [];
+  try {
+    rotacionList = JSON.parse(rotacionRow?.valor || "[]");
+  } catch {}
+
+  const activeRotacion = rotacionList.filter((v) => v.activo);
+
+  if (activeRotacion.length > 0) {
+    // Use rotation-based assignment
+    // Read current rotation index
+    const { data: idxRow } = await supabase
+      .from("configuracion_sistema")
+      .select("valor")
+      .eq("clave", "ROTACION_INDICE")
+      .maybeSingle();
+
+    let currentIdx = 0;
+    let currentCount = 0;
+    try {
+      const parsed = JSON.parse(idxRow?.valor || "{}");
+      currentIdx = parsed.idx || 0;
+      currentCount = parsed.count || 0;
+    } catch {}
+
+    // Ensure index is within bounds
+    if (currentIdx >= activeRotacion.length) {
+      currentIdx = 0;
+      currentCount = 0;
+    }
+
+    const currentVendedor = activeRotacion[currentIdx];
+    const maxConsecutivos = currentVendedor.consecutivos || 1;
+
+    // Advance the counter
+    const nextCount = currentCount + 1;
+    let nextIdx = currentIdx;
+    let nextCountSave = nextCount;
+
+    if (nextCount >= maxConsecutivos) {
+      // Move to next vendedor
+      nextIdx = (currentIdx + 1) % activeRotacion.length;
+      nextCountSave = 0;
+    }
+
+    // Save updated index
+    const newIdxVal = JSON.stringify({ idx: nextIdx, count: nextCountSave });
+    if (idxRow) {
+      await supabase
+        .from("configuracion_sistema")
+        .update({ valor: newIdxVal })
+        .eq("clave", "ROTACION_INDICE");
+    } else {
+      await supabase
+        .from("configuracion_sistema")
+        .insert({ clave: "ROTACION_INDICE", valor: newIdxVal });
+    }
+
+    return currentVendedor.nombre;
+  }
+
+  // ── Fallback: original logic ─────────────────────────────────────────────
   const { data: vendedores } = await supabase
     .from("vendedores")
     .select("nombre")
