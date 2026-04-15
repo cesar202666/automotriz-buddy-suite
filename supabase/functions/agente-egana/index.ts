@@ -892,7 +892,54 @@ Deno.serve(async (req) => {
         .eq("id", conversationId);
     }
 
-    // ── Send via Meta API if WhatsApp/Meta source ────────────────────────────
+    // ── Send agent reply to the client via ManyChat or Meta API ──────────────
+    // ManyChat source: send via ManyChat sendContent API
+    if (source === "manychat" && contactId) {
+      const manychatKey = Deno.env.get("MANYCHAT_API_KEY") || "";
+      if (manychatKey) {
+        // Get subscriber_id from contacts table
+        const { data: contactData } = await supabase
+          .from("contacts")
+          .select("manychat_subscriber_id")
+          .eq("id", contactId)
+          .single();
+
+        if (contactData?.manychat_subscriber_id) {
+          const contentPayload: Record<string, unknown> = {
+            messages: [{ type: "text", text: respuesta }],
+          };
+          // Set channel type for ManyChat
+          const normalizedCanal = canal.toLowerCase();
+          if (normalizedCanal === "whatsapp") contentPayload.type = "whatsapp";
+          else if (normalizedCanal === "instagram") contentPayload.type = "instagram";
+          else if (normalizedCanal === "messenger" || normalizedCanal === "facebook") contentPayload.type = "facebook";
+
+          try {
+            const mcResp = await fetch("https://api.manychat.com/fb/sending/sendContent", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${manychatKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                subscriber_id: contactData.manychat_subscriber_id,
+                data: { version: "v2", content: contentPayload },
+              }),
+            });
+            const mcText = await mcResp.text();
+            console.log("[AGENTE-IA] ManyChat send response:", mcText);
+          } catch (e) {
+            console.error("[AGENTE-IA] Error enviando via ManyChat:", e);
+          }
+        } else {
+          console.warn("[AGENTE-IA] Contacto sin manychat_subscriber_id, no se puede enviar respuesta");
+        }
+      } else {
+        console.warn("[AGENTE-IA] MANYCHAT_API_KEY no configurada, respuesta no enviada al cliente");
+      }
+    }
+
+    // Meta/WhatsApp direct API
     if (
       source === "meta" && canal === "whatsapp" && phoneNumberId && senderId &&
       accessToken
