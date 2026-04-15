@@ -35,11 +35,59 @@ function extractUrls(text: string): string[] {
   return text.match(/https?:\/\/[^\s]+/g) || []
 }
 
+const PHONE_REGEX = /(\+?\d[\d\s\-]{7,})/
+const INVALID_NAME_WORDS = new Set([
+  'quiero', 'comprar', 'auto', 'autos', 'vehiculo', 'vehiculos', 'necesito',
+  'consulta', 'consultar', 'informacion', 'precio', 'credito', 'financiamiento',
+  'ejecutivo', 'vendedor', 'contacto', 'telefono', 'numero', 'whatsapp',
+  'instagram', 'facebook', 'messenger', 'derivarte', 'atencion', 'atenderte',
+])
+
+function normalizeToken(token: string): string {
+  return token.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function extractRawPhone(text: string): string {
+  return text.match(PHONE_REGEX)?.[1]?.trim() || ''
+}
+
+function normalizePhoneNumber(phone: string): string {
+  const trimmed = phone.trim()
+  if (!trimmed) return ''
+
+  const digits = trimmed.replace(/\D/g, '')
+  if (digits.length < 8) return ''
+  if (trimmed.startsWith('+') || digits.startsWith('56')) return `+${digits}`
+  if (digits.length === 9) return `+56${digits}`
+  return `+${digits}`
+}
+
+function sanitizeNameCandidate(text: string): string {
+  const cleaned = text
+    .replace(/\b(hola|buenas|buenos|dias|días|tardes|noches|soy|me|llamo|mi|nombre|es|telefono|teléfono|fono|celular|numero|número|contacto|por|favor|gracias)\b/giu, ' ')
+    .replace(/[^\p{L}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!cleaned) return ''
+
+  const words = cleaned.split(/\s+/).filter(Boolean)
+  if (words.length < 2 || words.length > 4) return ''
+  if (words.some(word => INVALID_NAME_WORDS.has(normalizeToken(word)))) return ''
+
+  return normalizePersonName(words.join(' '))
+}
+
+function extractNameFromMessage(text: string): string {
+  const rawPhone = extractRawPhone(text)
+  const candidate = rawPhone ? text.replace(rawPhone, ' ') : text
+  return sanitizeNameCandidate(candidate)
+}
+
 function normalizePersonName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length <= 1) return name.trim()
 
-  const normalizeToken = (token: string) => token.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const firstToken = normalizeToken(parts[0])
   let nextIndex = 1
 
@@ -52,6 +100,12 @@ function normalizePersonName(name: string): string {
 
 function getFirstName(name: string): string {
   return normalizePersonName(name).split(/\s+/)[0] || 'Cliente'
+}
+
+function isFullName(name: string): boolean {
+  const normalized = normalizePersonName(name).trim()
+  if (!normalized || normalizeToken(normalized) === 'cliente') return false
+  return normalized.split(/\s+/).length >= 2
 }
 
 async function fetchUrlContent(url: string): Promise<string> {
@@ -372,13 +426,11 @@ Deno.serve(async (req) => {
 
     // ── Detect if client already provided name/phone ───────────────────────────
     const allUserMessages = history.filter(m => m.role === 'user').map(m => m.content).join(' ') + ' ' + mensajeCliente
-    const msgLower = mensajeCliente.toLowerCase().trim()
-
-    // Check if name was provided (messages with 2+ words that look like a name)
-    const looksLikeName = /^[a-záéíóúñ]+\s+[a-záéíóúñ]+/i.test(msgLower) && msgLower.split(/\s+/).length >= 2 && msgLower.length < 60
-    // Check if phone was provided
-    const looksLikePhone = /(\+?\d[\d\s\-]{7,})/.test(mensajeCliente)
-    const extractedPhone = mensajeCliente.match(/(\+?\d[\d\s\-]{7,})/)?.[1]?.replace(/[\s\-]/g, '') || ''
+    const extractedName = extractNameFromMessage(mensajeCliente)
+    const extractedPhone = normalizePhoneNumber(extractRawPhone(mensajeCliente))
+    const storedFullName = normalizePersonName([nombre, apellido].filter(Boolean).join(' ').trim())
+    const storedContactName = isFullName(storedFullName) ? storedFullName : ''
+    const storedContactPhone = normalizePhoneNumber(telefono)
 
     let respuesta: string
     let score = 0
@@ -396,33 +448,40 @@ Deno.serve(async (req) => {
       calificacion = 'tibio'
     }
 
-    // Helper: check if name was already captured in previous messages
-    const alreadyEscalated = outboundMessages.some(m => m.content.includes('te contactará'))
-
     // Helper: try to find previously captured name from history
     const findCapturedName = (): string => {
-      const userMsgs = history.filter(m => m.role === 'user').map(m => m.content)
+      const userMsgs = history.filter(m => m.role === 'user').map(m => m.content).reverse()
       for (const msg of userMsgs) {
-        const trimmed = msg.trim()
-        if (/^[a-záéíóúñA-ZÁÉÍÓÚÑ]+\s+[a-záéíóúñA-ZÁÉÍÓÚÑ]+/i.test(trimmed) && trimmed.split(/\s+/).length >= 2 && trimmed.length < 60) {
-          return normalizePersonName(trimmed)
-        }
+        const capturedName = extractNameFromMessage(msg)
+        if (isFullName(capturedName)) return capturedName
       }
       return ''
     }
+
+    const findCapturedPhone = (): string => {
+      const userMsgs = history.filter(m => m.role === 'user').map(m => m.content).reverse()
+      for (const msg of userMsgs) {
+        const capturedPhone = normalizePhoneNumber(extractRawPhone(msg))
+        if (capturedPhone) return capturedPhone
+      }
+      return ''
+    }
+
+    const knownClientName = extractedName || findCapturedName() || storedContactName
+    const knownClientPhone = extractedPhone || findCapturedPhone() || storedContactPhone
 
     let capturedClientName = ''
     let capturedClientPhone = ''
 
     if (isWhatsApp) {
-      if (isFirstContact) {
-        respuesta = `¡Hola! 😊 Bienvenido/a a Egaña Automotriz. Para atenderte de la mejor forma, ¿podrías indicarme tu nombre completo y apellido por favor?`
-      } else if (looksLikeName && !alreadyEscalated) {
-        capturedClientName = normalizePersonName(mensajeCliente)
-        const clienteNombre = getFirstName(capturedClientName || nombre)
+      if (isFullName(knownClientName)) {
+        capturedClientName = knownClientName
+        capturedClientPhone = knownClientPhone
+        const clienteNombre = getFirstName(capturedClientName)
 
-        // Update contact name
-        await supabase.from('contacts').update({ name: capturedClientName }).eq('id', contactId)
+        const contactUpdates: Record<string, string> = { name: capturedClientName }
+        if (capturedClientPhone) contactUpdates.phone = capturedClientPhone
+        await supabase.from('contacts').update(contactUpdates).eq('id', contactId)
 
         respuesta = `¡Perfecto ${clienteNombre}! 🙌 Ya registré tus datos. Nuestro ejecutivo${vendedorAsignado ? ` ${vendedorAsignado}` : ''} te contactará de inmediato. ¡Cualquier consulta no dudes en escribirnos!`
         shouldEscalate = true
@@ -431,30 +490,34 @@ Deno.serve(async (req) => {
         score = 20
         if (allUserMessages.includes('presupuesto') || allUserMessages.includes('precio') || /\$\d|millones|mil\s/i.test(allUserMessages)) score += 30
         if (allUserMessages.includes('pronto') || allUserMessages.includes('urgente')) score += 25
-        if (telefono) score += 10
+        if (capturedClientPhone) score += 10
         score = Math.min(100, score)
+      } else if (isFirstContact) {
+        respuesta = `¡Hola! 😊 Bienvenido/a a Egaña Automotriz. Para atenderte de la mejor forma, ¿podrías indicarme tu nombre completo y apellido por favor?`
       } else {
         respuesta = `Para poder derivarte con un ejecutivo, necesito tu nombre completo y apellido 😊`
       }
     } else if (isInstagramOrMessenger) {
-      if (isFirstContact) {
-        respuesta = `¡Hola! 😊 Gracias por escribirnos a Egaña Automotriz. Para contactarte, ¿podrías indicarme tu nombre y número de teléfono?`
-      } else if (looksLikePhone && !alreadyEscalated) {
-        // Client provided phone — also find name from earlier messages
-        const phoneToSave = extractedPhone.startsWith('+') ? extractedPhone : `+56${extractedPhone}`
-        capturedClientPhone = phoneToSave
-        capturedClientName = normalizePersonName(findCapturedName() || nombre || 'Cliente IG')
+      if (isFullName(knownClientName) && knownClientPhone) {
+        capturedClientPhone = knownClientPhone
+        capturedClientName = knownClientName
 
-        await supabase.from('contacts').update({ phone: phoneToSave, name: capturedClientName }).eq('id', contactId)
+        await supabase.from('contacts').update({ phone: knownClientPhone, name: knownClientName }).eq('id', contactId)
 
         const waLink = 'https://wa.me/message/QCXBGVU5I7MHM1'
         respuesta = `¡Gracias ${getFirstName(capturedClientName)}! 🙌 Ya registré tus datos. Nuestro ejecutivo${vendedorAsignado ? ` ${vendedorAsignado}` : ''} te contactará de inmediato. También puedes escribirnos por WhatsApp: ${waLink}`
         shouldEscalate = true
         clienteCreado = true
-      } else if (looksLikeName && !looksLikePhone) {
-        capturedClientName = normalizePersonName(mensajeCliente)
+      } else if (isFullName(knownClientName)) {
+        capturedClientName = knownClientName
         respuesta = `¡Gracias ${getFirstName(capturedClientName)}! ¿Podrías también darme tu número de teléfono para que un ejecutivo te contacte? 📱`
         await supabase.from('contacts').update({ name: capturedClientName }).eq('id', contactId)
+      } else if (knownClientPhone) {
+        capturedClientPhone = knownClientPhone
+        respuesta = `¡Perfecto! Ya tengo tu número. ¿Me compartes tu nombre completo para derivarte con un ejecutivo? 😊`
+        await supabase.from('contacts').update({ phone: capturedClientPhone }).eq('id', contactId)
+      } else if (isFirstContact) {
+        respuesta = `¡Hola! 😊 Gracias por escribirnos a Egaña Automotriz. Para contactarte, ¿podrías indicarme tu nombre y número de teléfono?`
       } else {
         respuesta = `Para derivarte con un ejecutivo, necesito tu nombre y número de teléfono 😊`
       }
