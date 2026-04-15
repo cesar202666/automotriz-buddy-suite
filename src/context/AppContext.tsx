@@ -279,7 +279,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [cuentasPagar, setCuentasPagar] = useState<CuentaPagar[]>([]);
   const [cuentasCobrar, setCuentasCobrar] = useState<CuentaCobrar[]>([]);
   const [adquisiciones, setAdquisiciones] = useState<Adquisicion[]>([]);
-  const [usuarios, setUsuarios] = useState<Usuario[]>(USUARIOS_INICIALES);
+  const [usuarios, setUsuariosInternal] = useState<Usuario[]>(loadUsuariosFromStorage);
+  const setUsuarios = (u: Usuario[]) => { setUsuariosInternal(u); saveUsuariosToStorage(u); };
   const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(null);
 
   // ── Load vehicles from DB on mount ─────────────────────────────────────────
