@@ -281,7 +281,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [adquisiciones, setAdquisiciones] = useState<Adquisicion[]>([]);
   const [usuarios, setUsuariosInternal] = useState<Usuario[]>(loadUsuariosFromStorage);
   const setUsuarios = (u: Usuario[]) => { setUsuariosInternal(u); saveUsuariosToStorage(u); };
-  const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(null);
+  const [usuarioActual, setUsuarioActualInternal] = useState<Usuario | null>(() => {
+    try {
+      const saved = localStorage.getItem("ea_usuario_actual");
+      if (saved) return JSON.parse(saved) as Usuario;
+    } catch {}
+    return null;
+  });
+  const setUsuarioActual = (u: Usuario | null) => {
+    setUsuarioActualInternal(u);
+    if (u) localStorage.setItem("ea_usuario_actual", JSON.stringify(u));
+    else localStorage.removeItem("ea_usuario_actual");
+  };
 
   // ── Load vehicles from DB on mount ─────────────────────────────────────────
   useEffect(() => {
