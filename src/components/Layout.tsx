@@ -95,7 +95,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [usuarioActual]);
 
   const handleLogin = (clave: string): boolean => {
-    const found = usuarios.find(u => u.clave === clave);
+    const claveIngresada = clave.trim();
+    const found = usuarios.find(u => u.clave.trim() === claveIngresada);
     if (found) { setUsuarioActual(found); return true; }
     return false;
   };

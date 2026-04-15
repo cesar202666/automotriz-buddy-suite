@@ -9,8 +9,89 @@ const CLAVE_ADMIN = "123cuatro";
 
 type AdminTab = "usuarios" | "ventas" | "cuentas_pagar" | "cuentas_cobrar" | "kpi";
 
+type UserFormState = {
+  nombre: string;
+  apellido: string;
+  telefono: string;
+  clave: string;
+  rol: Usuario["rol"];
+  email: string;
+};
+
+const emptyUserForm: UserFormState = {
+  nombre: "",
+  apellido: "",
+  telefono: "",
+  clave: "",
+  rol: "vendedor",
+  email: "",
+};
+
+const normalizeUserForm = (form: UserFormState): UserFormState => ({
+  ...form,
+  nombre: form.nombre.trim(),
+  apellido: form.apellido.trim(),
+  telefono: form.telefono.trim(),
+  email: form.email.trim().toLowerCase(),
+});
+
+const getNombreCompleto = ({ nombre, apellido }: Pick<UserFormState, "nombre" | "apellido">) =>
+  `${nombre}${apellido ? ` ${apellido}` : ""}`.trim();
+
+const hasUserFormChanges = (user: Usuario, form: UserFormState) => (
+  user.nombre !== form.nombre ||
+  user.apellido !== form.apellido ||
+  user.telefono !== form.telefono ||
+  user.clave !== form.clave ||
+  user.rol !== form.rol ||
+  user.email !== form.email
+);
+
+const buildUserFromForm = (id: string, form: UserFormState): Usuario => ({
+  id,
+  ...form,
+});
+
+async function syncUserToVendedores(previousUser: Usuario | null, nextUser: Usuario) {
+  const previousEmail = previousUser?.email?.trim().toLowerCase() ?? "";
+  const nextEmail = nextUser.email.trim().toLowerCase();
+
+  if (!previousEmail && !nextEmail) return;
+
+  const vendedorPayload = {
+    nombre: getNombreCompleto(nextUser),
+    email: nextEmail || previousEmail,
+    telefono: nextUser.telefono,
+    activo: true,
+  };
+
+  let vendedorId: string | null = null;
+
+  if (previousEmail) {
+    const { data } = await supabase.from("vendedores").select("id").eq("email", previousEmail).maybeSingle();
+    vendedorId = data?.id ?? null;
+  }
+
+  if (!vendedorId && nextEmail && nextEmail !== previousEmail) {
+    const { data } = await supabase.from("vendedores").select("id").eq("email", nextEmail).maybeSingle();
+    vendedorId = data?.id ?? null;
+  }
+
+  if (vendedorId) {
+    await supabase.from("vendedores").update(vendedorPayload).eq("id", vendedorId);
+    return;
+  }
+
+  if (nextEmail) {
+    await supabase.from("vendedores").insert({
+      ...vendedorPayload,
+      sucursal: "Principal",
+    });
+  }
+}
+
 export default function Administracion() {
-  const { ventas, setVentas, clientes, vehiculos, usuarios, setUsuarios, cuentasPagar, setCuentasPagar, cuentasCobrar, setCuentasCobrar } = useApp();
+  const { ventas, setVentas, clientes, vehiculos, usuarios, setUsuarios, cuentasPagar, setCuentasPagar, cuentasCobrar, setCuentasCobrar, usuarioActual, setUsuarioActual } = useApp();
 
   const [unlocked, setUnlocked] = useState(false);
   const [clave, setClave] = useState("");
@@ -42,8 +123,9 @@ export default function Administracion() {
   // Usuarios
   const [showUserModal, setShowUserModal] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [userForm, setUserForm] = useState({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor" as Usuario["rol"], email: "" });
+  const [userForm, setUserForm] = useState<UserFormState>(emptyUserForm);
   const [showPassword, setShowPassword] = useState(false);
+  const [userSaveState, setUserSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
   // Cuentas por Pagar
   const [showPagarModal, setShowPagarModal] = useState(false);
@@ -54,6 +136,38 @@ export default function Administracion() {
   const [showCobrarModal, setShowCobrarModal] = useState(false);
   const [editCobrarId, setEditCobrarId] = useState<string | null>(null);
   const [cobrarForm, setCobrarForm] = useState<Omit<CuentaCobrar, "id">>({ idVenta: "", patente: "", fechaVenta: "", idComprador: "", nombreComprador: "", precioVenta: 0, comisionCredito: 0, tipoFinanciamiento: "" });
+
+  useEffect(() => {
+    if (!showUserModal || !editUserId) return;
+
+    const usuarioBase = usuarios.find((u) => u.id === editUserId);
+    const normalizedForm = normalizeUserForm(userForm);
+
+    if (!usuarioBase || !hasUserFormChanges(usuarioBase, normalizedForm)) return;
+
+    setUserSaveState("saving");
+
+    const timeoutId = window.setTimeout(async () => {
+      const usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+      setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
+
+      if (usuarioActual?.id === editUserId) {
+        setUsuarioActual(usuarioActualizado);
+      }
+
+      await syncUserToVendedores(usuarioBase, usuarioActualizado);
+      setUserSaveState("saved");
+    }, 450);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [editUserId, setUsuarioActual, setUsuarios, showUserModal, userForm, usuarioActual, usuarios]);
+
+  useEffect(() => {
+    if (userSaveState !== "saved") return;
+
+    const timeoutId = window.setTimeout(() => setUserSaveState("idle"), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, [userSaveState]);
 
   const tryUnlock = () => {
     if (clave === CLAVE_ADMIN) { setUnlocked(true); setClaveError(""); }
@@ -123,35 +237,33 @@ export default function Administracion() {
     .slice(0, 10);
 
   // === USUARIOS ===
-  const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowPassword(false); setShowUserModal(true); };
-  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowPassword(false); setShowUserModal(true); };
+  const openCreateUser = () => { setUserForm(emptyUserForm); setEditUserId(null); setShowPassword(false); setUserSaveState("idle"); setShowUserModal(true); };
+  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowPassword(false); setUserSaveState("idle"); setShowUserModal(true); };
+
   const saveUser = async () => {
-    if (!userForm.nombre.trim()) return alert("Nombre requerido");
-    const nombreCompleto = `${userForm.nombre}${userForm.apellido ? " " + userForm.apellido : ""}`.trim();
+    const normalizedForm = normalizeUserForm(userForm);
+    if (!normalizedForm.nombre) return alert("Nombre requerido");
+
     if (editUserId) {
-      setUsuarios(usuarios.map(u => u.id === editUserId ? { ...u, ...userForm } : u));
-      // Sync: actualizar en tabla vendedores por email o nombre
-      const usuarioActualizado = usuarios.find(u => u.id === editUserId);
-      if (usuarioActualizado) {
-        await supabase.from("vendedores").update({
-          nombre: nombreCompleto,
-          email: userForm.email,
-          telefono: userForm.telefono,
-          activo: true,
-        }).eq("email", usuarioActualizado.email);
+      const usuarioAnterior = usuarios.find((u) => u.id === editUserId) ?? null;
+      const usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+
+      setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
+
+      if (usuarioActual?.id === editUserId) {
+        setUsuarioActual(usuarioActualizado);
       }
+
+      await syncUserToVendedores(usuarioAnterior, usuarioActualizado);
     } else {
       const nuevoId = String(Date.now());
-      setUsuarios([...usuarios, { id: nuevoId, ...userForm }]);
-      // Sync: insertar en tabla vendedores
-      await supabase.from("vendedores").insert({
-        nombre: nombreCompleto,
-        email: userForm.email,
-        telefono: userForm.telefono,
-        sucursal: "Principal",
-        activo: true,
-      });
+      const nuevoUsuario = buildUserFromForm(nuevoId, normalizedForm);
+      setUsuarios([...usuarios, nuevoUsuario]);
+      await syncUserToVendedores(null, nuevoUsuario);
     }
+
+    setUserForm(normalizedForm);
+    setUserSaveState("idle");
     setShowUserModal(false);
   };
 
@@ -521,6 +633,11 @@ export default function Administracion() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <h3 className="font-bold mb-4">{editUserId ? "Editar Usuario" : "Nuevo Usuario"}</h3>
+            {editUserId && (
+              <p className="text-xs mb-4" style={{ color: userSaveState === "saving" ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                {userSaveState === "saving" ? "Guardando cambios..." : userSaveState === "saved" ? "Cambios guardados automáticamente." : "Los cambios se guardan automáticamente."}
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium mb-1">Nombre *</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.nombre} onChange={e => setUserForm(f => ({ ...f, nombre: e.target.value }))} /></div>
@@ -545,8 +662,8 @@ export default function Administracion() {
                 </select></div>
             </div>
             <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => setShowUserModal(false)} className="px-4 py-2 rounded text-sm border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
-              <button onClick={saveUser} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Guardar</button>
+              <button onClick={() => { setShowUserModal(false); setUserSaveState("idle"); }} className="px-4 py-2 rounded text-sm border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>{editUserId ? "Cerrar" : "Cancelar"}</button>
+              <button onClick={saveUser} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>{editUserId ? "Guardar y cerrar" : "Guardar"}</button>
             </div>
           </div>
         </div>
