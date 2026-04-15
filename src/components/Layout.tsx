@@ -32,6 +32,7 @@ type BackendLoginRow = {
   telefono: string | null;
   clave: string | null;
   activo: boolean | null;
+  rol: string | null;
 };
 
 function normalizeLoginValue(value: string | null | undefined) {
@@ -46,7 +47,9 @@ function splitNombreLogin(nombreCompleto: string) {
   return { nombre, apellido: resto.join(" ") };
 }
 
-function resolveUserRole(email: string, matchedUser: Usuario | null): Usuario["rol"] {
+function resolveUserRole(email: string, matchedUser: Usuario | null, dbRol: string | null): Usuario["rol"] {
+  const validRoles: Usuario["rol"][] = ["master", "administracion", "vendedor"];
+  if (dbRol && validRoles.includes(dbRol as Usuario["rol"])) return dbRol as Usuario["rol"];
   if (matchedUser) return matchedUser.rol;
   if (email === "cesar@egana.cl") return "master";
   if (email === "pamela@egana.cl") return "administracion";
