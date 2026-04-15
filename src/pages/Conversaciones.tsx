@@ -146,6 +146,25 @@ const LEAD_CATEGORIES: { id: LeadCategory; label: string; color: string; icon: s
   { id: "cerrados", label: "Cerrados", color: "#6b7280", icon: "⬛" },
 ];
 
+function normalizeLeadName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return name.trim();
+
+  const normalizeToken = (token: string) => token.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const firstToken = normalizeToken(parts[0]);
+  let nextIndex = 1;
+
+  while (nextIndex < parts.length && normalizeToken(parts[nextIndex]) === firstToken) {
+    nextIndex += 1;
+  }
+
+  return [parts[0], ...parts.slice(nextIndex)].join(" ");
+}
+
+function normalizeLeadRecord<T extends { nombre: string }>(lead: T): T {
+  return { ...lead, nombre: normalizeLeadName(lead.nombre || "") };
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function getChannelConfig(channel: string) {
   return CHANNEL_CONFIG[channel as keyof typeof CHANNEL_CONFIG] || CHANNEL_CONFIG.whatsapp;
