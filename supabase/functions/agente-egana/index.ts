@@ -468,7 +468,12 @@ Deno.serve(async (req) => {
 
     if (shouldEscalate) {
       // Use the captured name (from conversation) or fallback
-      const leadNombre = capturedClientName || nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente'
+      // Deduplicate first name (e.g. "Cesar Cesar Mansilla" → "Cesar Mansilla")
+      let leadNombre = capturedClientName || nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente'
+      const nameParts = leadNombre.trim().split(/\s+/)
+      if (nameParts.length >= 2 && nameParts[0].toLowerCase() === nameParts[1].toLowerCase()) {
+        leadNombre = nameParts.slice(1).join(' ')
+      }
       const leadTelefono = capturedClientPhone || telefono || extractedPhone
 
       const leadData = {
