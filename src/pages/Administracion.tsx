@@ -128,43 +128,7 @@ export default function Administracion() {
   const [claveError, setClaveError] = useState("");
   const [tab, setTab] = useState<AdminTab>("usuarios");
 
-  // Sincroniza todos los usuarios del ERP a la base para restaurar claves antiguas y evitar desfaces
-  useEffect(() => {
-    let cancelled = false;
-
-    const syncUsuarios = async () => {
-      const usuariosSincronizados = await Promise.all(
-        usuarios.map(async (usuario) => {
-          const syncedId = await syncUserToVendedores(usuario, usuario);
-          return syncedId && syncedId !== usuario.id ? { ...usuario, id: syncedId } : usuario;
-        })
-      );
-
-      if (cancelled) return;
-
-      const changedIds = usuariosSincronizados.some((usuario, index) => usuario.id !== usuarios[index]?.id);
-      if (!changedIds) return;
-
-      setUsuarios(usuariosSincronizados);
-
-      if (usuarioActual) {
-        const usuarioActualSincronizado = usuariosSincronizados.find((usuario) =>
-          usuario.id === usuarioActual.id || (usuario.email && usuario.email === usuarioActual.email)
-        );
-
-        if (usuarioActualSincronizado) {
-          setUsuarioActual(usuarioActualSincronizado);
-        }
-      }
-    };
-
-    void syncUsuarios();
-
-    return () => {
-      cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // DB is the single source of truth — no local sync needed
 
   // Usuarios
   const [showUserModal, setShowUserModal] = useState(false);
