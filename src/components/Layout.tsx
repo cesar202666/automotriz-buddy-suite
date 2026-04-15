@@ -5,7 +5,7 @@ import {
   ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
-import { useApp } from "@/context/AppContext";
+import { useApp, type Usuario } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 
 const navItems = [
@@ -25,14 +25,54 @@ const navItems = [
 const ADMIN_ROUTES = ["/administracion", "/gerencia"];
 const VENDEDOR_HIDDEN = ["/administracion", "/gerencia"];
 
-function LoginScreen({ onLogin }: { onLogin: (clave: string) => boolean }) {
+type BackendLoginRow = {
+  id: string;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  clave: string | null;
+  activo: boolean | null;
+};
+
+function normalizeLoginValue(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function splitNombreLogin(nombreCompleto: string) {
+  const limpio = nombreCompleto.trim().replace(/\s+/g, " ");
+  if (!limpio) return { nombre: "", apellido: "" };
+
+  const [nombre, ...resto] = limpio.split(" ");
+  return { nombre, apellido: resto.join(" ") };
+}
+
+function resolveUserRole(email: string, matchedUser: Usuario | null): Usuario["rol"] {
+  if (matchedUser) return matchedUser.rol;
+  if (email === "cesar@egana.cl") return "master";
+  if (email === "pamela@egana.cl") return "administracion";
+  return "vendedor";
+}
+
+function LoginScreen({ onLogin }: { onLogin: (clave: string) => Promise<boolean> }) {
   const [clave, setClave] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = onLogin(clave);
-    if (!ok) { setError("Clave incorrecta"); setClave(""); }
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const ok = await onLogin(clave);
+      if (!ok) {
+        setError("Clave incorrecta");
+        setClave("");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -55,6 +95,7 @@ function LoginScreen({ onLogin }: { onLogin: (clave: string) => boolean }) {
           <input
             type="password"
             autoFocus
+            disabled={isSubmitting}
             className="w-full border rounded-lg px-4 py-3 text-sm bg-background mb-2 focus:outline-none focus:ring-2"
             style={{ borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
             placeholder="Tu contraseña..."
@@ -62,8 +103,8 @@ function LoginScreen({ onLogin }: { onLogin: (clave: string) => boolean }) {
             onChange={e => { setClave(e.target.value); setError(""); }}
           />
           {error && <p className="text-xs mb-3" style={{ color: "hsl(var(--destructive))" }}>{error}</p>}
-          <button type="submit" className="w-full py-2.5 rounded-lg text-sm font-medium text-white mt-1" style={{ background: "hsl(var(--primary))" }}>
-            Ingresar
+          <button type="submit" disabled={isSubmitting} className="w-full py-2.5 rounded-lg text-sm font-medium text-white mt-1 disabled:opacity-70" style={{ background: "hsl(var(--primary))" }}>
+            {isSubmitting ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
       </div>
@@ -73,7 +114,7 @@ function LoginScreen({ onLogin }: { onLogin: (clave: string) => boolean }) {
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { usuarioActual, setUsuarioActual, usuarios } = useApp();
+  const { usuarioActual, setUsuarioActual, usuarios, setUsuarios } = useApp();
   const [newLeadsCount, setNewLeadsCount] = useState(0);
 
   // ── Poll for new unassigned/new leads as notification badge ────────────────
@@ -94,11 +135,58 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => { supabase.removeChannel(ch); };
   }, [usuarioActual]);
 
-  const handleLogin = (clave: string): boolean => {
+  const handleLogin = async (clave: string): Promise<boolean> => {
     const claveIngresada = clave.trim();
-    const found = usuarios.find(u => u.clave.trim() === claveIngresada);
-    if (found) { setUsuarioActual(found); return true; }
-    return false;
+    if (!claveIngresada) return false;
+
+    const found = usuarios.find((u) => u.clave.trim() === claveIngresada);
+    if (found) {
+      setUsuarioActual(found);
+      return true;
+    }
+
+    const { data, error } = await supabase
+      .from("vendedores")
+      .select("id, nombre, email, telefono, clave, activo")
+      .eq("activo", true)
+      .eq("clave", claveIngresada)
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return false;
+
+    const vendedor = data as unknown as BackendLoginRow;
+    const email = normalizeLoginValue(vendedor.email);
+    const nombreNormalizado = normalizeLoginValue(vendedor.nombre);
+    const telefono = (vendedor.telefono ?? "").trim();
+
+    const existingIndex = usuarios.findIndex((item) => {
+      const nombreCompleto = normalizeLoginValue(`${item.nombre} ${item.apellido}`);
+      return item.id === vendedor.id || (email && normalizeLoginValue(item.email) === email) || nombreCompleto === nombreNormalizado;
+    });
+
+    const existingUser = existingIndex >= 0 ? usuarios[existingIndex] : null;
+    const nombreSeparado = splitNombreLogin(vendedor.nombre);
+    const usuarioSincronizado: Usuario = {
+      id: vendedor.id,
+      nombre: existingUser?.nombre || nombreSeparado.nombre || vendedor.nombre,
+      apellido: existingUser?.apellido || nombreSeparado.apellido,
+      telefono: existingUser?.telefono || telefono,
+      clave: vendedor.clave ?? claveIngresada,
+      rol: resolveUserRole(email, existingUser),
+      email: existingUser?.email || email,
+    };
+
+    if (existingIndex >= 0) {
+      const nextUsuarios = [...usuarios];
+      nextUsuarios[existingIndex] = usuarioSincronizado;
+      setUsuarios(nextUsuarios);
+    } else {
+      setUsuarios([...usuarios, usuarioSincronizado]);
+    }
+
+    setUsuarioActual(usuarioSincronizado);
+    return true;
   };
 
   if (!usuarioActual) {

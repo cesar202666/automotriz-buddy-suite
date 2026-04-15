@@ -127,25 +127,41 @@ export default function Administracion() {
   const [claveError, setClaveError] = useState("");
   const [tab, setTab] = useState<AdminTab>("usuarios");
 
-  // Sync usuarios del ERP → tabla vendedores al montar
+  // Sincroniza todos los usuarios del ERP a la base para restaurar claves antiguas y evitar desfaces
   useEffect(() => {
+    let cancelled = false;
+
     const syncUsuarios = async () => {
-      for (const u of usuarios) {
-        if (!u.email) continue;
-        const nombreCompleto = `${u.nombre}${u.apellido ? " " + u.apellido : ""}`.trim();
-        const { data } = await supabase.from("vendedores").select("id").eq("email", u.email).maybeSingle();
-        if (!data) {
-          await supabase.from("vendedores").insert({
-            nombre: nombreCompleto,
-            email: u.email,
-            telefono: u.telefono || "",
-            sucursal: "Principal",
-            activo: true,
-          });
+      const usuariosSincronizados = await Promise.all(
+        usuarios.map(async (usuario) => {
+          const syncedId = await syncUserToVendedores(usuario, usuario);
+          return syncedId && syncedId !== usuario.id ? { ...usuario, id: syncedId } : usuario;
+        })
+      );
+
+      if (cancelled) return;
+
+      const changedIds = usuariosSincronizados.some((usuario, index) => usuario.id !== usuarios[index]?.id);
+      if (!changedIds) return;
+
+      setUsuarios(usuariosSincronizados);
+
+      if (usuarioActual) {
+        const usuarioActualSincronizado = usuariosSincronizados.find((usuario) =>
+          usuario.id === usuarioActual.id || (usuario.email && usuario.email === usuarioActual.email)
+        );
+
+        if (usuarioActualSincronizado) {
+          setUsuarioActual(usuarioActualSincronizado);
         }
       }
     };
-    syncUsuarios();
+
+    void syncUsuarios();
+
+    return () => {
+      cancelled = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
