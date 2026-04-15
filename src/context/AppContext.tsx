@@ -187,6 +187,7 @@ type VendedorUsuarioRow = {
   telefono: string | null;
   clave: string | null;
   activo: boolean | null;
+  rol: string | null;
   created_at: string;
 };
 
@@ -272,13 +273,15 @@ function mergeUsuariosWithVendedores(baseUsuarios: Usuario[], vendedores: Vended
       .find((index): index is number => typeof index === "number");
 
     const nombreSeparado = splitNombreCompleto(vendedor.nombre);
+    const validRoles: Usuario["rol"][] = ["master", "administracion", "vendedor"];
+    const vendedorRol = validRoles.includes(vendedor.rol as Usuario["rol"]) ? (vendedor.rol as Usuario["rol"]) : "vendedor";
     const restoredUser: Usuario = {
       id: vendedor.id,
       nombre: nombreSeparado.nombre,
       apellido: nombreSeparado.apellido,
       telefono: vendedor.telefono ?? "",
       clave: vendedor.clave ?? "",
-      rol: "vendedor",
+      rol: vendedorRol,
       email: normalizeUserValue(vendedor.email),
     };
 
@@ -291,6 +294,7 @@ function mergeUsuariosWithVendedores(baseUsuarios: Usuario[], vendedores: Vended
         telefono: existing.telefono || restoredUser.telefono,
         email: existing.email || restoredUser.email,
         clave: existing.clave || restoredUser.clave,
+        rol: restoredUser.rol !== "vendedor" ? restoredUser.rol : existing.rol,
       };
 
       merged[matchedIndex] = mergedUser;
@@ -437,7 +441,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const restoreUsuariosFromBackend = async () => {
       const { data, error } = await supabase
         .from("vendedores")
-        .select("id, nombre, email, telefono, clave, activo, created_at")
+        .select("id, nombre, email, telefono, clave, activo, rol, created_at")
         .eq("activo", true)
         .order("created_at", { ascending: true });
 

@@ -500,6 +500,7 @@ export type Database = {
           email: string | null
           id: string
           nombre: string
+          rol: string
           sucursal: string | null
           telefono: string | null
         }
@@ -510,6 +511,7 @@ export type Database = {
           email?: string | null
           id?: string
           nombre?: string
+          rol?: string
           sucursal?: string | null
           telefono?: string | null
         }
@@ -520,6 +522,7 @@ export type Database = {
           email?: string | null
           id?: string
           nombre?: string
+          rol?: string
           sucursal?: string | null
           telefono?: string | null
         }
