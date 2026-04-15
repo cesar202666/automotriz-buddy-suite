@@ -137,6 +137,38 @@ export default function Administracion() {
   const [editCobrarId, setEditCobrarId] = useState<string | null>(null);
   const [cobrarForm, setCobrarForm] = useState<Omit<CuentaCobrar, "id">>({ idVenta: "", patente: "", fechaVenta: "", idComprador: "", nombreComprador: "", precioVenta: 0, comisionCredito: 0, tipoFinanciamiento: "" });
 
+  useEffect(() => {
+    if (!showUserModal || !editUserId) return;
+
+    const usuarioBase = usuarios.find((u) => u.id === editUserId);
+    const normalizedForm = normalizeUserForm(userForm);
+
+    if (!usuarioBase || !hasUserFormChanges(usuarioBase, normalizedForm)) return;
+
+    setUserSaveState("saving");
+
+    const timeoutId = window.setTimeout(async () => {
+      const usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+      setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
+
+      if (usuarioActual?.id === editUserId) {
+        setUsuarioActual(usuarioActualizado);
+      }
+
+      await syncUserToVendedores(usuarioBase, usuarioActualizado);
+      setUserSaveState("saved");
+    }, 450);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [editUserId, setUsuarioActual, setUsuarios, showUserModal, userForm, usuarioActual, usuarios]);
+
+  useEffect(() => {
+    if (userSaveState !== "saved") return;
+
+    const timeoutId = window.setTimeout(() => setUserSaveState("idle"), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, [userSaveState]);
+
   const tryUnlock = () => {
     if (clave === CLAVE_ADMIN) { setUnlocked(true); setClaveError(""); }
     else { setClaveError("Clave incorrecta"); }
@@ -208,38 +240,6 @@ export default function Administracion() {
   const openCreateUser = () => { setUserForm(emptyUserForm); setEditUserId(null); setShowPassword(false); setUserSaveState("idle"); setShowUserModal(true); };
   const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowPassword(false); setUserSaveState("idle"); setShowUserModal(true); };
 
-  useEffect(() => {
-    if (!showUserModal || !editUserId) return;
-
-    const usuarioBase = usuarios.find((u) => u.id === editUserId);
-    const normalizedForm = normalizeUserForm(userForm);
-
-    if (!usuarioBase || !hasUserFormChanges(usuarioBase, normalizedForm)) return;
-
-    setUserSaveState("saving");
-
-    const timeoutId = window.setTimeout(async () => {
-      const usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
-      setUsuarios((prev) => prev.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
-
-      if (usuarioActual?.id === editUserId) {
-        setUsuarioActual(usuarioActualizado);
-      }
-
-      await syncUserToVendedores(usuarioBase, usuarioActualizado);
-      setUserSaveState("saved");
-    }, 450);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [editUserId, setUsuarioActual, setUsuarios, showUserModal, userForm, usuarioActual?.id, usuarios]);
-
-  useEffect(() => {
-    if (userSaveState !== "saved") return;
-
-    const timeoutId = window.setTimeout(() => setUserSaveState("idle"), 1800);
-    return () => window.clearTimeout(timeoutId);
-  }, [userSaveState]);
-
   const saveUser = async () => {
     const normalizedForm = normalizeUserForm(userForm);
     if (!normalizedForm.nombre) return alert("Nombre requerido");
@@ -248,7 +248,7 @@ export default function Administracion() {
       const usuarioAnterior = usuarios.find((u) => u.id === editUserId) ?? null;
       const usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
 
-      setUsuarios((prev) => prev.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
+      setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
 
       if (usuarioActual?.id === editUserId) {
         setUsuarioActual(usuarioActualizado);
@@ -258,7 +258,7 @@ export default function Administracion() {
     } else {
       const nuevoId = String(Date.now());
       const nuevoUsuario = buildUserFromForm(nuevoId, normalizedForm);
-      setUsuarios((prev) => [...prev, nuevoUsuario]);
+      setUsuarios([...usuarios, nuevoUsuario]);
       await syncUserToVendedores(null, nuevoUsuario);
     }
 
