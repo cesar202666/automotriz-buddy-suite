@@ -176,7 +176,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       apellido: existingUser?.apellido || nombreSeparado.apellido,
       telefono: existingUser?.telefono || telefono,
       clave: vendedor.clave ?? claveIngresada,
-      rol: resolveUserRole(email, existingUser),
+      rol: resolveUserRole(email, existingUser, vendedor.rol),
       email: existingUser?.email || email,
     };
 
