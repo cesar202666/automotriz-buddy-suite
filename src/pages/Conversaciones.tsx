@@ -282,21 +282,34 @@ function TabMensajes() {
     if (!replyText.trim() || sending || !selectedConvId) return;
     const conv = conversations.find((c) => c.id === selectedConvId);
     if (!conv) return;
-    setSending(true);
+    const msgText = replyText.trim();
+    setReplyText("");
+
+    // Optimistic: add message to UI immediately
+    const optimisticMsg: Message = {
+      id: `temp-${Date.now()}`,
+      conversation_id: conv.id,
+      contact_id: conv.contact_id,
+      direction: "outbound",
+      content: msgText,
+      channel: conv.channel,
+      sent_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    // Update conversation list optimistically
+    setConversations((prev) => prev.map((c) => c.id === conv.id ? { ...c, last_message: msgText, last_message_at: new Date().toISOString() } : c));
+
+    // Send in background - no loading state needed
     try {
       const { data, error } = await supabase.functions.invoke("manychat-send-message", {
-        body: { conversation_id: conv.id, contact_id: conv.contact_id, message: replyText.trim(), channel: conv.channel },
+        body: { conversation_id: conv.id, contact_id: conv.contact_id, message: msgText, channel: conv.channel },
       });
       if (error || !data?.success) {
-        toast.error(`Error completo: ${JSON.stringify(data || error)}`, { duration: 15000 });
-      } else {
-        toast.success("Mensaje enviado al cliente");
-        setReplyText("");
+        toast.error(`Error al enviar: ${data?.error || error?.message || 'Error desconocido'}`, { duration: 10000 });
       }
     } catch (e: any) {
       toast.error(e.message || "Error al enviar mensaje");
-    } finally {
-      setSending(false);
     }
   };
 
