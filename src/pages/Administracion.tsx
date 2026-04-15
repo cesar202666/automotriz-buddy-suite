@@ -416,7 +416,7 @@ export default function Administracion() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-                      {u.rol === "master" ? "Todo" : u.rol === "administracion" ? "Todo excepto Validar" : "Ventas/Clientes/Vehículos (sin Validar, sin Admin/Gerencia)"}
+                      {u.rol === "master" ? "Todo" : u.rol === "administracion" ? "Todo excepto Gerencia y crear usuarios" : "Ventas/Clientes/Vehículos (sin Admin/Gerencia)"}
                     </td>
                     <td className="px-4 py-3">
                       {usuarioActual?.rol === "master" && (
