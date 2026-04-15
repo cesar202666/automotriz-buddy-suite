@@ -66,6 +66,7 @@ async function syncUserToVendedores(previousUser: Usuario | null, nextUser: Usua
     nombre: nextNombreCompleto,
     email: nextEmail || previousEmail,
     telefono: nextTelefono,
+    clave: nextUser.clave,
     activo: true,
   };
 

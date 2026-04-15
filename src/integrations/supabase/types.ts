@@ -495,6 +495,7 @@ export type Database = {
       vendedores: {
         Row: {
           activo: boolean | null
+          clave: string | null
           created_at: string
           email: string | null
           id: string
@@ -504,6 +505,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean | null
+          clave?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -513,6 +515,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean | null
+          clave?: string | null
           created_at?: string
           email?: string | null
           id?: string
