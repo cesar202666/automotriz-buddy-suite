@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Lock, Users, ShoppingCart, TrendingDown, TrendingUp, BarChart3, Plus, Edit2, Trash2, AlertTriangle } from "lucide-react";
+import { Lock, Users, ShoppingCart, TrendingDown, TrendingUp, BarChart3, Plus, Edit2, Trash2, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useApp, CuentaPagar, CuentaCobrar, Usuario, Venta } from "@/context/AppContext";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +43,7 @@ export default function Administracion() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [userForm, setUserForm] = useState({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor" as Usuario["rol"], email: "" });
+  const [showPassword, setShowPassword] = useState(false);
 
   // Cuentas por Pagar
   const [showPagarModal, setShowPagarModal] = useState(false);
@@ -122,8 +123,8 @@ export default function Administracion() {
     .slice(0, 10);
 
   // === USUARIOS ===
-  const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
-  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
+  const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowPassword(false); setShowUserModal(true); };
+  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowPassword(false); setShowUserModal(true); };
   const saveUser = async () => {
     if (!userForm.nombre.trim()) return alert("Nombre requerido");
     const nombreCompleto = `${userForm.nombre}${userForm.apellido ? " " + userForm.apellido : ""}`.trim();
@@ -530,7 +531,12 @@ export default function Administracion() {
               <div><label className="block text-xs font-medium mb-1">Email</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.email} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1">Contraseña</label>
-                <input type="password" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.clave} onChange={e => setUserForm(f => ({ ...f, clave: e.target.value }))} /></div>
+                <div className="relative">
+                  <input type={showPassword ? "text" : "password"} className="w-full border rounded px-3 py-2 text-sm bg-background pr-9" style={{ borderColor: "hsl(var(--border))" }} value={userForm.clave} onChange={e => setUserForm(f => ({ ...f, clave: e.target.value }))} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div></div>
               <div><label className="block text-xs font-medium mb-1">Rol</label>
                 <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.rol} onChange={e => setUserForm(f => ({ ...f, rol: e.target.value as Usuario["rol"] }))}>
                   <option value="master">Admin Master</option>
