@@ -592,25 +592,24 @@ function TabMensajes() {
               <input
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && replyText.trim() && !sending) { e.preventDefault(); handleSendReply(); } }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && replyText.trim()) { e.preventDefault(); handleSendReply(); } }}
                 placeholder="Escribe una respuesta al cliente..."
-                disabled={sending}
                 className="flex-1 px-3 py-2 rounded-lg text-sm outline-none border"
                 style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
               />
               <button
                 onClick={handleSendReply}
-                disabled={sending || !replyText.trim()}
+                disabled={!replyText.trim()}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 style={{
-                  background: sending || !replyText.trim() ? "hsl(var(--muted))" : "hsl(var(--primary))",
-                  color: sending || !replyText.trim() ? "hsl(var(--muted-foreground))" : "white",
-                  cursor: sending || !replyText.trim() ? "not-allowed" : "pointer",
-                  opacity: sending || !replyText.trim() ? 0.6 : 1,
+                  background: !replyText.trim() ? "hsl(var(--muted))" : "hsl(var(--primary))",
+                  color: !replyText.trim() ? "hsl(var(--muted-foreground))" : "white",
+                  cursor: !replyText.trim() ? "not-allowed" : "pointer",
+                  opacity: !replyText.trim() ? 0.6 : 1,
                 }}
               >
                 <Send size={14} />
-                {sending ? "Enviando..." : "Enviar"}
+                Enviar
               </button>
             </div>
           ) : (
