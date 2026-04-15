@@ -414,11 +414,20 @@ Deno.serve(async (req) => {
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         } else {
-          // Cooldown expired: reset escalation, allow new interaction
-          await supabase
+          // Cooldown expired: create a NEW conversation so agent starts fresh
+          const { data: newConv } = await supabase
             .from("conversations")
-            .update({ escalated: false, escalated_at: null })
-            .eq("id", conversationId);
+            .insert({
+              contact_id: contactId,
+              channel: canal,
+              status: "active",
+              last_message: mensajeCliente,
+              last_message_at: new Date().toISOString(),
+              unread_count: 0,
+            })
+            .select("id")
+            .single();
+          if (newConv?.id) conversationId = newConv.id;
         }
       }
     }
@@ -574,10 +583,10 @@ Deno.serve(async (req) => {
       return "";
     };
 
-    const knownClientName = extractedName || findCapturedName() ||
-      storedContactName;
-    const knownClientPhone = extractedPhone || findCapturedPhone() ||
-      storedContactPhone;
+    // ONLY use data captured within the current conversation — never from stored contact records
+    // This ensures the agent always asks for name/phone on new conversations
+    const knownClientName = extractedName || findCapturedName();
+    const knownClientPhone = extractedPhone || findCapturedPhone();
 
     let capturedClientName = "";
     let capturedClientPhone = "";

@@ -1,0 +1,1 @@
+UPDATE configuracion_sistema SET valor = 'true', updated_at = now() WHERE clave = 'AGENTE_ACTIVO';
