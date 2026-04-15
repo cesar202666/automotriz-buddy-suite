@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Lock, Users, ShoppingCart, TrendingDown, TrendingUp, BarChart3, Plus, Edit2, Trash2, AlertTriangle } from "lucide-react";
+import { Lock, Users, ShoppingCart, TrendingDown, TrendingUp, BarChart3, Plus, Edit2, Trash2, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useApp, CuentaPagar, CuentaCobrar, Usuario, Venta } from "@/context/AppContext";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
