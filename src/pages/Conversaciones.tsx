@@ -1318,38 +1318,44 @@ function TabContactos() {
 function TabMetricas() {
   const { usuarioActual } = useApp();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [periodo, setPeriodo] = useState("este_mes");
+  const [fechaDesde, setFechaDesde] = useState(() => {
+    const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
+  });
+  const [fechaHasta, setFechaHasta] = useState(() => new Date().toISOString().slice(0, 10));
+  const [filtroVendedor, setFiltroVendedor] = useState("todos");
 
   const isVendedor = usuarioActual?.rol === "vendedor";
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
 
   useEffect(() => {
-    const loadMetricas = async () => {
+    const load = async () => {
       setLoading(true);
-      const now = new Date();
-      let desde = new Date();
-      if (periodo === "este_mes") desde = new Date(now.getFullYear(), now.getMonth(), 1);
-      else if (periodo === "mes_anterior") desde = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      else if (periodo === "90_dias") desde = new Date(now.getTime() - 90 * 86400000);
+      const desde = new Date(fechaDesde + "T00:00:00");
+      const hasta = new Date(fechaHasta + "T23:59:59");
 
-      let query = supabase.from("leads").select("*").gte("created_at", desde.toISOString()).order("created_at", { ascending: false });
+      let query = supabase.from("leads").select("*").gte("created_at", desde.toISOString()).lte("created_at", hasta.toISOString()).order("created_at", { ascending: false });
       if (isVendedor && vendedorName) query = query.eq("vendedor_asignado", vendedorName);
 
-      const { data } = await query;
-      setLeads(((data || []) as Lead[]).map(normalizeLeadRecord));
+      const [leadsRes, vendRes] = await Promise.all([
+        query,
+        supabase.from("vendedores").select("*").eq("activo", true),
+      ]);
+      setLeads(((leadsRes.data || []) as Lead[]).map(normalizeLeadRecord));
+      setVendedores((vendRes.data || []) as Vendedor[]);
       setLoading(false);
     };
+    load();
+  }, [fechaDesde, fechaHasta, isVendedor, vendedorName]);
 
-    loadMetricas();
-  }, [periodo, isVendedor, vendedorName]);
-
-  const calificados = leads.filter((lead) => ["frio", "tibio", "caliente"].includes((lead.calificacion || "").toLowerCase()));
+  const filteredLeads = filtroVendedor === "todos" ? leads : leads.filter(l => l.vendedor_asignado === filtroVendedor);
+  const calificados = filteredLeads.filter((l) => ["frio", "tibio", "caliente"].includes((l.calificacion || "").toLowerCase()));
 
   const tipoCalificacionData = [
-    { name: "Frío", value: calificados.filter((lead) => lead.calificacion === "frio").length, fill: "hsl(210 90% 56%)" },
-    { name: "Tibio", value: calificados.filter((lead) => lead.calificacion === "tibio").length, fill: "hsl(42 96% 56%)" },
-    { name: "Caliente", value: calificados.filter((lead) => lead.calificacion === "caliente").length, fill: "hsl(2 84% 60%)" },
+    { name: "Frío", value: calificados.filter((l) => l.calificacion === "frio").length, fill: "hsl(210 90% 56%)" },
+    { name: "Tibio", value: calificados.filter((l) => l.calificacion === "tibio").length, fill: "hsl(42 96% 56%)" },
+    { name: "Caliente", value: calificados.filter((l) => l.calificacion === "caliente").length, fill: "hsl(2 84% 60%)" },
   ];
 
   const origenData = Object.values(
@@ -1361,43 +1367,81 @@ function TabMetricas() {
     }, {} as Record<string, { name: string; value: number; fill: string }>)
   ).sort((a, b) => b.value - a.value);
 
+  // Vendedor: asignados vs respondidos
   const vendedorData = Object.values(
-    leads.reduce((acc, lead) => {
+    filteredLeads.reduce((acc, lead) => {
       const vendedor = lead.vendedor_asignado?.trim() || "Sin asignar";
-      if (!acc[vendedor]) acc[vendedor] = { vendedor, asignados: 0, respondidos: 0 };
+      if (!acc[vendedor]) acc[vendedor] = { vendedor, asignados: 0, respondidos: 0, noRespondidos: 0 };
       acc[vendedor].asignados += 1;
       if (lead.primer_apertura_at) acc[vendedor].respondidos += 1;
+      else acc[vendedor].noRespondidos += 1;
       return acc;
-    }, {} as Record<string, { vendedor: string; asignados: number; respondidos: number }>)
+    }, {} as Record<string, { vendedor: string; asignados: number; respondidos: number; noRespondidos: number }>)
   ).sort((a, b) => b.asignados - a.asignados);
 
+  // Tiempo promedio de respuesta por vendedor (horas)
+  const tiempoRespuestaData = Object.values(
+    filteredLeads.reduce((acc, lead) => {
+      if (!lead.vendedor_asignado?.trim() || !lead.primer_apertura_at) return acc;
+      const vendedor = lead.vendedor_asignado.trim();
+      const creado = new Date(lead.created_at).getTime();
+      const apertura = new Date(lead.primer_apertura_at).getTime();
+      const diffHours = Math.max(0, (apertura - creado) / 3600000);
+      if (!acc[vendedor]) acc[vendedor] = { vendedor, totalHoras: 0, count: 0, promedio: 0 };
+      acc[vendedor].totalHoras += diffHours;
+      acc[vendedor].count += 1;
+      acc[vendedor].promedio = Math.round((acc[vendedor].totalHoras / acc[vendedor].count) * 10) / 10;
+      return acc;
+    }, {} as Record<string, { vendedor: string; totalHoras: number; count: number; promedio: number }>)
+  ).sort((a, b) => a.promedio - b.promedio);
+
+  // No respondidos por vendedor
+  const noRespondidosData = vendedorData.filter(v => v.vendedor !== "Sin asignar" && v.noRespondidos > 0);
+
   const leadsRecientes = calificados.slice(0, 8);
-  const totalRespondidos = vendedorData.reduce((acc, vendedor) => acc + vendedor.respondidos, 0);
+  const totalRespondidos = vendedorData.reduce((s, v) => s + v.respondidos, 0);
+  const totalNoRespondidos = vendedorData.reduce((s, v) => s + v.noRespondidos, 0);
   const origenPrincipal = origenData[0]?.name || "Sin origen";
+  const promedioGeneral = tiempoRespuestaData.length > 0
+    ? Math.round(tiempoRespuestaData.reduce((s, v) => s + v.promedio, 0) / tiempoRespuestaData.length * 10) / 10
+    : 0;
 
   const KPIS = [
     { label: "Clientes calificados", value: calificados.length, icon: Target, color: "hsl(var(--primary))" },
     { label: "Fríos", value: tipoCalificacionData[0].value, icon: Users, color: "hsl(210 90% 56%)" },
     { label: "Tibios", value: tipoCalificacionData[1].value, icon: TrendingUp, color: "hsl(42 96% 56%)" },
     { label: "Calientes", value: tipoCalificacionData[2].value, icon: Zap, color: "hsl(2 84% 60%)" },
-    { label: "Origen principal", value: origenPrincipal, icon: BarChart3, color: "hsl(var(--warning))" },
     { label: "Respondidos", value: totalRespondidos, icon: CheckCheck, color: "hsl(var(--success))" },
+    { label: "Sin responder", value: totalNoRespondidos, icon: AlertCircle, color: "hsl(var(--destructive))" },
+    { label: "Promedio respuesta", value: `${promedioGeneral}h`, icon: Clock, color: "hsl(var(--warning))" },
+    { label: "Origen principal", value: origenPrincipal, icon: BarChart3, color: "hsl(var(--muted-foreground))" },
   ];
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-sm animate-pulse" style={{ color: "hsl(var(--muted-foreground))" }}>Cargando métricas...</div></div>;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <select value={periodo} onChange={e => setPeriodo(e.target.value)} className="text-sm border rounded-lg px-3 py-2 bg-background" style={{ borderColor: "hsl(var(--border))" }}>
-          <option value="este_mes">Este mes</option>
-          <option value="mes_anterior">Mes anterior</option>
-          <option value="90_dias">Últimos 90 días</option>
-        </select>
+      {/* Filtros */}
+      <div className="flex flex-wrap items-end gap-3 border rounded-xl p-4" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Desde</label>
+          <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="text-sm border rounded-lg px-3 py-2 bg-background" style={{ borderColor: "hsl(var(--border))" }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Hasta</label>
+          <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="text-sm border rounded-lg px-3 py-2 bg-background" style={{ borderColor: "hsl(var(--border))" }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Vendedor</label>
+          <select value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)} className="text-sm border rounded-lg px-3 py-2 bg-background" style={{ borderColor: "hsl(var(--border))" }}>
+            <option value="todos">Todos</option>
+            {vendedores.map(v => <option key={v.id} value={v.nombre}>{v.nombre}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
         {KPIS.map(kpi => {
           const Icon = kpi.icon;
           return (
@@ -1450,6 +1494,7 @@ function TabMetricas() {
         </div>
       </div>
 
+      {/* Vendedores: direccionados vs respondidos */}
       <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
         <h3 className="text-sm font-bold mb-4">Clientes direccionados por vendedor vs respondidos</h3>
         {vendedorData.length > 0 ? (
@@ -1457,7 +1502,7 @@ function TabMetricas() {
             <BarChart data={vendedorData} layout="vertical" margin={{ left: 32, right: 12 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} />
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="vendedor" width={140} tick={{ fontSize: 11 }} tickFormatter={(value) => value.length > 18 ? `${value.slice(0, 18)}…` : value} />
+              <YAxis type="category" dataKey="vendedor" width={140} tick={{ fontSize: 11 }} tickFormatter={(v) => v.length > 18 ? `${v.slice(0, 18)}…` : v} />
               <Tooltip />
               <Legend />
               <Bar dataKey="asignados" name="Direccionados" fill="hsl(var(--primary))" radius={[0, 8, 8, 0]} />
@@ -1467,6 +1512,45 @@ function TabMetricas() {
         ) : <div className="flex items-center justify-center h-60 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vendedores con leads asignados</div>}
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Tiempo promedio de respuesta por vendedor */}
+        <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+          <h3 className="text-sm font-bold mb-4">Tiempo promedio de respuesta por vendedor (horas)</h3>
+          {tiempoRespuestaData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(240, tiempoRespuestaData.length * 48)}>
+              <BarChart data={tiempoRespuestaData} layout="vertical" margin={{ left: 32, right: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11 }} unit="h" />
+                <YAxis type="category" dataKey="vendedor" width={140} tick={{ fontSize: 11 }} tickFormatter={(v) => v.length > 18 ? `${v.slice(0, 18)}…` : v} />
+                <Tooltip formatter={(value: number) => [`${value} horas`, "Promedio"]} />
+                <Bar dataKey="promedio" name="Promedio (hrs)" fill="hsl(42 96% 56%)" radius={[0, 8, 8, 0]}>
+                  {tiempoRespuestaData.map((entry, i) => (
+                    <Cell key={i} fill={entry.promedio > 24 ? "hsl(2 84% 60%)" : entry.promedio > 4 ? "hsl(42 96% 56%)" : "hsl(var(--success))"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <div className="flex items-center justify-center h-60 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>No hay datos de respuesta aún</div>}
+        </div>
+
+        {/* Clientes no respondidos por vendedor */}
+        <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+          <h3 className="text-sm font-bold mb-4">Clientes direccionados sin respuesta del vendedor</h3>
+          {noRespondidosData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(240, noRespondidosData.length * 48)}>
+              <BarChart data={noRespondidosData} layout="vertical" margin={{ left: 32, right: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="vendedor" width={140} tick={{ fontSize: 11 }} tickFormatter={(v) => v.length > 18 ? `${v.slice(0, 18)}…` : v} />
+                <Tooltip />
+                <Bar dataKey="noRespondidos" name="Sin responder" fill="hsl(var(--destructive))" radius={[0, 8, 8, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <div className="flex items-center justify-center h-60 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>Todos los leads han sido respondidos 🎉</div>}
+        </div>
+      </div>
+
+      {/* Tabla últimos calificados */}
       <div className="border rounded-xl overflow-hidden" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
         <div className="px-5 py-4 border-b" style={{ borderColor: "hsl(var(--border))" }}>
           <h3 className="text-sm font-bold">Últimos clientes calificados</h3>
