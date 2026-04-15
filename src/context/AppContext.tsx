@@ -280,8 +280,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [cuentasPagar, setCuentasPagar] = useState<CuentaPagar[]>([]);
   const [cuentasCobrar, setCuentasCobrar] = useState<CuentaCobrar[]>([]);
   const [adquisiciones, setAdquisiciones] = useState<Adquisicion[]>([]);
-  const [usuarios, setUsuariosInternal] = useState<Usuario[]>(loadUsuariosFromStorage);
-  const setUsuarios = (u: Usuario[]) => { setUsuariosInternal(u); saveUsuariosToStorage(u); };
+  const [usuarios, setUsuariosInternal] = useState<Usuario[]>([]);
+  const setUsuarios = (u: Usuario[]) => { setUsuariosInternal(u); };
   const [usuarioActual, setUsuarioActualInternal] = useState<Usuario | null>(() => {
     try {
       const saved = localStorage.getItem("ea_usuario_actual");
@@ -295,32 +295,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem("ea_usuario_actual");
   };
 
+  // Load usuarios from DB (single source of truth)
   useEffect(() => {
-    const restoreUsuariosFromBackend = async () => {
+    const loadUsuarios = async () => {
       const { data, error } = await supabase
         .from("vendedores")
-        .select("id, nombre, email, telefono, clave, activo, rol, created_at")
+        .select("id, nombre, email, telefono, clave, rol")
         .eq("activo", true)
         .order("created_at", { ascending: true });
 
       if (error || !data) return;
 
-      const restoredUsuarios = mergeUsuariosWithVendedores(
-        loadUsuariosFromStorage(),
-        data as VendedorUsuarioRow[]
-      );
+      const loaded = data.map(vendedorToUsuario);
+      setUsuariosInternal(loaded);
 
-      setUsuariosInternal(restoredUsuarios);
-      saveUsuariosToStorage(restoredUsuarios);
+      // Sync current user with fresh DB data
+      const currentUser = (() => {
+        try {
+          const saved = localStorage.getItem("ea_usuario_actual");
+          return saved ? JSON.parse(saved) as Usuario : null;
+        } catch { return null; }
+      })();
 
-      const usuarioSincronizado = findMatchingUsuario(usuarioActual, restoredUsuarios);
-      if (usuarioSincronizado) {
-        setUsuarioActualInternal(usuarioSincronizado);
-        localStorage.setItem("ea_usuario_actual", JSON.stringify(usuarioSincronizado));
+      if (currentUser) {
+        const match = loaded.find(u =>
+          u.id === currentUser.id ||
+          (currentUser.email && u.email === currentUser.email.trim().toLowerCase()) ||
+          `${u.nombre} ${u.apellido}`.trim().toLowerCase() === `${currentUser.nombre} ${currentUser.apellido}`.trim().toLowerCase()
+        );
+        if (match) {
+          setUsuarioActualInternal(match);
+          localStorage.setItem("ea_usuario_actual", JSON.stringify(match));
+        }
       }
     };
 
-    restoreUsuariosFromBackend();
+    loadUsuarios();
   }, []);
 
   // ── Load vehicles from DB on mount ─────────────────────────────────────────
