@@ -390,6 +390,35 @@ export default function Configuracion() {
     setHorariosConfig(prev => prev.map((d, i) => i === idx ? { ...d, [field]: value } : d));
   };
 
+  // ── Rotación helpers ──────────────────────────────────────────────────────
+  const moveVendedorRotacion = (idx: number, dir: "up" | "down") => {
+    setRotacionVendedores(prev => {
+      const arr = [...prev];
+      const targetIdx = dir === "up" ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= arr.length) return prev;
+      [arr[idx], arr[targetIdx]] = [arr[targetIdx], arr[idx]];
+      return arr;
+    });
+  };
+
+  const toggleVendedorRotacion = (idx: number) => {
+    setRotacionVendedores(prev => prev.map((v, i) => i === idx ? { ...v, activo: !v.activo } : v));
+  };
+
+  const setConsecutivosRotacion = (idx: number, val: number) => {
+    setRotacionVendedores(prev => prev.map((v, i) => i === idx ? { ...v, consecutivos: Math.max(1, val) } : v));
+  };
+
+  const saveRotacion = async () => {
+    setSavingRotacion(true);
+    try {
+      await upsertConfig("ROTACION_VENDEDORES", JSON.stringify(rotacionVendedores));
+      setRotacionSaved(true);
+    } catch { setRotacionSaved(false); }
+    setSavingRotacion(false);
+    setTimeout(() => setRotacionSaved(null), 3000);
+  };
+
   // ── Status badge helpers ───────────────────────────────────────────────────
   const SavedBadge = ({ saved }: { saved: boolean | null }) => {
     if (saved === null) return null;
