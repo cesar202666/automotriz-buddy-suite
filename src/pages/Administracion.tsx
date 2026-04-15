@@ -43,6 +43,7 @@ export default function Administracion() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [userForm, setUserForm] = useState({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor" as Usuario["rol"], email: "" });
+  const [showPassword, setShowPassword] = useState(false);
 
   // Cuentas por Pagar
   const [showPagarModal, setShowPagarModal] = useState(false);
