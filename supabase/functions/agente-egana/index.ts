@@ -213,12 +213,12 @@ async function getConversationHistory(
   supabase: ReturnType<typeof createClient>,
   conversationId: string,
   limit = 12,
-): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+): Promise<Array<{ role: "user" | "assistant"; content: string; sentAt: string }>> {
   if (!conversationId) return [];
 
   const { data: msgs } = await supabase
     .from("messages")
-    .select("direction, content")
+    .select("direction, content, sent_at, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
     .limit(limit);
@@ -228,6 +228,8 @@ async function getConversationHistory(
   return msgs.map((m: { direction: string; content: string }) => ({
     role: m.direction === "inbound" ? "user" : "assistant",
     content: m.content,
+    sentAt: (m as { sent_at?: string | null; created_at?: string }).sent_at ||
+      (m as { sent_at?: string | null; created_at?: string }).created_at || "",
   }));
 }
 
@@ -504,11 +506,21 @@ Deno.serve(async (req) => {
     const history = conversationId
       ? await getConversationHistory(supabase, conversationId, 20)
       : [];
-    const outboundMessages = history.filter((m) => m.role === "assistant");
+    const inboundReferenceMs = Number.isFinite(new Date(inboundSentAt).getTime())
+      ? new Date(inboundSentAt).getTime()
+      : Date.now();
+    const sessionTimeoutMs = 30 * 60 * 1000;
+    const sessionHistory = history.filter((m) => {
+      const messageTs = new Date(m.sentAt).getTime();
+      if (!Number.isFinite(messageTs)) return true;
+      return inboundReferenceMs - messageTs <= sessionTimeoutMs;
+    });
+
+    const outboundMessages = sessionHistory.filter((m) => m.role === "assistant");
     const isFirstContact = outboundMessages.length === 0;
 
     // ── Detect if client already provided name/phone ───────────────────────────
-    const allUserMessages = history.filter((m) =>
+    const allUserMessages = sessionHistory.filter((m) =>
       m.role === "user"
     ).map((m) => m.content).join(" ") + " " + mensajeCliente;
     const extractedName = extractNameFromMessage(mensajeCliente);
@@ -562,7 +574,7 @@ Deno.serve(async (req) => {
 
     // Helper: try to find previously captured name from history
     const findCapturedName = (): string => {
-      const userMsgs = history.filter((m) => m.role === "user").map((m) =>
+      const userMsgs = sessionHistory.filter((m) => m.role === "user").map((m) =>
         m.content
       ).reverse();
       for (const msg of userMsgs) {
@@ -573,7 +585,7 @@ Deno.serve(async (req) => {
     };
 
     const findCapturedPhone = (): string => {
-      const userMsgs = history.filter((m) => m.role === "user").map((m) =>
+      const userMsgs = sessionHistory.filter((m) => m.role === "user").map((m) =>
         m.content
       ).reverse();
       for (const msg of userMsgs) {
