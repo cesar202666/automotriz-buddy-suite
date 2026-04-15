@@ -116,6 +116,14 @@ interface DiaHorario {
   fin: string;
 }
 
+interface RotacionVendedor {
+  vendedor_id: string;
+  nombre: string;
+  sucursal: string;
+  activo: boolean;
+  consecutivos: number;
+}
+
 // ── Helper: upsert a single key in configuracion_sistema ─────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sbAny = supabase as any;
