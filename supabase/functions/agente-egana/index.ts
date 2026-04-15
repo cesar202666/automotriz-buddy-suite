@@ -371,7 +371,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Check if conversation is already escalated (cooldown 10 days) ─────────
+    // ── Check if conversation is already escalated ─────────────────────────────
+    // Once escalated, the bot NEVER responds again unless manually reactivated
+    // (by setting escalated=false on the conversation)
     if (conversationId) {
       const { data: conv } = await supabase
         .from("conversations")
@@ -380,15 +382,7 @@ Deno.serve(async (req) => {
         .single();
 
       if (conv?.escalated) {
-        // Check 10-day cooldown: if escalated less than 10 days ago, don't respond
-        const escalatedAt = conv.escalated_at
-          ? new Date(conv.escalated_at)
-          : null;
-        const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
-        const withinCooldown = escalatedAt &&
-          (Date.now() - escalatedAt.getTime()) < tenDaysMs;
-
-        // Always save inbound message
+        // Always save inbound message so the seller can see it
         const nowIso = new Date().toISOString();
         const insertedInbound = await ensureInboundMessage(supabase, {
           conversationId,
@@ -409,28 +403,11 @@ Deno.serve(async (req) => {
           })
           .eq("id", conversationId);
 
-        if (withinCooldown) {
-          // Within 10-day cooldown: don't respond, vendor handles it
-          return new Response(
-            JSON.stringify({ messages: [] }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        } else {
-          // Cooldown expired: create a NEW conversation so agent starts fresh
-          const { data: newConv } = await supabase
-            .from("conversations")
-            .insert({
-              contact_id: contactId,
-              channel: canal,
-              status: "active",
-              last_message: mensajeCliente,
-              last_message_at: new Date().toISOString(),
-              unread_count: 0,
-            })
-            .select("id")
-            .single();
-          if (newConv?.id) conversationId = newConv.id;
-        }
+        // Bot does NOT respond — seller handles from now on
+        return new Response(
+          JSON.stringify({ messages: [] }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
     }
 
