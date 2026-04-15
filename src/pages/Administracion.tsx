@@ -52,22 +52,31 @@ const buildUserFromForm = (id: string, form: UserFormState): Usuario => ({
   ...form,
 });
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isUuid = (value: string | null | undefined): value is string => Boolean(value && UUID_PATTERN.test(value));
+
 async function syncUserToVendedores(previousUser: Usuario | null, nextUser: Usuario) {
   const previousEmail = previousUser?.email?.trim().toLowerCase() ?? "";
   const nextEmail = nextUser.email.trim().toLowerCase();
-
-  if (!previousEmail && !nextEmail) return;
+  const nextTelefono = nextUser.telefono.trim();
+  const nextNombreCompleto = getNombreCompleto(nextUser);
 
   const vendedorPayload = {
-    nombre: getNombreCompleto(nextUser),
+    nombre: nextNombreCompleto,
     email: nextEmail || previousEmail,
-    telefono: nextUser.telefono,
+    telefono: nextTelefono,
     activo: true,
   };
 
-  let vendedorId: string | null = null;
+  let vendedorId: string | null = isUuid(previousUser?.id) ? previousUser.id : isUuid(nextUser.id) ? nextUser.id : null;
 
-  if (previousEmail) {
+  if (vendedorId) {
+    const { data } = await supabase.from("vendedores").select("id").eq("id", vendedorId).maybeSingle();
+    vendedorId = data?.id ?? null;
+  }
+
+  if (!vendedorId && previousEmail) {
     const { data } = await supabase.from("vendedores").select("id").eq("email", previousEmail).maybeSingle();
     vendedorId = data?.id ?? null;
   }
@@ -77,17 +86,36 @@ async function syncUserToVendedores(previousUser: Usuario | null, nextUser: Usua
     vendedorId = data?.id ?? null;
   }
 
-  if (vendedorId) {
-    await supabase.from("vendedores").update(vendedorPayload).eq("id", vendedorId);
-    return;
+  if (!vendedorId && !nextEmail && nextNombreCompleto && nextTelefono) {
+    const { data } = await supabase
+      .from("vendedores")
+      .select("id")
+      .eq("nombre", nextNombreCompleto)
+      .eq("telefono", nextTelefono)
+      .maybeSingle();
+    vendedorId = data?.id ?? null;
   }
 
-  if (nextEmail) {
-    await supabase.from("vendedores").insert({
-      ...vendedorPayload,
-      sucursal: "Principal",
-    });
+  if (!vendedorId && !nextEmail && nextNombreCompleto) {
+    const { data } = await supabase
+      .from("vendedores")
+      .select("id")
+      .eq("nombre", nextNombreCompleto)
+      .maybeSingle();
+    vendedorId = data?.id ?? null;
   }
+
+  if (vendedorId) {
+    await supabase.from("vendedores").update(vendedorPayload).eq("id", vendedorId);
+    return vendedorId;
+  }
+
+  const { data } = await supabase.from("vendedores").insert({
+    ...vendedorPayload,
+    sucursal: "Principal",
+  }).select("id").single();
+
+  return data?.id ?? null;
 }
 
 export default function Administracion() {
@@ -148,14 +176,20 @@ export default function Administracion() {
     setUserSaveState("saving");
 
     const timeoutId = window.setTimeout(async () => {
-      const usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+      let usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+      const vendedorId = await syncUserToVendedores(usuarioBase, usuarioActualizado);
+
+      if (vendedorId && vendedorId !== usuarioActualizado.id) {
+        usuarioActualizado = { ...usuarioActualizado, id: vendedorId };
+        setEditUserId(vendedorId);
+      }
+
       setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
 
       if (usuarioActual?.id === editUserId) {
         setUsuarioActual(usuarioActualizado);
       }
 
-      await syncUserToVendedores(usuarioBase, usuarioActualizado);
       setUserSaveState("saved");
     }, 450);
 
@@ -246,20 +280,28 @@ export default function Administracion() {
 
     if (editUserId) {
       const usuarioAnterior = usuarios.find((u) => u.id === editUserId) ?? null;
-      const usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+      let usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+
+      const vendedorId = await syncUserToVendedores(usuarioAnterior, usuarioActualizado);
+      if (vendedorId && vendedorId !== usuarioActualizado.id) {
+        usuarioActualizado = { ...usuarioActualizado, id: vendedorId };
+      }
 
       setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
 
       if (usuarioActual?.id === editUserId) {
         setUsuarioActual(usuarioActualizado);
       }
-
-      await syncUserToVendedores(usuarioAnterior, usuarioActualizado);
     } else {
       const nuevoId = String(Date.now());
-      const nuevoUsuario = buildUserFromForm(nuevoId, normalizedForm);
+      let nuevoUsuario = buildUserFromForm(nuevoId, normalizedForm);
+      const vendedorId = await syncUserToVendedores(null, nuevoUsuario);
+
+      if (vendedorId) {
+        nuevoUsuario = { ...nuevoUsuario, id: vendedorId };
+      }
+
       setUsuarios([...usuarios, nuevoUsuario]);
-      await syncUserToVendedores(null, nuevoUsuario);
     }
 
     setUserForm(normalizedForm);
@@ -269,8 +311,15 @@ export default function Administracion() {
 
   const deleteUser = async (u: Usuario) => {
     setUsuarios(usuarios.filter(x => x.id !== u.id));
-    // Sync: desactivar en tabla vendedores (no eliminar para preservar historial)
-    await supabase.from("vendedores").update({ activo: false }).eq("email", u.email);
+
+    if (isUuid(u.id)) {
+      await supabase.from("vendedores").update({ activo: false }).eq("id", u.id);
+      return;
+    }
+
+    if (u.email.trim()) {
+      await supabase.from("vendedores").update({ activo: false }).eq("email", u.email.trim().toLowerCase());
+    }
   };
 
   // === CUENTAS POR PAGAR ===

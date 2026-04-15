@@ -180,6 +180,142 @@ function saveUsuariosToStorage(usuarios: Usuario[]) {
   localStorage.setItem("ea_usuarios_sistema", JSON.stringify(usuarios));
 }
 
+type VendedorUsuarioRow = {
+  id: string;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  activo: boolean | null;
+  created_at: string;
+};
+
+function normalizeUserValue(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function normalizePhoneValue(value: string | null | undefined) {
+  return (value ?? "").replace(/\s+/g, "").trim();
+}
+
+function splitNombreCompleto(nombreCompleto: string) {
+  const limpio = nombreCompleto.trim().replace(/\s+/g, " ");
+  if (!limpio) return { nombre: "", apellido: "" };
+
+  const [nombre, ...resto] = limpio.split(" ");
+  return {
+    nombre,
+    apellido: resto.join(" "),
+  };
+}
+
+function getUsuarioMergeKeys(usuario: Pick<Usuario, "nombre" | "apellido" | "email" | "telefono">) {
+  const keys = new Set<string>();
+  const email = normalizeUserValue(usuario.email);
+  const nombreCompleto = normalizeUserValue(`${usuario.nombre} ${usuario.apellido}`);
+  const telefono = normalizePhoneValue(usuario.telefono);
+
+  if (email) keys.add(`email:${email}`);
+  if (nombreCompleto) keys.add(`name:${nombreCompleto}`);
+  if (nombreCompleto && telefono) keys.add(`name-phone:${nombreCompleto}:${telefono}`);
+
+  return Array.from(keys);
+}
+
+function getVendedorMergeKeys(vendedor: Pick<VendedorUsuarioRow, "nombre" | "email" | "telefono">) {
+  const keys = new Set<string>();
+  const email = normalizeUserValue(vendedor.email);
+  const nombre = normalizeUserValue(vendedor.nombre);
+  const telefono = normalizePhoneValue(vendedor.telefono);
+
+  if (email) keys.add(`email:${email}`);
+  if (nombre) keys.add(`name:${nombre}`);
+  if (nombre && telefono) keys.add(`name-phone:${nombre}:${telefono}`);
+
+  return Array.from(keys);
+}
+
+function vendedorScore(vendedor: VendedorUsuarioRow) {
+  return (normalizeUserValue(vendedor.email) ? 2 : 0) + (normalizePhoneValue(vendedor.telefono) ? 1 : 0);
+}
+
+function dedupeVendedores(vendedores: VendedorUsuarioRow[]) {
+  const byKey = new Map<string, VendedorUsuarioRow>();
+
+  vendedores
+    .filter((vendedor) => vendedor.activo !== false)
+    .forEach((vendedor) => {
+      const key = normalizeUserValue(vendedor.email)
+        ? `email:${normalizeUserValue(vendedor.email)}`
+        : `name:${normalizeUserValue(vendedor.nombre)}`;
+
+      const current = byKey.get(key);
+      if (!current || vendedorScore(vendedor) > vendedorScore(current)) {
+        byKey.set(key, vendedor);
+      }
+    });
+
+  return Array.from(byKey.values());
+}
+
+function mergeUsuariosWithVendedores(baseUsuarios: Usuario[], vendedores: VendedorUsuarioRow[]) {
+  const merged = [...baseUsuarios];
+  const keyToIndex = new Map<string, number>();
+
+  merged.forEach((usuario, index) => {
+    getUsuarioMergeKeys(usuario).forEach((key) => keyToIndex.set(key, index));
+  });
+
+  dedupeVendedores(vendedores).forEach((vendedor) => {
+    const matchedIndex = getVendedorMergeKeys(vendedor)
+      .map((key) => keyToIndex.get(key))
+      .find((index): index is number => typeof index === "number");
+
+    const nombreSeparado = splitNombreCompleto(vendedor.nombre);
+    const restoredUser: Usuario = {
+      id: vendedor.id,
+      nombre: nombreSeparado.nombre,
+      apellido: nombreSeparado.apellido,
+      telefono: vendedor.telefono ?? "",
+      clave: "",
+      rol: "vendedor",
+      email: normalizeUserValue(vendedor.email),
+    };
+
+    if (typeof matchedIndex === "number") {
+      const existing = merged[matchedIndex];
+      const mergedUser: Usuario = {
+        ...restoredUser,
+        ...existing,
+        telefono: existing.telefono || restoredUser.telefono,
+        email: existing.email || restoredUser.email,
+      };
+
+      merged[matchedIndex] = mergedUser;
+      getUsuarioMergeKeys(mergedUser).forEach((key) => keyToIndex.set(key, matchedIndex));
+      return;
+    }
+
+    merged.push(restoredUser);
+    const newIndex = merged.length - 1;
+    getUsuarioMergeKeys(restoredUser).forEach((key) => keyToIndex.set(key, newIndex));
+  });
+
+  return merged;
+}
+
+function findMatchingUsuario(usuario: Usuario | null, usuarios: Usuario[]) {
+  if (!usuario) return null;
+
+  const email = normalizeUserValue(usuario.email);
+  const nombreCompleto = normalizeUserValue(`${usuario.nombre} ${usuario.apellido}`);
+
+  return usuarios.find((item) =>
+    item.id === usuario.id ||
+    (email && normalizeUserValue(item.email) === email) ||
+    normalizeUserValue(`${item.nombre} ${item.apellido}`) === nombreCompleto
+  ) ?? null;
+}
+
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
 function toDb(v: Vehiculo) {
@@ -293,6 +429,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (u) localStorage.setItem("ea_usuario_actual", JSON.stringify(u));
     else localStorage.removeItem("ea_usuario_actual");
   };
+
+  useEffect(() => {
+    const restoreUsuariosFromBackend = async () => {
+      const { data, error } = await supabase
+        .from("vendedores")
+        .select("id, nombre, email, telefono, activo, created_at")
+        .eq("activo", true)
+        .order("created_at", { ascending: true });
+
+      if (error || !data) return;
+
+      const restoredUsuarios = mergeUsuariosWithVendedores(
+        loadUsuariosFromStorage(),
+        data as VendedorUsuarioRow[]
+      );
+
+      setUsuariosInternal(restoredUsuarios);
+      saveUsuariosToStorage(restoredUsuarios);
+
+      const usuarioSincronizado = findMatchingUsuario(usuarioActual, restoredUsuarios);
+      if (usuarioSincronizado) {
+        setUsuarioActualInternal(usuarioSincronizado);
+        localStorage.setItem("ea_usuario_actual", JSON.stringify(usuarioSincronizado));
+      }
+    };
+
+    restoreUsuariosFromBackend();
+  }, []);
 
   // ── Load vehicles from DB on mount ─────────────────────────────────────────
   useEffect(() => {
