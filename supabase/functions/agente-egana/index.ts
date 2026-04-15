@@ -504,7 +504,7 @@ Deno.serve(async (req) => {
           leadId = existingLead.id
           await supabase
             .from('leads')
-            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: calificacion !== 'frio' ? 'calificado' : 'contactado', calificacion })
+            .update({ nombre: leadNombre, telefono: leadTelefono, score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: calificacion !== 'frio' ? 'calificado' : 'contactado', calificacion })
             .eq('id', existingLead.id)
         }
       } else {
