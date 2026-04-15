@@ -187,6 +187,7 @@ type VendedorUsuarioRow = {
   telefono: string | null;
   clave: string | null;
   activo: boolean | null;
+  rol: string | null;
   created_at: string;
 };
 
