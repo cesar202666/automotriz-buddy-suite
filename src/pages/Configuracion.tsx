@@ -668,7 +668,99 @@ export default function Configuracion() {
           </div>
         </Card>
 
-        {/* ── TARJETA 3: Horarios ───────────────────────────────────────────── */}
+        {/* ── TARJETA: Rotación de Vendedores ──────────────────────────────── */}
+        <Card>
+          <CardHeader
+            icon={<RotateCw size={18} style={{ color: "hsl(var(--primary))" }} />}
+            title="Rotación de Vendedores"
+            subtitle="Orden y cantidad de clientes que el agente IA asigna a cada vendedor"
+            badge={
+              rotacionVendedores.filter(v => v.activo).length > 0
+                ? <span className="flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#dcfce7", color: "#16a34a" }}><CheckCircle size={13} /> {rotacionVendedores.filter(v => v.activo).length} activos</span>
+                : <span className="flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#fee2e2", color: "#dc2626" }}><XCircle size={13} /> Sin vendedores</span>
+            }
+          />
+          <div className="space-y-4">
+            <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+              Ordena los vendedores de arriba a abajo. El agente asignará clientes en ese orden. 
+              Puedes definir cuántos clientes consecutivos recibe cada vendedor antes de pasar al siguiente, 
+              y desactivar vendedores que no quieras incluir en la rotación.
+            </p>
+
+            <div className="border rounded-lg overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ background: "hsl(var(--muted))" }}>
+                    <th className="px-3 py-2 text-left text-xs font-semibold w-10">#</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold">Vendedor</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold">Activo</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold">Clientes seguidos</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold w-20">Orden</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rotacionVendedores.map((v, i) => (
+                    <tr key={v.vendedor_id} className="border-t" style={{ borderColor: "hsl(var(--border))", opacity: v.activo ? 1 : 0.5 }}>
+                      <td className="px-3 py-2 text-xs font-bold" style={{ color: "hsl(var(--primary))" }}>{i + 1}</td>
+                      <td className="px-3 py-2">
+                        <span className="text-xs font-medium">{v.nombre}</span>
+                        {v.sucursal && <span className="text-xs ml-1" style={{ color: "hsl(var(--muted-foreground))" }}>— {v.sucursal}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <Toggle value={v.activo} onChange={() => toggleVendedorRotacion(i)} />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="number"
+                          min={1}
+                          max={99}
+                          className="w-16 border rounded px-2 py-1 text-xs text-center bg-background"
+                          style={{ borderColor: "hsl(var(--border))" }}
+                          value={v.consecutivos}
+                          onChange={e => setConsecutivosRotacion(i, Number(e.target.value))}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => moveVendedorRotacion(i, "up")}
+                            disabled={i === 0}
+                            className="p-1 rounded hover:bg-muted disabled:opacity-30"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                          <button
+                            onClick={() => moveVendedorRotacion(i, "down")}
+                            disabled={i === rotacionVendedores.length - 1}
+                            className="p-1 rounded hover:bg-muted disabled:opacity-30"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {rotacionVendedores.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-6 text-center text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vendedores registrados. Agrega vendedores en la sección Administración.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={saveRotacion}
+                disabled={savingRotacion}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: "hsl(var(--primary))" }}
+              >
+                {savingRotacion ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : <><CheckCircle size={14} /> Guardar rotación</>}
+              </button>
+              <SavedBadge saved={rotacionSaved} />
+            </div>
+          </div>
+        </Card>
+
         <Card>
           <CardHeader
             icon={<Clock size={18} style={{ color: "hsl(var(--primary))" }} />}
