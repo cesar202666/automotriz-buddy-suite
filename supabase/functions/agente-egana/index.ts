@@ -574,10 +574,10 @@ Deno.serve(async (req) => {
       return "";
     };
 
-    const knownClientName = extractedName || findCapturedName() ||
-      storedContactName;
-    const knownClientPhone = extractedPhone || findCapturedPhone() ||
-      storedContactPhone;
+    // ONLY use data captured within the current conversation — never from stored contact records
+    // This ensures the agent always asks for name/phone on new conversations
+    const knownClientName = extractedName || findCapturedName();
+    const knownClientPhone = extractedPhone || findCapturedPhone();
 
     let capturedClientName = "";
     let capturedClientPhone = "";
