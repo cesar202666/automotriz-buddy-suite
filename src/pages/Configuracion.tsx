@@ -234,6 +234,11 @@ export default function Configuracion() {
   const [savingHorarios, setSavingHorarios] = useState(false);
   const [horariosSaved, setHorariosSaved] = useState<boolean | null>(null);
 
+  // ── Rotación de Vendedores ──────────────────────────────────────────────
+  const [rotacionVendedores, setRotacionVendedores] = useState<RotacionVendedor[]>([]);
+  const [savingRotacion, setSavingRotacion] = useState(false);
+  const [rotacionSaved, setRotacionSaved] = useState<boolean | null>(null);
+
   // Load config from DB on mount
   useEffect(() => {
     if (!authenticated) return;
