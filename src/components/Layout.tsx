@@ -150,7 +150,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     const { data, error } = await supabase
       .from("vendedores")
-      .select("id, nombre, email, telefono, clave, activo")
+      .select("id, nombre, email, telefono, clave, activo, rol")
       .eq("activo", true)
       .eq("clave", claveIngresada)
       .limit(1)
