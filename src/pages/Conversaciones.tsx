@@ -1515,17 +1515,17 @@ function TabMetricas() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Tiempo promedio de respuesta por vendedor */}
         <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-          <h3 className="text-sm font-bold mb-4">Tiempo promedio de respuesta por vendedor (horas)</h3>
+          <h3 className="text-sm font-bold mb-4">Tiempo promedio de respuesta por vendedor (minutos)</h3>
           {tiempoRespuestaData.length > 0 ? (
             <ResponsiveContainer width="100%" height={Math.max(240, tiempoRespuestaData.length * 48)}>
-              <BarChart data={tiempoRespuestaData} layout="vertical" margin={{ left: 32, right: 12 }}>
+              <BarChart data={tiempoRespuestaData} layout="vertical" margin={{ left: 10, right: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11 }} unit="h" />
+                <XAxis type="number" tick={{ fontSize: 11 }} unit="min" />
                 <YAxis type="category" dataKey="vendedor" width={140} tick={{ fontSize: 11 }} tickFormatter={(v) => v.length > 18 ? `${v.slice(0, 18)}…` : v} />
-                <Tooltip formatter={(value: number) => [`${value} horas`, "Promedio"]} />
-                <Bar dataKey="promedio" name="Promedio (hrs)" fill="hsl(42 96% 56%)" radius={[0, 8, 8, 0]}>
+                <Tooltip formatter={(value: number) => [`${value} min`, "Promedio"]} />
+                <Bar dataKey="promedio" name="Promedio (min)" fill="hsl(42 96% 56%)" radius={[0, 8, 8, 0]}>
                   {tiempoRespuestaData.map((entry, i) => (
-                    <Cell key={i} fill={entry.promedio > 24 ? "hsl(2 84% 60%)" : entry.promedio > 4 ? "hsl(42 96% 56%)" : "hsl(var(--success))"} />
+                    <Cell key={i} fill={entry.promedio > 30 ? "hsl(2 84% 60%)" : entry.promedio > 15 ? "hsl(42 96% 56%)" : "hsl(var(--success))"} />
                   ))}
                 </Bar>
               </BarChart>
