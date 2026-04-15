@@ -342,13 +342,19 @@ function TabMensajes() {
     setMessagesLoading(false);
   }, []);
 
+  const selectedConvRef = useRef<string | null>(null);
+  selectedConvRef.current = selectedConvId;
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+
   useEffect(() => {
     if (selectedConvId) {
       const selected = conversations.find((c) => c.id === selectedConvId);
       loadMessages(selectedConvId, selected?.contact_id, selected?.channel);
     }
     else setMessages([]);
-  }, [selectedConvId, conversations, loadMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConvId, loadMessages]);
 
   const markRead = async (convId: string) => {
     await supabase.from("conversations").update({ unread_count: 0 }).eq("id", convId);
@@ -357,20 +363,24 @@ function TabMensajes() {
 
   useEffect(() => {
     if (!realtime) return;
-    const convChannel = supabase.channel("conv-rt").on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, async () => { await loadConversations(); }).subscribe();
+    const convChannel = supabase.channel("conv-rt").on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, async () => { await loadConversations(true); }).subscribe();
     const msgChannel = supabase.channel("msg-rt").on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
       const newMsg = payload.new as Message;
-      const selected = conversations.find((c) => c.id === selectedConvId);
+      const curSelected = selectedConvRef.current;
+      const selected = conversationsRef.current.find((c) => c.id === curSelected);
       if (!selected) return;
 
-      const sameConversation = newMsg.conversation_id === selectedConvId;
+      const sameConversation = newMsg.conversation_id === curSelected;
       const sameContact = newMsg.contact_id && selected.contact_id && newMsg.contact_id === selected.contact_id;
       const sameChannel = !selected.channel || newMsg.channel === selected.channel;
 
       if ((sameConversation || sameContact) && sameChannel) {
         setMessages((prev) => {
+          // Skip if already exists (including optimistic temp messages with same content)
           if (prev.find((m) => m.id === newMsg.id)) return prev;
-          const ordered = [...prev, newMsg].sort((a, b) => {
+          // Remove optimistic temp message with same content
+          const filtered = prev.filter((m) => !(m.id.startsWith('temp-') && m.content === newMsg.content && m.direction === newMsg.direction));
+          const ordered = [...filtered, newMsg].sort((a, b) => {
             const aTs = new Date(a.sent_at || a.created_at).getTime();
             const bTs = new Date(b.sent_at || b.created_at).getTime();
             return aTs - bTs;
@@ -380,7 +390,7 @@ function TabMensajes() {
       }
     }).subscribe();
     return () => { supabase.removeChannel(convChannel); supabase.removeChannel(msgChannel); };
-  }, [realtime, loadConversations, selectedConvId, conversations]);
+  }, [realtime, loadConversations]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
