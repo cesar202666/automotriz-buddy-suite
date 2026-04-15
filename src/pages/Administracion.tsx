@@ -123,8 +123,8 @@ export default function Administracion() {
     .slice(0, 10);
 
   // === USUARIOS ===
-  const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowUserModal(true); };
-  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowUserModal(true); };
+  const openCreateUser = () => { setUserForm({ nombre: "", apellido: "", telefono: "", clave: "", rol: "vendedor", email: "" }); setEditUserId(null); setShowPassword(false); setShowUserModal(true); };
+  const openEditUser = (u: Usuario) => { setUserForm({ nombre: u.nombre, apellido: u.apellido || "", telefono: u.telefono || "", clave: u.clave, rol: u.rol, email: u.email }); setEditUserId(u.id); setShowPassword(false); setShowUserModal(true); };
   const saveUser = async () => {
     if (!userForm.nombre.trim()) return alert("Nombre requerido");
     const nombreCompleto = `${userForm.nombre}${userForm.apellido ? " " + userForm.apellido : ""}`.trim();
