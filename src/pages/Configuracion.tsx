@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Wrench, Key, Lock, CheckCircle, XCircle, Loader2, Eye, EyeOff,
   Cpu, Globe, Copy, ChevronDown, ChevronUp, Bot, Users, Clock,
-  AlertCircle, Settings2,
+  AlertCircle, Settings2, ArrowUp, ArrowDown, RotateCw,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
