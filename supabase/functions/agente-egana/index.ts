@@ -35,6 +35,25 @@ function extractUrls(text: string): string[] {
   return text.match(/https?:\/\/[^\s]+/g) || []
 }
 
+function normalizePersonName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return name.trim()
+
+  const normalizeToken = (token: string) => token.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const firstToken = normalizeToken(parts[0])
+  let nextIndex = 1
+
+  while (nextIndex < parts.length && normalizeToken(parts[nextIndex]) === firstToken) {
+    nextIndex += 1
+  }
+
+  return [parts[0], ...parts.slice(nextIndex)].join(' ')
+}
+
+function getFirstName(name: string): string {
+  return normalizePersonName(name).split(/\s+/)[0] || 'Cliente'
+}
+
 async function fetchUrlContent(url: string): Promise<string> {
   try {
     const res = await fetch(url, {
@@ -386,7 +405,7 @@ Deno.serve(async (req) => {
       for (const msg of userMsgs) {
         const trimmed = msg.trim()
         if (/^[a-záéíóúñA-ZÁÉÍÓÚÑ]+\s+[a-záéíóúñA-ZÁÉÍÓÚÑ]+/i.test(trimmed) && trimmed.split(/\s+/).length >= 2 && trimmed.length < 60) {
-          return trimmed
+          return normalizePersonName(trimmed)
         }
       }
       return ''
@@ -399,9 +418,8 @@ Deno.serve(async (req) => {
       if (isFirstContact) {
         respuesta = `¡Hola! 😊 Bienvenido/a a Egaña Automotriz. Para atenderte de la mejor forma, ¿podrías indicarme tu nombre completo y apellido por favor?`
       } else if (looksLikeName && !alreadyEscalated) {
-        const parts = mensajeCliente.trim().split(/\s+/)
-        capturedClientName = mensajeCliente.trim()
-        const clienteNombre = parts[0] || nombre
+        capturedClientName = normalizePersonName(mensajeCliente)
+        const clienteNombre = getFirstName(capturedClientName || nombre)
 
         // Update contact name
         await supabase.from('contacts').update({ name: capturedClientName }).eq('id', contactId)
@@ -425,17 +443,17 @@ Deno.serve(async (req) => {
         // Client provided phone — also find name from earlier messages
         const phoneToSave = extractedPhone.startsWith('+') ? extractedPhone : `+56${extractedPhone}`
         capturedClientPhone = phoneToSave
-        capturedClientName = findCapturedName() || nombre || 'Cliente IG'
+        capturedClientName = normalizePersonName(findCapturedName() || nombre || 'Cliente IG')
 
         await supabase.from('contacts').update({ phone: phoneToSave, name: capturedClientName }).eq('id', contactId)
 
         const waLink = 'https://wa.me/message/QCXBGVU5I7MHM1'
-        respuesta = `¡Gracias ${capturedClientName.split(/\s+/)[0]}! 🙌 Ya registré tus datos. Nuestro ejecutivo${vendedorAsignado ? ` ${vendedorAsignado}` : ''} te contactará de inmediato. También puedes escribirnos por WhatsApp: ${waLink}`
+        respuesta = `¡Gracias ${getFirstName(capturedClientName)}! 🙌 Ya registré tus datos. Nuestro ejecutivo${vendedorAsignado ? ` ${vendedorAsignado}` : ''} te contactará de inmediato. También puedes escribirnos por WhatsApp: ${waLink}`
         shouldEscalate = true
         clienteCreado = true
       } else if (looksLikeName && !looksLikePhone) {
-        capturedClientName = mensajeCliente.trim()
-        respuesta = `¡Gracias ${mensajeCliente.split(/\s+/)[0]}! ¿Podrías también darme tu número de teléfono para que un ejecutivo te contacte? 📱`
+        capturedClientName = normalizePersonName(mensajeCliente)
+        respuesta = `¡Gracias ${getFirstName(capturedClientName)}! ¿Podrías también darme tu número de teléfono para que un ejecutivo te contacte? 📱`
         await supabase.from('contacts').update({ name: capturedClientName }).eq('id', contactId)
       } else {
         respuesta = `Para derivarte con un ejecutivo, necesito tu nombre y número de teléfono 😊`
@@ -468,12 +486,7 @@ Deno.serve(async (req) => {
 
     if (shouldEscalate) {
       // Use the captured name (from conversation) or fallback
-      // Deduplicate first name (e.g. "Cesar Cesar Mansilla" → "Cesar Mansilla")
-      let leadNombre = capturedClientName || nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente'
-      const nameParts = leadNombre.trim().split(/\s+/)
-      if (nameParts.length >= 2 && nameParts[0].toLowerCase() === nameParts[1].toLowerCase()) {
-        leadNombre = nameParts.slice(1).join(' ')
-      }
+      let leadNombre = normalizePersonName(capturedClientName || nombre || mensajeCliente.split(/\s+/)[0] || 'Cliente')
       const leadTelefono = capturedClientPhone || telefono || extractedPhone
 
       const leadData = {
