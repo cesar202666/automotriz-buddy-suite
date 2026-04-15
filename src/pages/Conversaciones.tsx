@@ -1379,20 +1379,20 @@ function TabMetricas() {
     }, {} as Record<string, { vendedor: string; asignados: number; respondidos: number; noRespondidos: number }>)
   ).sort((a, b) => b.asignados - a.asignados);
 
-  // Tiempo promedio de respuesta por vendedor (horas)
+  // Tiempo promedio de respuesta por vendedor (minutos)
   const tiempoRespuestaData = Object.values(
     filteredLeads.reduce((acc, lead) => {
-      if (!lead.vendedor_asignado?.trim() || !lead.primer_apertura_at) return acc;
-      const vendedor = lead.vendedor_asignado.trim();
+      const vendedor = lead.vendedor_asignado?.trim();
+      if (!vendedor || !lead.primer_apertura_at) return acc;
       const creado = new Date(lead.created_at).getTime();
       const apertura = new Date(lead.primer_apertura_at).getTime();
-      const diffHours = Math.max(0, (apertura - creado) / 3600000);
-      if (!acc[vendedor]) acc[vendedor] = { vendedor, totalHoras: 0, count: 0, promedio: 0 };
-      acc[vendedor].totalHoras += diffHours;
+      const diffMinutes = Math.max(0, (apertura - creado) / 60000);
+      if (!acc[vendedor]) acc[vendedor] = { vendedor, totalMinutos: 0, count: 0, promedio: 0 };
+      acc[vendedor].totalMinutos += diffMinutes;
       acc[vendedor].count += 1;
-      acc[vendedor].promedio = Math.round((acc[vendedor].totalHoras / acc[vendedor].count) * 10) / 10;
+      acc[vendedor].promedio = Math.round(acc[vendedor].totalMinutos / acc[vendedor].count);
       return acc;
-    }, {} as Record<string, { vendedor: string; totalHoras: number; count: number; promedio: number }>)
+    }, {} as Record<string, { vendedor: string; totalMinutos: number; count: number; promedio: number }>)
   ).sort((a, b) => a.promedio - b.promedio);
 
   // No respondidos por vendedor
