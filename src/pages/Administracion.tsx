@@ -531,7 +531,12 @@ export default function Administracion() {
               <div><label className="block text-xs font-medium mb-1">Email</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.email} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1">Contraseña</label>
-                <input type="password" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.clave} onChange={e => setUserForm(f => ({ ...f, clave: e.target.value }))} /></div>
+                <div className="relative">
+                  <input type={showPassword ? "text" : "password"} className="w-full border rounded px-3 py-2 text-sm bg-background pr-9" style={{ borderColor: "hsl(var(--border))" }} value={userForm.clave} onChange={e => setUserForm(f => ({ ...f, clave: e.target.value }))} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div></div>
               <div><label className="block text-xs font-medium mb-1">Rol</label>
                 <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.rol} onChange={e => setUserForm(f => ({ ...f, rol: e.target.value as Usuario["rol"] }))}>
                   <option value="master">Admin Master</option>
