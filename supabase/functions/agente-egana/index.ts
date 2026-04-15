@@ -454,8 +454,12 @@ Deno.serve(async (req) => {
         .maybeSingle()
 
       if (existingLead && existingLead.calificacion !== calificacion) {
-        await supabase.from('leads').update({ calificacion }).eq('id', existingLead.id)
-        console.log(`[RECLASIFICACION] Lead ${existingLead.id}: ${existingLead.calificacion} → ${calificacion}`)
+        const updateData: Record<string, string> = { calificacion }
+        if (calificacion !== 'frio') {
+          updateData.etapa = 'calificado'
+        }
+        await supabase.from('leads').update(updateData).eq('id', existingLead.id)
+        console.log(`[RECLASIFICACION] Lead ${existingLead.id}: ${existingLead.calificacion} → ${calificacion}, etapa → ${updateData.etapa || 'sin cambio'}`)
       }
     }
 
@@ -471,7 +475,7 @@ Deno.serve(async (req) => {
         nombre: leadNombre,
         telefono: leadTelefono,
         canal: isWhatsApp ? 'whatsapp' : canal,
-        etapa: 'contactado',
+        etapa: calificacion !== 'frio' ? 'calificado' : 'contactado',
         score: isWhatsApp ? score : 0,
         urgencia: score >= 70 ? 'alta' : score >= 40 ? 'media' : 'baja',
         vendedor_asignado: vendedorAsignado,
@@ -495,7 +499,7 @@ Deno.serve(async (req) => {
           leadId = existingLead.id
           await supabase
             .from('leads')
-            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: 'contactado', calificacion })
+            .update({ score: isWhatsApp ? score : undefined, vendedor_asignado: vendedorAsignado, etapa: calificacion !== 'frio' ? 'calificado' : 'contactado', calificacion })
             .eq('id', existingLead.id)
         }
       } else {
