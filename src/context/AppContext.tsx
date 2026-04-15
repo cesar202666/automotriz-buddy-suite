@@ -165,6 +165,21 @@ const USUARIOS_INICIALES: Usuario[] = [
   { id: "3", nombre: "Nicol", apellido: "M.", telefono: "", clave: "nicol123", rol: "vendedor", email: "nicol@egana.cl" },
 ];
 
+function loadUsuariosFromStorage(): Usuario[] {
+  try {
+    const saved = localStorage.getItem("ea_usuarios_sistema");
+    if (saved) {
+      const parsed = JSON.parse(saved) as Usuario[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return USUARIOS_INICIALES;
+}
+
+function saveUsuariosToStorage(usuarios: Usuario[]) {
+  localStorage.setItem("ea_usuarios_sistema", JSON.stringify(usuarios));
+}
+
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
 function toDb(v: Vehiculo) {
