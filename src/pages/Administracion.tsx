@@ -183,43 +183,7 @@ export default function Administracion() {
   const [editCobrarId, setEditCobrarId] = useState<string | null>(null);
   const [cobrarForm, setCobrarForm] = useState<Omit<CuentaCobrar, "id">>({ idVenta: "", patente: "", fechaVenta: "", idComprador: "", nombreComprador: "", precioVenta: 0, comisionCredito: 0, tipoFinanciamiento: "" });
 
-  useEffect(() => {
-    if (!showUserModal || !editUserId) return;
-
-    const usuarioBase = usuarios.find((u) => u.id === editUserId);
-    const normalizedForm = normalizeUserForm(userForm);
-
-    if (!usuarioBase || !hasUserFormChanges(usuarioBase, normalizedForm)) return;
-
-    setUserSaveState("saving");
-
-    const timeoutId = window.setTimeout(async () => {
-      let usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
-      const vendedorId = await syncUserToVendedores(usuarioBase, usuarioActualizado);
-
-      if (vendedorId && vendedorId !== usuarioActualizado.id) {
-        usuarioActualizado = { ...usuarioActualizado, id: vendedorId };
-        setEditUserId(vendedorId);
-      }
-
-      setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
-
-      if (usuarioActual?.id === editUserId) {
-        setUsuarioActual(usuarioActualizado);
-      }
-
-      setUserSaveState("saved");
-    }, 450);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [editUserId, setUsuarioActual, setUsuarios, showUserModal, userForm, usuarioActual, usuarios]);
-
-  useEffect(() => {
-    if (userSaveState !== "saved") return;
-
-    const timeoutId = window.setTimeout(() => setUserSaveState("idle"), 1800);
-    return () => window.clearTimeout(timeoutId);
-  }, [userSaveState]);
+  // No auto-save — changes are only persisted when user clicks "Guardar"
 
   const tryUnlock = () => {
     if (clave === CLAVE_ADMIN) { setUnlocked(true); setClaveError(""); }
@@ -296,35 +260,44 @@ export default function Administracion() {
     const normalizedForm = normalizeUserForm(userForm);
     if (!normalizedForm.nombre) return alert("Nombre requerido");
 
-    if (editUserId) {
-      const usuarioAnterior = usuarios.find((u) => u.id === editUserId) ?? null;
-      let usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+    setUserSaveState("saving");
 
-      const vendedorId = await syncUserToVendedores(usuarioAnterior, usuarioActualizado);
-      if (vendedorId && vendedorId !== usuarioActualizado.id) {
-        usuarioActualizado = { ...usuarioActualizado, id: vendedorId };
+    try {
+      if (editUserId) {
+        const usuarioAnterior = usuarios.find((u) => u.id === editUserId) ?? null;
+        let usuarioActualizado = buildUserFromForm(editUserId, normalizedForm);
+
+        const vendedorId = await syncUserToVendedores(usuarioAnterior, usuarioActualizado);
+        if (vendedorId && vendedorId !== usuarioActualizado.id) {
+          usuarioActualizado = { ...usuarioActualizado, id: vendedorId };
+        }
+
+        setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
+
+        if (usuarioActual?.id === editUserId) {
+          setUsuarioActual(usuarioActualizado);
+        }
+      } else {
+        const nuevoId = String(Date.now());
+        let nuevoUsuario = buildUserFromForm(nuevoId, normalizedForm);
+        const vendedorId = await syncUserToVendedores(null, nuevoUsuario);
+
+        if (vendedorId) {
+          nuevoUsuario = { ...nuevoUsuario, id: vendedorId };
+        }
+
+        setUsuarios([...usuarios, nuevoUsuario]);
       }
 
-      setUsuarios(usuarios.map((u) => (u.id === editUserId ? usuarioActualizado : u)));
-
-      if (usuarioActual?.id === editUserId) {
-        setUsuarioActual(usuarioActualizado);
-      }
-    } else {
-      const nuevoId = String(Date.now());
-      let nuevoUsuario = buildUserFromForm(nuevoId, normalizedForm);
-      const vendedorId = await syncUserToVendedores(null, nuevoUsuario);
-
-      if (vendedorId) {
-        nuevoUsuario = { ...nuevoUsuario, id: vendedorId };
-      }
-
-      setUsuarios([...usuarios, nuevoUsuario]);
+      setUserSaveState("saved");
+      setTimeout(() => {
+        setUserSaveState("idle");
+        setShowUserModal(false);
+      }, 800);
+    } catch {
+      setUserSaveState("idle");
+      alert("Error al guardar. Intente nuevamente.");
     }
-
-    setUserForm(normalizedForm);
-    setUserSaveState("idle");
-    setShowUserModal(false);
   };
 
   const deleteUser = async (u: Usuario) => {
@@ -704,11 +677,6 @@ export default function Administracion() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <h3 className="font-bold mb-4">{editUserId ? "Editar Usuario" : "Nuevo Usuario"}</h3>
-            {editUserId && (
-              <p className="text-xs mb-4" style={{ color: userSaveState === "saving" ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-                {userSaveState === "saving" ? "Guardando cambios..." : userSaveState === "saved" ? "Cambios guardados automáticamente." : "Los cambios se guardan automáticamente."}
-              </p>
-            )}
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium mb-1">Nombre *</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.nombre} onChange={e => setUserForm(f => ({ ...f, nombre: e.target.value }))} /></div>
@@ -732,9 +700,14 @@ export default function Administracion() {
                   <option value="vendedor">Vendedor</option>
                 </select></div>
             </div>
+            {userSaveState === "saved" && (
+              <p className="text-xs mt-3 font-medium" style={{ color: "hsl(var(--chart-2))" }}>✓ Usuario guardado correctamente en la base de datos.</p>
+            )}
             <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => { setShowUserModal(false); setUserSaveState("idle"); }} className="px-4 py-2 rounded text-sm border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>{editUserId ? "Cerrar" : "Cancelar"}</button>
-              <button onClick={saveUser} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>{editUserId ? "Guardar y cerrar" : "Guardar"}</button>
+              <button onClick={() => { setShowUserModal(false); setUserSaveState("idle"); }} className="px-4 py-2 rounded text-sm border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
+              <button onClick={saveUser} disabled={userSaveState === "saving"} className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
+                {userSaveState === "saving" ? "Guardando..." : "Guardar"}
+              </button>
             </div>
           </div>
         </div>
