@@ -146,23 +146,59 @@ const LEAD_CATEGORIES: { id: LeadCategory; label: string; color: string; icon: s
   { id: "cerrados", label: "Cerrados", color: "#6b7280", icon: "⬛" },
 ];
 
-function normalizeLeadName(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return name.trim();
+const NON_NAME_TOKENS = new Set([
+  "andaba","busca","quiero","comprar","necesito","consulta","consultar",
+  "informacion","información","precio","credito","crédito","financiamiento",
+  "auto","autos","vehiculo","vehículo","vehiculos","vehículos","hola","buenas",
+  "buenos","dias","días","tardes","noches","cliente","de","del","la","el","y",
+  "para","por","con","mi","me","soy","llamo","nombre","es","numero","número",
+  "telefono","teléfono","fono","celular","contacto","whatsapp","instagram",
+  "facebook","messenger",
+]);
 
-  const normalizeToken = (token: string) => token.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  const firstToken = normalizeToken(parts[0]);
-  let nextIndex = 1;
-
-  while (nextIndex < parts.length && normalizeToken(parts[nextIndex]) === firstToken) {
-    nextIndex += 1;
-  }
-
-  return [parts[0], ...parts.slice(nextIndex)].join(" ");
+function stripDiacritics(s: string) {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-function normalizeLeadRecord<T extends { nombre: string }>(lead: T): T {
-  return { ...lead, nombre: normalizeLeadName(lead.nombre || "") };
+function looksLikeSentence(name: string): boolean {
+  const tokens = name.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  if (tokens.length > 4) return true;
+  const bad = tokens.filter(t => NON_NAME_TOKENS.has(stripDiacritics(t))).length;
+  return bad >= 1 && bad / tokens.length >= 0.34;
+}
+
+function titleCase(token: string): string {
+  if (!token) return token;
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+}
+
+function normalizeLeadName(name: string, fallback?: string): string {
+  const raw = (name || "").trim();
+  const useFallback = !raw || looksLikeSentence(raw);
+  const source = useFallback ? (fallback || "").trim() : raw;
+  if (!source) return raw || (fallback || "").trim();
+
+  // Split, dedupe consecutive equal tokens (case/diacritic insensitive)
+  const parts = source.split(/\s+/).filter(Boolean);
+  const deduped: string[] = [];
+  for (const p of parts) {
+    const key = stripDiacritics(p);
+    if (deduped.length && stripDiacritics(deduped[deduped.length - 1]) === key) continue;
+    deduped.push(p);
+  }
+
+  if (deduped.length === 0) return source;
+  if (deduped.length === 1) return titleCase(deduped[0]);
+
+  // First name + first apellido (skip middle names if any)
+  const first = titleCase(deduped[0]);
+  const lastIdx = deduped.length === 2 ? 1 : Math.min(2, deduped.length - 1);
+  return `${first} ${titleCase(deduped[lastIdx])}`;
+}
+
+function normalizeLeadRecord<T extends { nombre: string; contact_name?: string | null }>(lead: T): T {
+  return { ...lead, nombre: normalizeLeadName(lead.nombre || "", lead.contact_name || "") };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
