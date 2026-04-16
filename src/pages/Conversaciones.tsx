@@ -265,6 +265,7 @@ function TabMensajes() {
   const { usuarioActual } = useApp();
   const isVendedor = usuarioActual?.rol === "vendedor";
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+  const vendedorFirstName = usuarioActual?.nombre || "";
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -317,12 +318,17 @@ function TabMensajes() {
     if (!silent) setLoading(true);
     let query = supabase.from("conversations").select("*, contact:contacts(*)").order("last_message_at", { ascending: false }).limit(200);
     if (isVendedor && vendedorName) {
-      query = query.eq("assigned_to", vendedorName);
+      // Match full name or first name only (agent may assign with just first name)
+      if (vendedorFirstName && vendedorFirstName !== vendedorName) {
+        query = query.or(`assigned_to.eq.${vendedorName},assigned_to.eq.${vendedorFirstName}`);
+      } else {
+        query = query.eq("assigned_to", vendedorName);
+      }
     }
     const { data, error } = await query;
     if (!error && data) setConversations(data as Conversation[]);
     if (!silent) setLoading(false);
-  }, [isVendedor, vendedorName]);
+  }, [isVendedor, vendedorName, vendedorFirstName]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
@@ -655,13 +661,18 @@ function TabLeads() {
 
   const isVendedor = usuarioActual?.rol === "vendedor";
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+  const vendedorFirstName = usuarioActual?.nombre || "";
 
   const loadData = useCallback(async () => {
     setLoading(true);
     let leadsQuery = supabase.from("leads").select("*").order("created_at", { ascending: false });
     // Vendedores only see their assigned leads
     if (isVendedor && vendedorName) {
-      leadsQuery = leadsQuery.eq("vendedor_asignado", vendedorName);
+      if (vendedorFirstName && vendedorFirstName !== vendedorName) {
+        leadsQuery = leadsQuery.or(`vendedor_asignado.eq.${vendedorName},vendedor_asignado.eq.${vendedorFirstName}`);
+      } else {
+        leadsQuery = leadsQuery.eq("vendedor_asignado", vendedorName);
+      }
     }
     const [leadsRes, vendRes] = await Promise.all([
       leadsQuery,
@@ -670,7 +681,6 @@ function TabLeads() {
     if (leadsRes.data) {
       const normalizedLeads = (leadsRes.data as Lead[]).map(normalizeLeadRecord);
       setLeads(normalizedLeads);
-      // Load last inbound message time for each lead's conversation
       const convIds = normalizedLeads.filter(l => l.conversation_id).map(l => l.conversation_id!);
       if (convIds.length > 0) {
         const { data: msgs } = await supabase
@@ -690,7 +700,7 @@ function TabLeads() {
     }
     if (vendRes.data) setVendedores(vendRes.data as Vendedor[]);
     setLoading(false);
-  }, [isVendedor, vendedorName]);
+  }, [isVendedor, vendedorName, vendedorFirstName]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

@@ -1,0 +1,1 @@
+UPDATE vendedores SET activo = false WHERE id IN ('a9e61c78-9b0e-4e7a-8b12-f2f38818fdd4', '2c9bcafb-5c37-46a6-b5f7-0d59ed8f910a');
