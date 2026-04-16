@@ -322,11 +322,16 @@ export default function Administracion() {
       </div>
 
       {/* === USUARIOS === */}
-      {tab === "usuarios" && (
+      {tab === "usuarios" && (() => {
+        const isMaster = usuarioActual?.rol === "master";
+        const isAdmin = usuarioActual?.rol === "administracion";
+        const canCreate = isMaster || isAdmin;
+        const canManage = (u: Usuario) => isMaster || (isAdmin && u.rol === "vendedor");
+        return (
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold">Usuarios del Sistema</h2>
-            {usuarioActual?.rol === "master" && (
+            {canCreate && (
               <button onClick={openCreateUser} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
                 <Plus size={15} /> Nuevo Usuario
               </button>
@@ -357,7 +362,7 @@ export default function Administracion() {
                       {u.rol === "master" ? "Todo" : u.rol === "administracion" ? "Todo excepto Gerencia y crear usuarios" : "Ventas/Clientes/Vehículos (sin Admin/Gerencia)"}
                     </td>
                     <td className="px-4 py-3">
-                      {usuarioActual?.rol === "master" && (
+                      {canManage(u) && (
                         <div className="flex gap-2">
                           <button onClick={() => openEditUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
                           <button onClick={() => deleteUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
@@ -370,7 +375,8 @@ export default function Administracion() {
             </table>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* === VENTAS (igual que módulo ventas) === */}
       {tab === "ventas" && (
