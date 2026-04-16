@@ -664,11 +664,15 @@ export default function Administracion() {
                   </button>
                 </div></div>
               <div><label className="block text-xs font-medium mb-1">Rol</label>
-                <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.rol} onChange={e => setUserForm(f => ({ ...f, rol: e.target.value as Usuario["rol"] }))}>
-                  <option value="master">Admin Master</option>
-                  <option value="administracion">Administración</option>
+                <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.rol} onChange={e => setUserForm(f => ({ ...f, rol: e.target.value as Usuario["rol"] }))} disabled={usuarioActual?.rol !== "master"}>
+                  {usuarioActual?.rol === "master" && <option value="master">Admin Master</option>}
+                  {usuarioActual?.rol === "master" && <option value="administracion">Administración</option>}
                   <option value="vendedor">Vendedor</option>
-                </select></div>
+                </select>
+                {usuarioActual?.rol === "administracion" && (
+                  <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Solo puedes gestionar usuarios con rol Vendedor.</p>
+                )}
+              </div>
             </div>
             {userSaveState === "saved" && (
               <p className="text-xs mt-3 font-medium" style={{ color: "hsl(var(--chart-2))" }}>✓ Usuario guardado correctamente en la base de datos.</p>
