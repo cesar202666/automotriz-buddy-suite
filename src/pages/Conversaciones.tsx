@@ -674,7 +674,6 @@ function TabLeads() {
         leadsQuery = leadsQuery.eq("vendedor_asignado", vendedorName);
       }
     }
-    }
     const [leadsRes, vendRes] = await Promise.all([
       leadsQuery,
       supabase.from("vendedores").select("*").eq("activo", true)
@@ -682,7 +681,6 @@ function TabLeads() {
     if (leadsRes.data) {
       const normalizedLeads = (leadsRes.data as Lead[]).map(normalizeLeadRecord);
       setLeads(normalizedLeads);
-      // Load last inbound message time for each lead's conversation
       const convIds = normalizedLeads.filter(l => l.conversation_id).map(l => l.conversation_id!);
       if (convIds.length > 0) {
         const { data: msgs } = await supabase
@@ -702,7 +700,7 @@ function TabLeads() {
     }
     if (vendRes.data) setVendedores(vendRes.data as Vendedor[]);
     setLoading(false);
-  }, [isVendedor, vendedorName]);
+  }, [isVendedor, vendedorName, vendedorFirstName]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
