@@ -265,6 +265,7 @@ function TabMensajes() {
   const { usuarioActual } = useApp();
   const isVendedor = usuarioActual?.rol === "vendedor";
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+  const vendedorFirstName = usuarioActual?.nombre || "";
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
