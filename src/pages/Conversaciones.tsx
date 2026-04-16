@@ -438,7 +438,7 @@ function TabMensajes() {
 
   const filtered = conversations.filter((c) => {
     const matchChannel = channelFilter === "all" || c.channel === channelFilter;
-    const matchSearch = !search || c.contact?.name?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search || normalizeLeadName(c.contact?.name || "").toLowerCase().includes(search.toLowerCase());
     return matchChannel && matchSearch;
   });
 
@@ -491,7 +491,7 @@ function TabMensajes() {
             filtered.map((conv) => {
               const isActive = selectedConvId === conv.id;
               const cfg = getChannelConfig(conv.channel);
-              const contactName = conv.contact?.name || "Desconocido";
+              const contactName = normalizeLeadName(conv.contact?.name || "") || "Desconocido";
               return (
                 <button key={conv.id} onClick={() => { setSelectedConvId(conv.id); markRead(conv.id); }} className="w-full text-left px-3 py-3 flex items-center gap-3 transition-all relative"
                   style={{ background: isActive ? "rgba(255,255,255,0.1)" : "transparent", borderLeft: isActive ? `3px solid ${cfg.color}` : "3px solid transparent" }}>
@@ -536,10 +536,10 @@ function TabMensajes() {
         <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "hsl(var(--background))" }}>
           <div className="px-5 py-3 border-b flex items-center justify-between flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
             <div className="flex items-center gap-3">
-              <Avatar name={selectedConv.contact?.name || "?"} size={36} />
+              <Avatar name={normalizeLeadName(selectedConv.contact?.name || "") || "?"} size={36} />
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold">{selectedConv.contact?.name || "Desconocido"}</p>
+                  <p className="text-sm font-semibold">{normalizeLeadName(selectedConv.contact?.name || "") || "Desconocido"}</p>
                   <ChannelBadge channel={selectedConv.channel} />
                   <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ background: selectedConv.status === "active" ? "#dcfce7" : "hsl(var(--muted))", color: selectedConv.status === "active" ? "#166534" : "hsl(var(--muted-foreground))" }}>
                     {selectedConv.status === "active" ? "● Activa" : "Cerrada"}
@@ -1307,8 +1307,8 @@ function TabContactos() {
                 <tr key={contact.id} className="border-t hover:bg-muted/30 cursor-pointer" style={{ borderColor: "hsl(var(--border))" }} onClick={() => setSelectedContact(contact)}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <Avatar name={contact.name} size={32} />
-                      <span className="font-medium">{contact.name}</span>
+                      <Avatar name={normalizeLeadName(contact.name)} size={32} />
+                      <span className="font-medium">{normalizeLeadName(contact.name)}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>{contact.phone || "-"}</td>
@@ -1344,9 +1344,9 @@ function TabContactos() {
             <button onClick={() => setSelectedContact(null)}><X size={16} /></button>
           </div>
           <div className="flex items-center gap-3 mb-4">
-            <Avatar name={selectedContact.name} size={48} />
+            <Avatar name={normalizeLeadName(selectedContact.name)} size={48} />
             <div>
-              <p className="font-semibold">{selectedContact.name}</p>
+              <p className="font-semibold">{normalizeLeadName(selectedContact.name)}</p>
               <ChannelBadge channel={selectedContact.channel || "whatsapp"} />
             </div>
           </div>
