@@ -322,11 +322,16 @@ export default function Administracion() {
       </div>
 
       {/* === USUARIOS === */}
-      {tab === "usuarios" && (
+      {tab === "usuarios" && (() => {
+        const isMaster = usuarioActual?.rol === "master";
+        const isAdmin = usuarioActual?.rol === "administracion";
+        const canCreate = isMaster || isAdmin;
+        const canManage = (u: Usuario) => isMaster || (isAdmin && u.rol === "vendedor");
+        return (
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold">Usuarios del Sistema</h2>
-            {usuarioActual?.rol === "master" && (
+            {canCreate && (
               <button onClick={openCreateUser} className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>
                 <Plus size={15} /> Nuevo Usuario
               </button>
@@ -357,7 +362,7 @@ export default function Administracion() {
                       {u.rol === "master" ? "Todo" : u.rol === "administracion" ? "Todo excepto Gerencia y crear usuarios" : "Ventas/Clientes/Vehículos (sin Admin/Gerencia)"}
                     </td>
                     <td className="px-4 py-3">
-                      {usuarioActual?.rol === "master" && (
+                      {canManage(u) && (
                         <div className="flex gap-2">
                           <button onClick={() => openEditUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
                           <button onClick={() => deleteUser(u)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
@@ -370,7 +375,8 @@ export default function Administracion() {
             </table>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* === VENTAS (igual que módulo ventas) === */}
       {tab === "ventas" && (
@@ -658,11 +664,15 @@ export default function Administracion() {
                   </button>
                 </div></div>
               <div><label className="block text-xs font-medium mb-1">Rol</label>
-                <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.rol} onChange={e => setUserForm(f => ({ ...f, rol: e.target.value as Usuario["rol"] }))}>
-                  <option value="master">Admin Master</option>
-                  <option value="administracion">Administración</option>
+                <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={userForm.rol} onChange={e => setUserForm(f => ({ ...f, rol: e.target.value as Usuario["rol"] }))} disabled={usuarioActual?.rol !== "master"}>
+                  {usuarioActual?.rol === "master" && <option value="master">Admin Master</option>}
+                  {usuarioActual?.rol === "master" && <option value="administracion">Administración</option>}
                   <option value="vendedor">Vendedor</option>
-                </select></div>
+                </select>
+                {usuarioActual?.rol === "administracion" && (
+                  <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Solo puedes gestionar usuarios con rol Vendedor.</p>
+                )}
+              </div>
             </div>
             {userSaveState === "saved" && (
               <p className="text-xs mt-3 font-medium" style={{ color: "hsl(var(--chart-2))" }}>✓ Usuario guardado correctamente en la base de datos.</p>
