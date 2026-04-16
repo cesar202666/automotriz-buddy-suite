@@ -318,12 +318,17 @@ function TabMensajes() {
     if (!silent) setLoading(true);
     let query = supabase.from("conversations").select("*, contact:contacts(*)").order("last_message_at", { ascending: false }).limit(200);
     if (isVendedor && vendedorName) {
-      query = query.eq("assigned_to", vendedorName);
+      // Match full name or first name only (agent may assign with just first name)
+      if (vendedorFirstName && vendedorFirstName !== vendedorName) {
+        query = query.or(`assigned_to.eq.${vendedorName},assigned_to.eq.${vendedorFirstName}`);
+      } else {
+        query = query.eq("assigned_to", vendedorName);
+      }
     }
     const { data, error } = await query;
     if (!error && data) setConversations(data as Conversation[]);
     if (!silent) setLoading(false);
-  }, [isVendedor, vendedorName]);
+  }, [isVendedor, vendedorName, vendedorFirstName]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
