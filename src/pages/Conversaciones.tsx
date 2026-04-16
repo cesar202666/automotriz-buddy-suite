@@ -661,13 +661,19 @@ function TabLeads() {
 
   const isVendedor = usuarioActual?.rol === "vendedor";
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+  const vendedorFirstName = usuarioActual?.nombre || "";
 
   const loadData = useCallback(async () => {
     setLoading(true);
     let leadsQuery = supabase.from("leads").select("*").order("created_at", { ascending: false });
     // Vendedores only see their assigned leads
     if (isVendedor && vendedorName) {
-      leadsQuery = leadsQuery.eq("vendedor_asignado", vendedorName);
+      if (vendedorFirstName && vendedorFirstName !== vendedorName) {
+        leadsQuery = leadsQuery.or(`vendedor_asignado.eq.${vendedorName},vendedor_asignado.eq.${vendedorFirstName}`);
+      } else {
+        leadsQuery = leadsQuery.eq("vendedor_asignado", vendedorName);
+      }
+    }
     }
     const [leadsRes, vendRes] = await Promise.all([
       leadsQuery,
