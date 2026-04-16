@@ -194,7 +194,20 @@ async function getVendedorAsignado(
     rotacionList = JSON.parse(rotacionRow?.valor || "[]");
   } catch {}
 
-  const activeRotacion = rotacionList.filter((v) => v.activo);
+  // ── Validate rotation against current ACTIVE sellers in DB ─────────────
+  const { data: vendedoresActivos } = await supabase
+    .from("vendedores")
+    .select("nombre")
+    .eq("activo", true);
+
+  const nombresActivos = new Set(
+    (vendedoresActivos || []).map((v: { nombre: string }) => v.nombre.trim()),
+  );
+
+  // Only keep rotation entries that are marked active AND still exist as active sellers
+  const activeRotacion = rotacionList.filter(
+    (v) => v.activo && nombresActivos.has((v.nombre || "").trim()),
+  );
 
   if (activeRotacion.length > 0) {
     // Use rotation-based assignment
@@ -207,20 +220,33 @@ async function getVendedorAsignado(
 
     let currentIdx = 0;
     let currentCount = 0;
+    let lastAssigned = "";
     try {
       const parsed = JSON.parse(idxRow?.valor || "{}");
       currentIdx = parsed.idx || 0;
       currentCount = parsed.count || 0;
+      lastAssigned = parsed.lastAssigned || "";
     } catch {}
 
-    // Ensure index is within bounds
+    // Ensure index is within bounds (rotation may have changed)
     if (currentIdx >= activeRotacion.length) {
       currentIdx = 0;
       currentCount = 0;
     }
 
+    // If last assigned vendor no longer matches the current index name,
+    // realign to that name (preserves order after roster changes)
+    if (lastAssigned) {
+      const realigned = activeRotacion.findIndex(
+        (v) => v.nombre.trim() === lastAssigned.trim(),
+      );
+      if (realigned >= 0 && realigned !== currentIdx) {
+        currentIdx = realigned;
+      }
+    }
+
     const currentVendedor = activeRotacion[currentIdx];
-    const maxConsecutivos = currentVendedor.consecutivos || 1;
+    const maxConsecutivos = Math.max(1, currentVendedor.consecutivos || 1);
 
     // Advance the counter
     const nextCount = currentCount + 1;
@@ -233,8 +259,12 @@ async function getVendedorAsignado(
       nextCountSave = 0;
     }
 
-    // Save updated index
-    const newIdxVal = JSON.stringify({ idx: nextIdx, count: nextCountSave });
+    // Save updated index (include lastAssigned for resilience to roster edits)
+    const newIdxVal = JSON.stringify({
+      idx: nextIdx,
+      count: nextCountSave,
+      lastAssigned: activeRotacion[nextIdx]?.nombre || currentVendedor.nombre,
+    });
     if (idxRow) {
       await supabase
         .from("configuracion_sistema")
