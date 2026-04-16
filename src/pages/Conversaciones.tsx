@@ -715,7 +715,22 @@ function TabLeads() {
       supabase.from("vendedores").select("*").eq("activo", true)
     ]);
     if (leadsRes.data) {
-      const normalizedLeads = (leadsRes.data as Lead[]).map(normalizeLeadRecord);
+      // Fetch contact names so we can fall back when the lead nombre is a sentence/empty
+      const rawLeads = leadsRes.data as Lead[];
+      const contactIds = Array.from(new Set(rawLeads.map(l => l.contact_id).filter(Boolean) as string[]));
+      const contactNameMap: Record<string, string> = {};
+      if (contactIds.length > 0) {
+        const { data: contactsData } = await supabase
+          .from("contacts")
+          .select("id, name")
+          .in("id", contactIds);
+        (contactsData || []).forEach((c: { id: string; name: string }) => {
+          contactNameMap[c.id] = c.name || "";
+        });
+      }
+      const normalizedLeads = rawLeads.map(l =>
+        normalizeLeadRecord({ ...l, contact_name: l.contact_id ? contactNameMap[l.contact_id] : "" })
+      );
       setLeads(normalizedLeads);
       const convIds = normalizedLeads.filter(l => l.conversation_id).map(l => l.conversation_id!);
       if (convIds.length > 0) {
