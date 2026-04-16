@@ -205,10 +205,10 @@ Deno.serve(async (req) => {
       sent_at: new Date().toISOString(),
     })
 
-    // ── 3b. Auto-create lead if not exists ────────────────────────────────────
+    // ── 3b. Auto-create lead if not exists / backfill phone if missing ────────
     const { data: existingLead } = await supabase
       .from('leads')
-      .select('id, score')
+      .select('id, telefono')
       .eq('contact_id', contactId)
       .maybeSingle()
 
@@ -228,6 +228,12 @@ Deno.serve(async (req) => {
         vendedor_asignado: '',
         notas: messageText.substring(0, 200),
       })
+    } else if (channel === 'whatsapp' && phone && !existingLead.telefono) {
+      // WhatsApp: ManyChat exposes the phone — persist it on the lead the first time we see it
+      await supabase
+        .from('leads')
+        .update({ telefono: phone })
+        .eq('id', existingLead.id)
     }
 
     // ── 4. Si la conversación ya fue escalada, NO llamar al agente IA
