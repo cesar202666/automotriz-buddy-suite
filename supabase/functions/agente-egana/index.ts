@@ -177,12 +177,28 @@ async function getVendedorAsignado(
   asignacionPorCanal: Record<string, string>,
   vendedorDefault: string,
 ): Promise<string> {
+  // ── Always load the canonical list of ACTIVE sellers (rol = 'vendedor') ──
+  // This is the single source of truth: nobody outside this list can ever
+  // be assigned, regardless of mode, rotation config or stale defaults.
+  const { data: vendedoresActivos } = await supabase
+    .from("vendedores")
+    .select("nombre")
+    .eq("activo", true)
+    .eq("rol", "vendedor");
+
+  const nombresActivos = new Set(
+    (vendedoresActivos || []).map((v: { nombre: string }) => (v.nombre || "").trim()),
+  );
+  const isElegible = (n: string) => !!n && nombresActivos.has(n.trim());
+
   if (modo === "MANUAL") return "";
   if (modo === "POR_CANAL") {
-    return asignacionPorCanal[canal] || vendedorDefault || "";
+    const candidato = asignacionPorCanal[canal] || vendedorDefault || "";
+    if (isElegible(candidato)) return candidato;
+    // fall through to rotation/ordered if the configured one is not a real active vendedor
   }
 
-  // ── Check for rotation config first ──────────────────────────────────────
+  // ── Check for rotation config ────────────────────────────────────────────
   const { data: rotacionRow } = await supabase
     .from("configuracion_sistema")
     .select("valor")
@@ -193,18 +209,6 @@ async function getVendedorAsignado(
   try {
     rotacionList = JSON.parse(rotacionRow?.valor || "[]");
   } catch {}
-
-  // ── Validate rotation against current ACTIVE sellers in DB ─────────────
-  // IMPORTANT: only users with rol='vendedor' should be eligible for assignment
-  const { data: vendedoresActivos } = await supabase
-    .from("vendedores")
-    .select("nombre")
-    .eq("activo", true)
-    .eq("rol", "vendedor");
-
-  const nombresActivos = new Set(
-    (vendedoresActivos || []).map((v: { nombre: string }) => v.nombre.trim()),
-  );
 
   // Only keep rotation entries that are marked active AND still exist as active sellers
   const activeRotacion = rotacionList.filter(
@@ -288,7 +292,9 @@ async function getVendedorAsignado(
     .eq("activo", true)
     .eq("rol", "vendedor");
 
-  if (!vendedores || vendedores.length === 0) return vendedorDefault || "";
+  if (!vendedores || vendedores.length === 0) {
+    return isElegible(vendedorDefault) ? vendedorDefault : "";
+  }
 
   if (modo === "RANDOM") {
     return vendedores[Math.floor(Math.random() * vendedores.length)].nombre;
