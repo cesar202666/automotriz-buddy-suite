@@ -629,7 +629,7 @@ function TabMensajes() {
             <div ref={messagesEndRef} />
           </div>
 
-          {selectedConv.escalated ? (
+          {(selectedConv.escalated || (selectedConv.assigned_to && selectedConv.assigned_to.trim() !== "")) ? (
             <div className="px-4 py-3 border-t flex items-center gap-2 flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
               <input
                 value={replyText}
