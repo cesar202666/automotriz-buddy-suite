@@ -195,10 +195,12 @@ async function getVendedorAsignado(
   } catch {}
 
   // ── Validate rotation against current ACTIVE sellers in DB ─────────────
+  // IMPORTANT: only users with rol='vendedor' should be eligible for assignment
   const { data: vendedoresActivos } = await supabase
     .from("vendedores")
     .select("nombre")
-    .eq("activo", true);
+    .eq("activo", true)
+    .eq("rol", "vendedor");
 
   const nombresActivos = new Set(
     (vendedoresActivos || []).map((v: { nombre: string }) => v.nombre.trim()),
