@@ -712,7 +712,7 @@ function TabLeads() {
     }
     const [leadsRes, vendRes] = await Promise.all([
       leadsQuery,
-      supabase.from("vendedores").select("*").eq("activo", true)
+      supabase.from("vendedores").select("*").eq("activo", true).eq("rol", "vendedor")
     ]);
     if (leadsRes.data) {
       // Fetch contact names so we can fall back when the lead nombre is a sentence/empty
@@ -812,6 +812,32 @@ function TabLeads() {
       ...(editLead.nombre ? { nombre: normalizeLeadName(editLead.nombre) } : {}),
     };
     await supabase.from("leads").update(payload).eq("id", selectedLead.id);
+
+    // If a vendedor is assigned, escalate the conversation so the seller can chat directly
+    const nuevoVendedor = (editLead.vendedor_asignado || "").trim();
+    if (nuevoVendedor && selectedLead.conversation_id) {
+      await supabase
+        .from("conversations")
+        .update({
+          assigned_to: nuevoVendedor,
+          escalated: true,
+          escalated_at: new Date().toISOString(),
+          escalated_to: nuevoVendedor,
+        })
+        .eq("id", selectedLead.conversation_id);
+    } else if (nuevoVendedor && selectedLead.contact_id) {
+      // Fallback: locate the conversation by contact_id
+      await supabase
+        .from("conversations")
+        .update({
+          assigned_to: nuevoVendedor,
+          escalated: true,
+          escalated_at: new Date().toISOString(),
+          escalated_to: nuevoVendedor,
+        })
+        .eq("contact_id", selectedLead.contact_id);
+    }
+
     setLeads(prev => prev.map(l => l.id === selectedLead.id ? normalizeLeadRecord({ ...l, ...payload }) : l));
     setSelectedLead(prev => prev ? normalizeLeadRecord({ ...prev, ...payload }) : null);
     setSavingLead(false);
@@ -1401,7 +1427,7 @@ function TabMetricas() {
 
       const [leadsRes, vendRes] = await Promise.all([
         query,
-        supabase.from("vendedores").select("*").eq("activo", true),
+        supabase.from("vendedores").select("*").eq("activo", true).eq("rol", "vendedor"),
       ]);
       setLeads(((leadsRes.data || []) as Lead[]).map(normalizeLeadRecord));
       setVendedores((vendRes.data || []) as Vendedor[]);
