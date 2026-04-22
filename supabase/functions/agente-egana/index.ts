@@ -564,6 +564,32 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Check business hours ──────────────────────────────────────────────────
+    // If schedules are enabled and we're outside the configured window,
+    // respond ONLY with the configured out-of-hours message and stop here.
+    const horariosActivos = (cfg.HORARIOS_ACTIVOS || "false") === "true";
+    if (horariosActivos) {
+      let horariosConfig: HorarioConfig[] = [];
+      try {
+        horariosConfig = JSON.parse(cfg.HORARIOS_CONFIG || "[]");
+      } catch {}
+
+      // Use Chile time (America/Santiago) for the schedule check
+      const nowChile = new Date(
+        new Date().toLocaleString("en-US", { timeZone: "America/Santiago" }),
+      );
+
+      if (!isWithinSchedule(horariosConfig, nowChile)) {
+        const fueraMsg = (cfg.MENSAJE_FUERA_HORARIO || "").trim() ||
+          "Hola, en este momento estamos fuera de horario de atención. Te contactaremos a la brevedad. ¡Gracias!";
+
+        return new Response(
+          JSON.stringify({ messages: [{ type: "text", text: fueraMsg }] }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     const modoAsignacion = cfg.ASIGNACION_MODO || "ORDENADO";
     const vendedorDefault = cfg.VENDEDOR_DEFAULT || "";
     const notificarVendedor = (cfg.NOTIFICAR_VENDEDOR || "true") === "true";
