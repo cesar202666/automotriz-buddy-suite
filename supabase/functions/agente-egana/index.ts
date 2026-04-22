@@ -292,7 +292,9 @@ async function getVendedorAsignado(
     .eq("activo", true)
     .eq("rol", "vendedor");
 
-  if (!vendedores || vendedores.length === 0) return vendedorDefault || "";
+  if (!vendedores || vendedores.length === 0) {
+    return isElegible(vendedorDefault) ? vendedorDefault : "";
+  }
 
   if (modo === "RANDOM") {
     return vendedores[Math.floor(Math.random() * vendedores.length)].nombre;
