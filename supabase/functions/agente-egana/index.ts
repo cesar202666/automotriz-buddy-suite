@@ -285,7 +285,8 @@ async function getVendedorAsignado(
   const { data: vendedores } = await supabase
     .from("vendedores")
     .select("nombre")
-    .eq("activo", true);
+    .eq("activo", true)
+    .eq("rol", "vendedor");
 
   if (!vendedores || vendedores.length === 0) return vendedorDefault || "";
 
