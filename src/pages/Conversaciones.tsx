@@ -1567,6 +1567,28 @@ function TabMetricas() {
         })}
       </div>
 
+      {/* Evolución diaria de leads (últimos 30 días) */}
+      <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <h3 className="text-sm font-bold mb-4">Evolución de Leads — Últimos 30 días</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={dailyLeadsData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Line
+              type="monotone"
+              dataKey="leads"
+              name="Leads"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2.5}
+              dot={{ r: 3, fill: "hsl(var(--primary))" }}
+              activeDot={{ r: 5 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Origen */}
         <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
