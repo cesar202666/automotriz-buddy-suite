@@ -72,9 +72,9 @@ export default function Metricas() {
     const fetchLeads = async () => {
       const { data } = await supabase
         .from("leads")
-        .select("id, nombre, calificacion, canal, vendedor_asignado, etapa, primer_apertura_at")
+        .select("id, nombre, calificacion, canal, vendedor_asignado, etapa, primer_apertura_at, created_at")
         .order("created_at", { ascending: false });
-      setLeads(data || []);
+      setLeads((data as Lead[]) || []);
       setLoading(false);
     };
     fetchLeads();
