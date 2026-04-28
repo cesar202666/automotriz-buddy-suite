@@ -16,6 +16,8 @@ import {
   Pie,
   Cell,
   Legend,
+  LineChart,
+  Line,
   ResponsiveContainer,
 } from "recharts";
 import { BarChart3, Users, ThermometerSun, Globe } from "lucide-react";
@@ -28,6 +30,7 @@ interface Lead {
   vendedor_asignado: string | null;
   etapa: string | null;
   primer_apertura_at: string | null;
+  created_at: string;
 }
 
 const CALIFICACION_COLORS: Record<string, string> = {
@@ -69,9 +72,9 @@ export default function Metricas() {
     const fetchLeads = async () => {
       const { data } = await supabase
         .from("leads")
-        .select("id, nombre, calificacion, canal, vendedor_asignado, etapa, primer_apertura_at")
+        .select("id, nombre, calificacion, canal, vendedor_asignado, etapa, primer_apertura_at, created_at")
         .order("created_at", { ascending: false });
-      setLeads(data || []);
+      setLeads((data as Lead[]) || []);
       setLoading(false);
     };
     fetchLeads();
@@ -129,7 +132,29 @@ export default function Metricas() {
   ).length;
   const totalContactados = leads.filter((l) => l.primer_apertura_at).length;
 
-  // 5. Últimos leads calificados (tibio/caliente)
+  // 5. Serie diaria de leads (últimos 30 días)
+  const dailyLeadsData = (() => {
+    const days: { date: string; label: string; leads: number }[] = [];
+    const map: Record<string, number> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+      days.push({ date: key, label, leads: 0 });
+      map[key] = 0;
+    }
+    leads.forEach((l) => {
+      if (!l.created_at) return;
+      const key = l.created_at.slice(0, 10);
+      if (key in map) map[key]++;
+    });
+    return days.map((d) => ({ ...d, leads: map[d.date] }));
+  })();
+
+  // 6. Últimos leads calificados (tibio/caliente)
   const leadsCalificados = leads
     .filter((l) => l.calificacion === "tibio" || l.calificacion === "caliente")
     .slice(0, 10);
@@ -189,6 +214,39 @@ export default function Metricas() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Evolución diaria de leads (30 días) */}
+      <Card className="mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            Evolución de Leads — Últimos 30 días
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              leads: { label: "Leads", color: "hsl(217 91% 50%)" },
+            }}
+            className="h-[300px] w-full"
+          >
+            <LineChart data={dailyLeadsData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line
+                type="monotone"
+                dataKey="leads"
+                stroke="hsl(217 91% 50%)"
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: "hsl(217 91% 50%)" }}
+                activeDot={{ r: 5 }}
+                name="Leads"
+              />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
 
       {/* Row 1: Calificación + Origen */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
