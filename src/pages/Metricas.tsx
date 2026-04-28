@@ -215,6 +215,39 @@ export default function Metricas() {
         </Card>
       </div>
 
+      {/* Evolución diaria de leads (30 días) */}
+      <Card className="mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            Evolución de Leads — Últimos 30 días
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              leads: { label: "Leads", color: "hsl(217 91% 50%)" },
+            }}
+            className="h-[300px] w-full"
+          >
+            <LineChart data={dailyLeadsData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line
+                type="monotone"
+                dataKey="leads"
+                stroke="hsl(217 91% 50%)"
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: "hsl(217 91% 50%)" }}
+                activeDot={{ r: 5 }}
+                name="Leads"
+              />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
       {/* Row 1: Calificación + Origen */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Calificación Pie */}
