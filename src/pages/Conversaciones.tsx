@@ -1485,6 +1485,28 @@ function TabMetricas() {
   // No respondidos por vendedor
   const noRespondidosData = vendedorData.filter(v => v.vendedor !== "Sin asignar" && v.noRespondidos > 0);
 
+  // Evolución diaria de leads (últimos 30 días)
+  const dailyLeadsData = (() => {
+    const days: { date: string; label: string; leads: number }[] = [];
+    const map: Record<string, number> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+      days.push({ date: key, label, leads: 0 });
+      map[key] = 0;
+    }
+    filteredLeads.forEach((l) => {
+      if (!l.created_at) return;
+      const key = String(l.created_at).slice(0, 10);
+      if (key in map) map[key]++;
+    });
+    return days.map((d) => ({ ...d, leads: map[d.date] }));
+  })();
+
   const leadsRecientes = calificados.slice(0, 8);
   const totalRespondidos = vendedorData.reduce((s, v) => s + v.respondidos, 0);
   const totalNoRespondidos = vendedorData.reduce((s, v) => s + v.noRespondidos, 0);
@@ -1543,6 +1565,28 @@ function TabMetricas() {
             </div>
           );
         })}
+      </div>
+
+      {/* Evolución diaria de leads (últimos 30 días) */}
+      <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <h3 className="text-sm font-bold mb-4">Evolución de Leads — Últimos 30 días</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={dailyLeadsData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Line
+              type="monotone"
+              dataKey="leads"
+              name="Leads"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2.5}
+              dot={{ r: 3, fill: "hsl(var(--primary))" }}
+              activeDot={{ r: 5 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
