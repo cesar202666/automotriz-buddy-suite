@@ -132,7 +132,29 @@ export default function Metricas() {
   ).length;
   const totalContactados = leads.filter((l) => l.primer_apertura_at).length;
 
-  // 5. Últimos leads calificados (tibio/caliente)
+  // 5. Serie diaria de leads (últimos 30 días)
+  const dailyLeadsData = (() => {
+    const days: { date: string; label: string; leads: number }[] = [];
+    const map: Record<string, number> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+      days.push({ date: key, label, leads: 0 });
+      map[key] = 0;
+    }
+    leads.forEach((l) => {
+      if (!l.created_at) return;
+      const key = l.created_at.slice(0, 10);
+      if (key in map) map[key]++;
+    });
+    return days.map((d) => ({ ...d, leads: map[d.date] }));
+  })();
+
+  // 6. Últimos leads calificados (tibio/caliente)
   const leadsCalificados = leads
     .filter((l) => l.calificacion === "tibio" || l.calificacion === "caliente")
     .slice(0, 10);
