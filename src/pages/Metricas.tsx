@@ -30,6 +30,7 @@ interface Lead {
   vendedor_asignado: string | null;
   etapa: string | null;
   primer_apertura_at: string | null;
+  created_at: string;
 }
 
 const CALIFICACION_COLORS: Record<string, string> = {
