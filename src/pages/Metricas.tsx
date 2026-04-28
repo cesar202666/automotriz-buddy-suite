@@ -16,6 +16,8 @@ import {
   Pie,
   Cell,
   Legend,
+  LineChart,
+  Line,
   ResponsiveContainer,
 } from "recharts";
 import { BarChart3, Users, ThermometerSun, Globe } from "lucide-react";
