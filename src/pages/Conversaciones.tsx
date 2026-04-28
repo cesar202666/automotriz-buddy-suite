@@ -1485,6 +1485,28 @@ function TabMetricas() {
   // No respondidos por vendedor
   const noRespondidosData = vendedorData.filter(v => v.vendedor !== "Sin asignar" && v.noRespondidos > 0);
 
+  // Evolución diaria de leads (últimos 30 días)
+  const dailyLeadsData = (() => {
+    const days: { date: string; label: string; leads: number }[] = [];
+    const map: Record<string, number> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+      days.push({ date: key, label, leads: 0 });
+      map[key] = 0;
+    }
+    filteredLeads.forEach((l) => {
+      if (!l.created_at) return;
+      const key = String(l.created_at).slice(0, 10);
+      if (key in map) map[key]++;
+    });
+    return days.map((d) => ({ ...d, leads: map[d.date] }));
+  })();
+
   const leadsRecientes = calificados.slice(0, 8);
   const totalRespondidos = vendedorData.reduce((s, v) => s + v.respondidos, 0);
   const totalNoRespondidos = vendedorData.reduce((s, v) => s + v.noRespondidos, 0);
