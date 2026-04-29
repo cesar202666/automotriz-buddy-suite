@@ -269,19 +269,27 @@ export default function Configuracion() {
     })();
 
     (async () => {
-      const { data } = await supabase.from("vendedores").select("id, nombre, sucursal").eq("activo", true);
+      const { data } = await supabase.from("vendedores").select("id, nombre, sucursal").eq("activo", true).eq("rol", "vendedor");
       if (data) {
         setVendedores(data as Vendedor[]);
-        // Initialize rotation list if empty — will be populated after config loads
+        // Merge: keep existing rotation order/config and append any new vendedores
+        // that don't yet exist in the rotation list (by name match).
         setRotacionVendedores(prev => {
-          if (prev.length > 0) return prev;
-          return (data as Vendedor[]).map(v => ({
-            vendedor_id: v.id,
-            nombre: v.nombre,
-            sucursal: v.sucursal || "",
-            activo: true,
-            consecutivos: 1,
-          }));
+          const norm = (s: string) => (s || "").trim().toLowerCase();
+          const existingNames = new Set(prev.map(p => norm(p.nombre)));
+          const additions = (data as Vendedor[])
+            .filter(v => !existingNames.has(norm(v.nombre)))
+            .map(v => ({
+              vendedor_id: v.id,
+              nombre: v.nombre,
+              sucursal: v.sucursal || "",
+              activo: true,
+              consecutivos: 1,
+            }));
+          // Also drop entries whose vendedor no longer exists / is inactive
+          const activeNames = new Set((data as Vendedor[]).map(v => norm(v.nombre)));
+          const filtered = prev.filter(p => activeNames.has(norm(p.nombre)));
+          return [...filtered, ...additions];
         });
       }
     })();
