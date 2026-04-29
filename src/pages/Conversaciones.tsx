@@ -967,7 +967,7 @@ function TabLeads() {
       {/* Categorias panel */}
       {viewMode === "categorias" && (() => {
         // Categorize leads
-        const closedStatuses = ["venta_realizada", "no_contesta", "sin_interes", "compro_otro_lugar", "no_cumple_credito", "precio_alto"];
+        const closedStatuses = ["venta_realizada", "no_contesta", "sin_interes", "compro_otro_lugar", "no_cumple_credito", "precio_alto", "spam"];
         const pendienteVendedor = filteredLeads.filter(l => !l.estado_cierre && !l.primer_apertura_at);
         const contactados = filteredLeads.filter(l => !l.estado_cierre && l.primer_apertura_at);
         const cerrados = filteredLeads.filter(l => l.estado_cierre && closedStatuses.includes(l.estado_cierre));
@@ -1017,7 +1017,7 @@ function TabLeads() {
                         </div>
                         {cat.id === "cerrados" && lead.estado_cierre && (
                           <div className="mt-1.5 text-xs px-2 py-1 rounded" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)" }}>
-                            {lead.estado_cierre === "venta_realizada" ? "✅ Venta realizada" : lead.estado_cierre === "no_contesta" ? "📵 No contesta" : lead.estado_cierre === "sin_interes" ? "❌ Sin interés" : lead.estado_cierre === "compro_otro_lugar" ? "🏪 Compró en otro lugar" : lead.estado_cierre === "no_cumple_credito" ? "🚫 No cumple crédito" : "💰 Precio alto"}
+                            {lead.estado_cierre === "venta_realizada" ? "✅ Venta realizada" : lead.estado_cierre === "no_contesta" ? "📵 No contesta" : lead.estado_cierre === "sin_interes" ? "❌ Sin interés" : lead.estado_cierre === "compro_otro_lugar" ? "🏪 Compró en otro lugar" : lead.estado_cierre === "no_cumple_credito" ? "🚫 No cumple crédito" : lead.estado_cierre === "spam" ? "🚯 Spam" : "💰 Precio alto"}
                           </div>
                         )}
                       </div>
@@ -1138,11 +1138,13 @@ function TabLeads() {
                 </select>
               </div>
 
-              <div><label className="text-xs font-medium block mb-1">Vendedor asignado</label>
-                <select className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={editLead.vendedor_asignado || ""} onChange={e => setEditLead(p => ({ ...p, vendedor_asignado: e.target.value }))}>
-                  <option value="">Sin asignar</option>
-                  {vendedores.map(v => <option key={v.id} value={v.nombre}>{v.nombre}</option>)}
-                </select>
+              <div>
+                <label className="text-xs font-medium block mb-1">Vendedor asignado</label>
+                <div className="w-full border rounded-lg px-3 py-2 text-sm bg-muted/40 flex items-center justify-between" style={{ borderColor: "hsl(var(--border))" }}>
+                  <span>{editLead.vendedor_asignado || "Sin asignar"}</span>
+                  <span className="text-[10px] uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>🤖 Asigna el Agente IA</span>
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Solo el Agente IA puede asignar clientes a vendedores según la rotación configurada.</p>
               </div>
 
               <div><label className="text-xs font-medium block mb-1">Calificación</label>
@@ -1167,8 +1169,9 @@ function TabLeads() {
                   <option value="sin_interes">❌ Sin interés</option>
                   <option value="compro_otro_lugar">🏪 Compró en otro lugar</option>
                   <option value="no_cumple_credito">🚫 No cumple requisitos de crédito</option>
-                  <option value="precio_alto">💰 Precio alto</option>
-                </select>
+                   <option value="precio_alto">💰 Precio alto</option>
+                   <option value="spam">🚯 Spam</option>
+                 </select>
               </div>
 
               {editLead.estado_cierre && (
@@ -1235,11 +1238,12 @@ function TabLeads() {
               </div>
               <div><label className="text-xs font-medium block mb-1">Interés</label><input className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="¿Qué busca?" value={newLead.interes} onChange={e => setNewLead(p => ({ ...p, interes: e.target.value }))} /></div>
               <div><label className="text-xs font-medium block mb-1">Presupuesto</label><input className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="$ Estimado" value={newLead.presupuesto} onChange={e => setNewLead(p => ({ ...p, presupuesto: e.target.value }))} /></div>
-              <div className="col-span-2"><label className="text-xs font-medium block mb-1">Vendedor asignado</label>
-                <select className="w-full border rounded-lg px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={newLead.vendedor_asignado} onChange={e => setNewLead(p => ({ ...p, vendedor_asignado: e.target.value }))}>
-                  <option value="">Sin asignar</option>
-                  {vendedores.map(v => <option key={v.id} value={v.nombre}>{v.nombre}</option>)}
-                </select>
+              <div className="col-span-2">
+                <label className="text-xs font-medium block mb-1">Vendedor asignado</label>
+                <div className="w-full border rounded-lg px-3 py-2 text-sm bg-muted/40 flex items-center justify-between" style={{ borderColor: "hsl(var(--border))" }}>
+                  <span style={{ color: "hsl(var(--muted-foreground))" }}>Sin asignar</span>
+                  <span className="text-[10px] uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>🤖 Lo asigna el Agente IA</span>
+                </div>
               </div>
               <div className="col-span-2"><label className="text-xs font-medium block mb-1">Calificación</label>
                 <div className="flex gap-2">
