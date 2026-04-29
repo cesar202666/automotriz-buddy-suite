@@ -243,9 +243,9 @@ export default function Configuracion() {
   useEffect(() => {
     if (!authenticated) return;
     (async () => {
-      const { data } = await sbAny.from("configuracion_sistema").select("clave, valor") as { data: { clave: string; valor: string }[] | null };
-      if (!data) return;
-      const map = Object.fromEntries(data.map((r) => [r.clave, r.valor]));
+      // 1) Load saved config first
+      const { data: cfgData } = await sbAny.from("configuracion_sistema").select("clave, valor") as { data: { clave: string; valor: string }[] | null };
+      const map = cfgData ? Object.fromEntries(cfgData.map((r) => [r.clave, r.valor])) : {};
       if (map.AGENT_NAME) setAgenteName(map.AGENT_NAME);
       if (map.AGENT_SYSTEM_PROMPT) setAgentePrompt(map.AGENT_SYSTEM_PROMPT);
       if (map.AGENT_MODEL) setAgenteModel(map.AGENT_MODEL);
@@ -263,34 +263,39 @@ export default function Configuracion() {
       if (map.HORARIOS_ACTIVOS !== undefined) setHorariosActivos(map.HORARIOS_ACTIVOS === "true");
       if (map.HORARIOS_CONFIG) { try { setHorariosConfig(JSON.parse(map.HORARIOS_CONFIG)); } catch {} }
       if (map.MENSAJE_FUERA_HORARIO) setMsgFueraHorario(map.MENSAJE_FUERA_HORARIO);
-      if (map.ROTACION_VENDEDORES) {
-        try { setRotacionVendedores(JSON.parse(map.ROTACION_VENDEDORES)); } catch {}
-      }
-    })();
 
-    (async () => {
-      const { data } = await supabase.from("vendedores").select("id, nombre, sucursal").eq("activo", true).eq("rol", "vendedor");
-      if (data) {
-        setVendedores(data as Vendedor[]);
-        // Merge: keep existing rotation order/config and append any new vendedores
-        // that don't yet exist in the rotation list (by name match).
-        setRotacionVendedores(prev => {
-          const norm = (s: string) => (s || "").trim().toLowerCase();
-          const existingNames = new Set(prev.map(p => norm(p.nombre)));
-          const additions = (data as Vendedor[])
-            .filter(v => !existingNames.has(norm(v.nombre)))
-            .map(v => ({
-              vendedor_id: v.id,
-              nombre: v.nombre,
-              sucursal: v.sucursal || "",
-              activo: true,
-              consecutivos: 1,
-            }));
-          // Also drop entries whose vendedor no longer exists / is inactive
-          const activeNames = new Set((data as Vendedor[]).map(v => norm(v.nombre)));
-          const filtered = prev.filter(p => activeNames.has(norm(p.nombre)));
-          return [...filtered, ...additions];
-        });
+      let savedRotacion: RotacionVendedor[] = [];
+      if (map.ROTACION_VENDEDORES) {
+        try { savedRotacion = JSON.parse(map.ROTACION_VENDEDORES) as RotacionVendedor[]; } catch {}
+      }
+
+      // 2) Load active vendedores and merge into rotation
+      const { data: vendData } = await supabase
+        .from("vendedores")
+        .select("id, nombre, sucursal")
+        .eq("activo", true)
+        .eq("rol", "vendedor");
+
+      if (vendData) {
+        setVendedores(vendData as Vendedor[]);
+        const norm = (s: string) => (s || "").trim().toLowerCase();
+        const activeNames = new Set((vendData as Vendedor[]).map(v => norm(v.nombre)));
+        // Keep saved entries for vendedores that still exist and are active
+        const filtered = savedRotacion.filter(p => activeNames.has(norm(p.nombre)));
+        const existingNames = new Set(filtered.map(p => norm(p.nombre)));
+        // Append any active vendedores that aren't in the saved list
+        const additions = (vendData as Vendedor[])
+          .filter(v => !existingNames.has(norm(v.nombre)))
+          .map(v => ({
+            vendedor_id: v.id,
+            nombre: v.nombre,
+            sucursal: v.sucursal || "",
+            activo: true,
+            consecutivos: 1,
+          }));
+        setRotacionVendedores([...filtered, ...additions]);
+      } else {
+        setRotacionVendedores(savedRotacion);
       }
     })();
   }, [authenticated]);
