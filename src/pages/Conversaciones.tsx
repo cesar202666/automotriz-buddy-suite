@@ -1140,11 +1140,73 @@ function TabLeads() {
 
               <div>
                 <label className="text-xs font-medium block mb-1">Vendedor asignado</label>
-                <div className="w-full border rounded-lg px-3 py-2 text-sm bg-muted/40 flex items-center justify-between" style={{ borderColor: "hsl(var(--border))" }}>
-                  <span>{editLead.vendedor_asignado || "Sin asignar"}</span>
-                  <span className="text-[10px] uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>🤖 Asigna el Agente IA</span>
-                </div>
-                <p className="text-[10px] mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Solo el Agente IA puede asignar clientes a vendedores según la rotación configurada.</p>
+                {(usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion") ? (
+                  <>
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background"
+                        style={{ borderColor: "hsl(var(--border))" }}
+                        value={editLead.vendedor_asignado || ""}
+                        onChange={e => setEditLead(p => ({ ...p, vendedor_asignado: e.target.value }))}
+                      >
+                        <option value="">Sin asignar</option>
+                        {vendedores.map(v => (
+                          <option key={v.id} value={v.nombre}>{v.nombre}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={async () => {
+                          if (!selectedLead) return;
+                          const nuevoVendedor = (editLead.vendedor_asignado || "").trim();
+                          const anterior = (selectedLead.vendedor_asignado || "").trim();
+                          setSavingLead(true);
+                          await supabase.from("leads").update({ vendedor_asignado: nuevoVendedor }).eq("id", selectedLead.id);
+                          if (selectedLead.conversation_id) {
+                            await supabase.from("conversations").update({
+                              assigned_to: nuevoVendedor,
+                              escalated: !!nuevoVendedor,
+                              escalated_at: nuevoVendedor ? new Date().toISOString() : null,
+                              escalated_to: nuevoVendedor || null,
+                            }).eq("id", selectedLead.conversation_id);
+                          } else if (selectedLead.contact_id) {
+                            await supabase.from("conversations").update({
+                              assigned_to: nuevoVendedor,
+                              escalated: !!nuevoVendedor,
+                              escalated_at: nuevoVendedor ? new Date().toISOString() : null,
+                              escalated_to: nuevoVendedor || null,
+                            }).eq("contact_id", selectedLead.contact_id);
+                          }
+                          await supabase.from("lead_actividades").insert({
+                            lead_id: selectedLead.id,
+                            tipo: "estado_cambio",
+                            descripcion: `Reasignación manual: ${anterior || "Sin asignar"} → ${nuevoVendedor || "Sin asignar"}`,
+                            usuario: `${usuarioActual?.nombre || ""} ${usuarioActual?.apellido || ""}`.trim() || "Admin",
+                          });
+                          setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, vendedor_asignado: nuevoVendedor } : l));
+                          setSelectedLead(prev => prev ? { ...prev, vendedor_asignado: nuevoVendedor } : null);
+                          const { data: actData } = await supabase.from("lead_actividades").select("*").eq("lead_id", selectedLead.id).order("created_at", { ascending: false });
+                          if (actData) setActividades(actData as LeadActividad[]);
+                          setSavingLead(false);
+                          toast.success(nuevoVendedor ? `Cliente asignado a ${nuevoVendedor}` : "Asignación removida");
+                        }}
+                        disabled={savingLead || (editLead.vendedor_asignado || "") === (selectedLead?.vendedor_asignado || "")}
+                        className="px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                        style={{ background: "hsl(var(--primary))" }}
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                    <p className="text-[10px] mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Como {usuarioActual?.rol === "master" ? "Admin Master" : "Administración"}, puedes reasignar manualmente. La conversación se escalará al nuevo vendedor.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-full border rounded-lg px-3 py-2 text-sm bg-muted/40 flex items-center justify-between" style={{ borderColor: "hsl(var(--border))" }}>
+                      <span>{editLead.vendedor_asignado || "Sin asignar"}</span>
+                      <span className="text-[10px] uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>🤖 Asigna el Agente IA</span>
+                    </div>
+                    <p className="text-[10px] mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>Solo el Agente IA puede asignar clientes a vendedores según la rotación configurada.</p>
+                  </>
+                )}
               </div>
 
               <div><label className="text-xs font-medium block mb-1">Calificación</label>
