@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { HashRouter, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { AppProvider } from "@/context/AppContext";
 import Layout from "./components/Layout";
@@ -22,7 +22,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AppProvider>
       <Toaster />
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path="/" element={<Layout><Dashboard /></Layout>} />
           <Route path="/clientes" element={<Layout><Clientes /></Layout>} />
@@ -37,7 +37,7 @@ const App = () => (
           <Route path="/crm-movil" element={<CrmMovil />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </AppProvider>
   </QueryClientProvider>
 );
