@@ -669,7 +669,7 @@ function TabMensajes() {
           )}
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center" style={{ background: "hsl(220 20% 97%)" }}>
+        <div className="flex-1 hidden md:flex flex-col items-center justify-center" style={{ background: "hsl(220 20% 97%)" }}>
           <div className="text-center max-w-sm px-6">
             <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: "hsl(var(--primary)/0.1)" }}>
               <MessageSquare size={28} style={{ color: "hsl(var(--primary))" }} />
