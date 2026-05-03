@@ -13,6 +13,7 @@ import Administracion from "./pages/Administracion";
 import Gerencia from "./pages/Gerencia";
 import Conversaciones from "./pages/Conversaciones";
 import Configuracion from "./pages/Configuracion";
+import CrmMovil from "./pages/CrmMovil";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/gerencia" element={<Layout><Gerencia /></Layout>} />
           <Route path="/conversaciones" element={<Layout><Conversaciones /></Layout>} />
           <Route path="/configuracion" element={<Layout><Configuracion /></Layout>} />
+          <Route path="/crm-movil" element={<CrmMovil />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
