@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import {
   Wrench, Key, Lock, CheckCircle, XCircle, Loader2, Eye, EyeOff,
   Cpu, Globe, Copy, ChevronDown, ChevronUp, Bot, Users, Clock,
-  AlertCircle, Settings2, ArrowUp, ArrowDown, RotateCw,
+  AlertCircle, Settings2, ArrowUp, ArrowDown, RotateCw, Smartphone,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/integrations/supabase/client";
 
 const MASTER_PASS = "123cuatro";
@@ -477,6 +478,9 @@ export default function Configuracion() {
       </div>
 
       <div className="grid gap-6 max-w-3xl">
+
+        {/* ── Acceso Móvil CRM ─────────────────────────────────────────────── */}
+        <AccesoMovilCRM />
 
         {/* ── IA Providers ─────────────────────────────────────────────────── */}
         {PROVIDERS.map(provider => {
