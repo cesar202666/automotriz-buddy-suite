@@ -450,7 +450,7 @@ function TabMensajes() {
   return (
     <div className="flex" style={{ height: "calc(100vh - 140px)" }}>
       {/* Sidebar */}
-      <div className="flex flex-col w-80 flex-shrink-0 border-r" style={{ borderColor: "hsl(var(--border))", background: "hsl(220 25% 10%)" }}>
+      <div className={`flex-col w-full md:w-80 flex-shrink-0 border-r ${selectedConv ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: "hsl(var(--border))", background: "hsl(220 25% 10%)" }}>
         <div className="p-3 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           <div className="relative flex-1 mr-2">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "rgba(255,255,255,0.4)" }} />
