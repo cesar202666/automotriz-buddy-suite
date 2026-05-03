@@ -1482,9 +1482,10 @@ function TabMetricas() {
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [fechaDesde, setFechaDesde] = useState(() => {
-    const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
+    const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().slice(0, 10);
   });
   const [fechaHasta, setFechaHasta] = useState(() => new Date().toISOString().slice(0, 10));
+
   const [filtroVendedor, setFiltroVendedor] = useState("todos");
 
   const isVendedor = usuarioActual?.rol === "vendedor";
