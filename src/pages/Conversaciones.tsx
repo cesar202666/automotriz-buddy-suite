@@ -1560,15 +1560,18 @@ function TabMetricas() {
   // No respondidos por vendedor
   const noRespondidosData = vendedorData.filter(v => v.vendedor !== "Sin asignar" && v.noRespondidos > 0);
 
-  // Evolución diaria de leads (últimos 30 días)
+  // Evolución diaria de leads (rango seleccionado)
   const dailyLeadsData = (() => {
     const days: { date: string; label: string; leads: number }[] = [];
     const map: Record<string, number> = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
+    const start = new Date(fechaDesde + "T00:00:00");
+    const end = new Date(fechaHasta + "T00:00:00");
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
       const key = d.toISOString().slice(0, 10);
       const label = d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
       days.push({ date: key, label, leads: 0 });
@@ -1581,6 +1584,7 @@ function TabMetricas() {
     });
     return days.map((d) => ({ ...d, leads: map[d.date] }));
   })();
+
 
   const leadsRecientes = calificados.slice(0, 8);
   const totalRespondidos = vendedorData.reduce((s, v) => s + v.respondidos, 0);
