@@ -533,19 +533,27 @@ function TabMensajes() {
 
       {/* Chat panel */}
       {selectedConv ? (
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "hsl(var(--background))" }}>
-          <div className="px-5 py-3 border-b flex items-center justify-between flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-            <div className="flex items-center gap-3">
+        <div className="flex-1 flex flex-col overflow-hidden w-full" style={{ background: "hsl(var(--background))" }}>
+          <div className="px-3 md:px-5 py-3 border-b flex items-center justify-between flex-shrink-0 gap-2" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+              <button
+                onClick={() => setSelectedConvId(null)}
+                className="md:hidden flex-shrink-0 p-1.5 rounded-lg border"
+                style={{ borderColor: "hsl(var(--border))" }}
+                aria-label="Volver"
+              >
+                <ChevronRight size={18} style={{ transform: "rotate(180deg)" }} />
+              </button>
               <Avatar name={normalizeLeadName(selectedConv.contact?.name || "") || "?"} size={36} />
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold">{normalizeLeadName(selectedConv.contact?.name || "") || "Desconocido"}</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold truncate">{normalizeLeadName(selectedConv.contact?.name || "") || "Desconocido"}</p>
                   <ChannelBadge channel={selectedConv.channel} />
-                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ background: selectedConv.status === "active" ? "#dcfce7" : "hsl(var(--muted))", color: selectedConv.status === "active" ? "#166534" : "hsl(var(--muted-foreground))" }}>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium hidden md:inline" style={{ background: selectedConv.status === "active" ? "#dcfce7" : "hsl(var(--muted))", color: selectedConv.status === "active" ? "#166534" : "hsl(var(--muted-foreground))" }}>
                     {selectedConv.status === "active" ? "● Activa" : "Cerrada"}
                   </span>
                 </div>
-                <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                <p className="text-xs truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
                   {selectedConv.contact?.phone || ""}{selectedConv.contact?.phone && selectedConv.contact?.email ? " · " : ""}{selectedConv.contact?.email || ""}
                 </p>
               </div>
