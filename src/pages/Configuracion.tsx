@@ -175,7 +175,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 function AccesoMovilCRM() {
-  const url = `${window.location.origin}/crm-movil`;
+  const url = `${window.location.origin}/#/crm-movil`;
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {

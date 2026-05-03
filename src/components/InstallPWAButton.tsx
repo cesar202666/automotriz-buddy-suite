@@ -29,7 +29,7 @@ export default function InstallPWAButton() {
     >
       <div className="flex items-center gap-2 text-sm">
         <Download size={16} />
-        <span className="font-semibold">Instalar Egaña CRM</span>
+        <span className="font-semibold">Instalar Automotriz Egaña</span>
       </div>
       <div className="flex items-center gap-1">
         <button
