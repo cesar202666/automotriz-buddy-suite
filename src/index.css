@@ -118,3 +118,47 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* ── /crm-movil: forzar layout móvil sin afectar desktop ────────────────── */
+.crm-movil-wrap {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Aplicar SOLO en móvil; respeta el comportamiento desktop existente */
+@media (max-width: 767px) {
+  .crm-movil-wrap,
+  .crm-movil-wrap * {
+    min-width: 0;
+  }
+  /* Contenedor raíz de Conversaciones: ajustar altura sin restar header desktop */
+  .crm-movil-wrap > div {
+    height: 100vh !important;
+    height: 100dvh !important;
+  }
+  /* Layout interno de TabMensajes (lista + chat) */
+  .crm-movil-wrap .flex[style*="calc(100vh"] {
+    height: calc(100dvh - 96px) !important;
+    width: 100%;
+  }
+  /* Sidebar de conversaciones siempre 100% ancho en móvil */
+  .crm-movil-wrap .md\:w-80 {
+    width: 100% !important;
+    max-width: 100%;
+  }
+  /* Asegurar que la lista respeta el ancho del viewport */
+  .crm-movil-wrap .overflow-y-auto > button {
+    width: 100%;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  /* Padding adicional al input de búsqueda y barra inferior */
+  .crm-movil-wrap input[placeholder="Buscar contacto..."] {
+    font-size: 16px; /* evita zoom en iOS */
+  }
+}
+
