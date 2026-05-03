@@ -450,7 +450,7 @@ function TabMensajes() {
   return (
     <div className="flex" style={{ height: "calc(100vh - 140px)" }}>
       {/* Sidebar */}
-      <div className="flex flex-col w-80 flex-shrink-0 border-r" style={{ borderColor: "hsl(var(--border))", background: "hsl(220 25% 10%)" }}>
+      <div className={`flex-col w-full md:w-80 flex-shrink-0 border-r ${selectedConv ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: "hsl(var(--border))", background: "hsl(220 25% 10%)" }}>
         <div className="p-3 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           <div className="relative flex-1 mr-2">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "rgba(255,255,255,0.4)" }} />
@@ -533,19 +533,27 @@ function TabMensajes() {
 
       {/* Chat panel */}
       {selectedConv ? (
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "hsl(var(--background))" }}>
-          <div className="px-5 py-3 border-b flex items-center justify-between flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-            <div className="flex items-center gap-3">
+        <div className="flex-1 flex flex-col overflow-hidden w-full" style={{ background: "hsl(var(--background))" }}>
+          <div className="px-3 md:px-5 py-3 border-b flex items-center justify-between flex-shrink-0 gap-2" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+              <button
+                onClick={() => setSelectedConvId(null)}
+                className="md:hidden flex-shrink-0 p-1.5 rounded-lg border"
+                style={{ borderColor: "hsl(var(--border))" }}
+                aria-label="Volver"
+              >
+                <ChevronRight size={18} style={{ transform: "rotate(180deg)" }} />
+              </button>
               <Avatar name={normalizeLeadName(selectedConv.contact?.name || "") || "?"} size={36} />
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold">{normalizeLeadName(selectedConv.contact?.name || "") || "Desconocido"}</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold truncate">{normalizeLeadName(selectedConv.contact?.name || "") || "Desconocido"}</p>
                   <ChannelBadge channel={selectedConv.channel} />
-                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ background: selectedConv.status === "active" ? "#dcfce7" : "hsl(var(--muted))", color: selectedConv.status === "active" ? "#166534" : "hsl(var(--muted-foreground))" }}>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium hidden md:inline" style={{ background: selectedConv.status === "active" ? "#dcfce7" : "hsl(var(--muted))", color: selectedConv.status === "active" ? "#166534" : "hsl(var(--muted-foreground))" }}>
                     {selectedConv.status === "active" ? "● Activa" : "Cerrada"}
                   </span>
                 </div>
-                <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                <p className="text-xs truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
                   {selectedConv.contact?.phone || ""}{selectedConv.contact?.phone && selectedConv.contact?.email ? " · " : ""}{selectedConv.contact?.email || ""}
                 </p>
               </div>
@@ -661,7 +669,7 @@ function TabMensajes() {
           )}
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center" style={{ background: "hsl(220 20% 97%)" }}>
+        <div className="flex-1 hidden md:flex flex-col items-center justify-center" style={{ background: "hsl(220 20% 97%)" }}>
           <div className="text-center max-w-sm px-6">
             <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: "hsl(var(--primary)/0.1)" }}>
               <MessageSquare size={28} style={{ color: "hsl(var(--primary))" }} />
@@ -1991,40 +1999,41 @@ export default function Conversaciones() {
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "hsl(var(--primary))" }}>
-            <Target size={18} className="text-white" />
+      <div className="flex items-center justify-between px-3 md:px-5 py-2 md:py-3 border-b flex-shrink-0 gap-2" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "hsl(var(--primary))" }}>
+            <Target size={16} className="text-white" />
           </div>
-          <div>
-            <h1 className="text-base font-bold">Egaña CRM</h1>
-            <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Gestión de clientes y conversaciones</p>
+          <div className="min-w-0">
+            <h1 className="text-sm md:text-base font-bold truncate">Egaña CRM</h1>
+            <p className="text-[10px] md:text-xs truncate hidden sm:block" style={{ color: "hsl(var(--muted-foreground))" }}>Gestión de clientes y conversaciones</p>
           </div>
         </div>
         <button
           onClick={toggleAgente}
           disabled={loadingAgente}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95"
+          className="flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-[11px] md:text-xs font-medium transition-all active:scale-95 flex-shrink-0"
           style={{
             background: agenteActivo ? "hsl(142 71% 45% / 0.15)" : "hsl(0 84% 60% / 0.15)",
             color: agenteActivo ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)",
             border: `1px solid ${agenteActivo ? "hsl(142 71% 45% / 0.3)" : "hsl(0 84% 60% / 0.3)"}`,
           }}
         >
-          <Bot size={14} />
-          {loadingAgente ? "..." : agenteActivo ? "Agente IA Activo" : "Agente IA Apagado"}
+          <Bot size={13} />
+          <span className="hidden sm:inline">{loadingAgente ? "..." : agenteActivo ? "Agente IA Activo" : "Agente IA Apagado"}</span>
+          <span className="sm:hidden">{loadingAgente ? "..." : agenteActivo ? "IA ON" : "IA OFF"}</span>
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b flex-shrink-0 px-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+      <div className="flex border-b flex-shrink-0 px-2 md:px-5 overflow-x-auto scrollbar-hide" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
         {TABS.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all relative"
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-2.5 md:py-3 text-xs md:text-sm font-medium transition-all relative flex-shrink-0 whitespace-nowrap"
               style={{ color: isActive ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))", borderBottom: isActive ? "2px solid hsl(var(--primary))" : "2px solid transparent", marginBottom: "-1px" }}>
-              <Icon size={15} />
+              <Icon size={14} />
               {tab.label}
             </button>
           );
