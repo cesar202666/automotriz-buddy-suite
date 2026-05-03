@@ -174,6 +174,63 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 }
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
+function AccesoMovilCRM() {
+  const url = `${window.location.origin}/crm-movil`;
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = url; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+      document.body.removeChild(ta);
+    }
+  };
+  return (
+    <div className="bg-card border rounded-xl p-6 shadow-sm" style={{ borderColor: "hsl(var(--border))" }}>
+      <div className="flex items-center gap-2 mb-1">
+        <Smartphone size={18} style={{ color: "hsl(var(--primary))" }} />
+        <h3 className="text-base font-bold">Acceso Móvil CRM</h3>
+      </div>
+      <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>
+        Comparte este enlace con los vendedores para que usen el CRM desde su celular como una app instalable.
+      </p>
+
+      <div className="flex flex-col md:flex-row gap-5 items-start">
+        <div className="flex-1 w-full space-y-3">
+          <div>
+            <label className="text-xs font-semibold block mb-1">URL del CRM móvil</label>
+            <div className="rounded-lg p-3 font-mono text-xs break-all select-all" style={{ background: "hsl(var(--muted))", color: "hsl(var(--primary))" }}>
+              {url}
+            </div>
+          </div>
+          <button
+            onClick={copy}
+            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border font-medium hover:bg-muted/40 transition-colors"
+            style={{ borderColor: "hsl(var(--border))" }}
+          >
+            {copied ? <CheckCircle size={14} style={{ color: "hsl(var(--success))" }} /> : <Copy size={14} />}
+            {copied ? "¡Enlace copiado!" : "Copiar enlace"}
+          </button>
+          <p className="text-xs leading-relaxed" style={{ color: "hsl(var(--muted-foreground))" }}>
+            📱 Abre este enlace en Chrome desde tu celular para instalar la app <strong>Egaña CRM</strong> en tu pantalla de inicio.
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 mx-auto md:mx-0">
+          <div className="bg-white p-3 rounded-lg border" style={{ borderColor: "hsl(var(--border))" }}>
+            <QRCodeSVG value={url} size={140} level="M" />
+          </div>
+          <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Escanea con tu cámara</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Configuracion() {
   const [authenticated, setAuthenticated] = useState(false);
   const [passInput, setPassInput] = useState("");
