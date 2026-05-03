@@ -129,7 +129,14 @@ export default function CrmMovil() {
     return true;
   };
 
-  if (!usuarioActual) return <MobileLogin onLogin={handleLogin} />;
+  if (!usuarioActual) {
+    return (
+      <>
+        <InstallPWAButton />
+        <MobileLogin onLogin={handleLogin} />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
