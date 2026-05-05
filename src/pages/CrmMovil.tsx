@@ -5,6 +5,7 @@ import { Lock } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import Conversaciones from "@/pages/Conversaciones";
 import InstallPWAButton from "@/components/InstallPWAButton";
+import MobileNotifications from "@/components/MobileNotifications";
 
 type BackendLoginRow = {
   id: string;
@@ -141,6 +142,7 @@ export default function CrmMovil() {
   return (
     <div className="min-h-screen bg-background">
       <InstallPWAButton />
+      <MobileNotifications />
       <div className="crm-movil-wrap">
         <Conversaciones />
       </div>
