@@ -726,6 +726,16 @@ function TabMensajes() {
                           {!isInbound && <Bot size={9} />}
                           <span>{fmtFullTime(msg.sent_at)}</span>
                           {!isInbound && <CheckCheck size={10} style={{ color: "#3b82f6" }} />}
+                          {isAdmin && !msg.id.startsWith("temp-") && (
+                            <button
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              className="ml-1 p-0.5 rounded hover:bg-red-100 transition-colors"
+                              title="Eliminar mensaje"
+                              style={{ color: "#ef4444" }}
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       {!isInbound && <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5" style={{ background: "hsl(var(--primary))" }}><Bot size={14} className="text-white" /></div>}
