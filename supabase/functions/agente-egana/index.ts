@@ -612,17 +612,19 @@ Deno.serve(async (req) => {
     }
 
     // ── Check if conversation is already escalated ─────────────────────────────
-    // Once escalated, the bot NEVER responds again unless manually reactivated
-    // (by setting escalated=false on the conversation)
+    // If escalated AND seller already opened the chat → bot stays silent (seller takes over).
+    // If escalated but seller has NOT opened the chat yet → bot keeps replying with Lovable AI
+    // so the client never feels ignored while waiting for the seller.
     if (conversationId) {
       const { data: conv } = await supabase
         .from("conversations")
-        .select("escalated, escalated_at, unread_count")
+        .select(
+          "escalated, escalated_at, unread_count, primer_apertura_vendedor, assigned_to",
+        )
         .eq("id", conversationId)
         .single();
 
       if (conv?.escalated) {
-        // Always save inbound message so the seller can see it
         const nowIso = new Date().toISOString();
         const insertedInbound = await ensureInboundMessage(supabase, {
           conversationId,
@@ -643,9 +645,56 @@ Deno.serve(async (req) => {
           })
           .eq("id", conversationId);
 
-        // Bot does NOT respond — seller handles from now on
+        // Seller already opened the chat → bot stays silent
+        if (conv.primer_apertura_vendedor) {
+          return new Response(
+            JSON.stringify({ messages: [] }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Seller has NOT opened yet → keep client engaged with AI follow-up
+        const followUpHistory = await getConversationHistory(
+          supabase,
+          conversationId,
+          12,
+        );
+        const aiReply = await generateAIFollowUp(
+          followUpHistory,
+          mensajeCliente,
+          conv.assigned_to || "",
+        );
+
+        // Save outbound + update conversation
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          contact_id: contactId || null,
+          direction: "outbound",
+          content: aiReply,
+          channel: canal,
+          sent_at: new Date().toISOString(),
+        });
+        await supabase
+          .from("conversations")
+          .update({
+            last_message: aiReply,
+            last_message_at: new Date().toISOString(),
+          })
+          .eq("id", conversationId);
+
+        // Send to client via ManyChat (only when invoked from manychat webhook)
+        if (source === "manychat") {
+          await sendViaManychat(supabase, contactId, canal, aiReply);
+        }
+
         return new Response(
-          JSON.stringify({ messages: [] }),
+          JSON.stringify({
+            messages: [{ type: "text", text: aiReply }],
+            set_field_values: [
+              { field_name: "ultimo_mensaje_agente", value: aiReply },
+              { field_name: "escalado", value: "true" },
+            ],
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
