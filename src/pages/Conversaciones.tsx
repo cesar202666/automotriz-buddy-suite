@@ -300,6 +300,7 @@ function UrgenciaDot({ urgencia }: { urgencia: string }) {
 function TabMensajes() {
   const { usuarioActual } = useApp();
   const isVendedor = usuarioActual?.rol === "vendedor";
+  const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
   const vendedorFirstName = usuarioActual?.nombre || "";
 
@@ -314,6 +315,65 @@ function TabMensajes() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const [vendedoresList, setVendedoresList] = useState<Vendedor[]>([]);
+  const [showAssignMenu, setShowAssignMenu] = useState(false);
+
+  // Load active sellers for manual assignment dropdown
+  useEffect(() => {
+    supabase
+      .from("vendedores")
+      .select("*")
+      .eq("activo", true)
+      .eq("rol", "vendedor")
+      .then(({ data }) => {
+        if (data) setVendedoresList(data as Vendedor[]);
+      });
+  }, []);
+
+  const handleAssignVendedor = async (vendedorNombre: string) => {
+    if (!selectedConvId) return;
+    const conv = conversations.find((c) => c.id === selectedConvId);
+    if (!conv) return;
+    const nowIso = new Date().toISOString();
+    await supabase
+      .from("conversations")
+      .update({
+        assigned_to: vendedorNombre,
+        escalated: true,
+        escalated_at: nowIso,
+        escalated_to: vendedorNombre,
+      })
+      .eq("id", selectedConvId);
+    // Also reflect in linked lead
+    if (conv.contact_id) {
+      await supabase
+        .from("leads")
+        .update({ vendedor_asignado: vendedorNombre, etapa: "calificado" })
+        .eq("contact_id", conv.contact_id);
+    }
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedConvId
+          ? { ...c, assigned_to: vendedorNombre, escalated: true, escalated_at: nowIso }
+          : c,
+      ),
+    );
+    setShowAssignMenu(false);
+    toast.success(`Conversación asignada a ${vendedorNombre}`);
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!isAdmin) return;
+    if (!confirm("¿Eliminar este mensaje? Esta acción no se puede deshacer.")) return;
+    const { error } = await supabase.from("messages").delete().eq("id", msgId);
+    if (error) {
+      toast.error("No se pudo eliminar el mensaje");
+      return;
+    }
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+    toast.success("Mensaje eliminado");
+  };
+
 
   const handleSendReply = async () => {
     if (!replyText.trim() || sending || !selectedConvId) return;
@@ -564,6 +624,46 @@ function TabMensajes() {
                   <Phone size={12} />WhatsApp
                 </a>
               )}
+              {/* Manual seller assignment (admin only) */}
+              {isAdmin && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowAssignMenu((v) => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border"
+                    style={{ borderColor: "hsl(var(--primary))", color: "hsl(var(--primary))", background: "hsl(var(--primary)/0.08)" }}
+                    title="Asignar manualmente a un vendedor"
+                  >
+                    <UserIcon size={12} />
+                    {selectedConv.assigned_to ? `Reasignar` : `Asignar vendedor`}
+                  </button>
+                  {showAssignMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowAssignMenu(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-lg border shadow-lg overflow-hidden" style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
+                        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))", background: "hsl(var(--muted)/0.4)" }}>
+                          Vendedores activos
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          {vendedoresList.length === 0 && (
+                            <div className="px-3 py-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Sin vendedores activos</div>
+                          )}
+                          {vendedoresList.map((v) => (
+                            <button
+                              key={v.id}
+                              onClick={() => handleAssignVendedor(v.nombre)}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-muted flex items-center justify-between"
+                              style={{ color: "hsl(var(--foreground))" }}
+                            >
+                              <span>{v.nombre}</span>
+                              {selectedConv.assigned_to === v.nombre && <CheckCheck size={12} style={{ color: "#22c55e" }} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <button onClick={async () => {
                 const newStatus = selectedConv.status === "active" ? "closed" : "active";
                 await supabase.from("conversations").update({ status: newStatus }).eq("id", selectedConv.id);
@@ -626,6 +726,16 @@ function TabMensajes() {
                           {!isInbound && <Bot size={9} />}
                           <span>{fmtFullTime(msg.sent_at)}</span>
                           {!isInbound && <CheckCheck size={10} style={{ color: "#3b82f6" }} />}
+                          {isAdmin && !msg.id.startsWith("temp-") && (
+                            <button
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              className="ml-1 p-0.5 rounded hover:bg-red-100 transition-colors"
+                              title="Eliminar mensaje"
+                              style={{ color: "#ef4444" }}
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       {!isInbound && <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5" style={{ background: "hsl(var(--primary))" }}><Bot size={14} className="text-white" /></div>}
@@ -707,8 +817,8 @@ function TabLeads() {
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
   const vendedorFirstName = usuarioActual?.nombre || "";
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     let leadsQuery = supabase.from("leads").select("*").order("created_at", { ascending: false });
     // Vendedores only see their assigned leads
     if (isVendedor && vendedorName) {
@@ -765,7 +875,7 @@ function TabLeads() {
 
   useEffect(() => {
     const ch = supabase.channel("leads-rt").on("postgres_changes", { event: "*", schema: "public", table: "leads" }, (payload) => {
-      loadData();
+      loadData(true);
       if (payload.eventType === "INSERT") {
         const newLead = normalizeLeadRecord(payload.new as Lead);
         toast(`Nuevo lead: ${newLead.nombre} vía ${newLead.canal || "web"}`, {
