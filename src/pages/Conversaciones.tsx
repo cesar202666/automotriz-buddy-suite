@@ -300,6 +300,7 @@ function UrgenciaDot({ urgencia }: { urgencia: string }) {
 function TabMensajes() {
   const { usuarioActual } = useApp();
   const isVendedor = usuarioActual?.rol === "vendedor";
+  const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
   const vendedorFirstName = usuarioActual?.nombre || "";
 
@@ -314,6 +315,65 @@ function TabMensajes() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const [vendedoresList, setVendedoresList] = useState<Vendedor[]>([]);
+  const [showAssignMenu, setShowAssignMenu] = useState(false);
+
+  // Load active sellers for manual assignment dropdown
+  useEffect(() => {
+    supabase
+      .from("vendedores")
+      .select("*")
+      .eq("activo", true)
+      .eq("rol", "vendedor")
+      .then(({ data }) => {
+        if (data) setVendedoresList(data as Vendedor[]);
+      });
+  }, []);
+
+  const handleAssignVendedor = async (vendedorNombre: string) => {
+    if (!selectedConvId) return;
+    const conv = conversations.find((c) => c.id === selectedConvId);
+    if (!conv) return;
+    const nowIso = new Date().toISOString();
+    await supabase
+      .from("conversations")
+      .update({
+        assigned_to: vendedorNombre,
+        escalated: true,
+        escalated_at: nowIso,
+        escalated_to: vendedorNombre,
+      })
+      .eq("id", selectedConvId);
+    // Also reflect in linked lead
+    if (conv.contact_id) {
+      await supabase
+        .from("leads")
+        .update({ vendedor_asignado: vendedorNombre, etapa: "calificado" })
+        .eq("contact_id", conv.contact_id);
+    }
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedConvId
+          ? { ...c, assigned_to: vendedorNombre, escalated: true, escalated_at: nowIso }
+          : c,
+      ),
+    );
+    setShowAssignMenu(false);
+    toast.success(`Conversación asignada a ${vendedorNombre}`);
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!isAdmin) return;
+    if (!confirm("¿Eliminar este mensaje? Esta acción no se puede deshacer.")) return;
+    const { error } = await supabase.from("messages").delete().eq("id", msgId);
+    if (error) {
+      toast.error("No se pudo eliminar el mensaje");
+      return;
+    }
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+    toast.success("Mensaje eliminado");
+  };
+
 
   const handleSendReply = async () => {
     if (!replyText.trim() || sending || !selectedConvId) return;
