@@ -236,8 +236,12 @@ Deno.serve(async (req) => {
         .eq('id', existingLead.id)
     }
 
-    // ── 4. Si la conversación ya fue escalada, NO llamar al agente IA
-    if (convData?.escalated) {
+    // ── 4. Si la conversación ya fue escalada Y el vendedor ya abrió el chat,
+    //       NO llamar al agente IA (el vendedor toma el control).
+    //       Si está escalada pero el vendedor NO ha abierto aún, el agente IA
+    //       sigue respondiendo (modo "follow-up con AI") para no dejar al cliente
+    //       sin respuesta mientras espera.
+    if (convData?.escalated && convData?.primer_apertura_vendedor) {
       return new Response(
         JSON.stringify({ messages: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
