@@ -742,13 +742,6 @@ function TabMensajes() {
                   </div>
                 );
               })
-                        </div>
-                      </div>
-                      {!isInbound && <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5" style={{ background: "hsl(var(--primary))" }}><Bot size={14} className="text-white" /></div>}
-                    </div>
-                  </div>
-                );
-              })
             )}
             <div ref={messagesEndRef} />
           </div>
