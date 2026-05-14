@@ -362,23 +362,26 @@ function TabMensajes() {
     toast.success(`Conversación asignada a ${vendedorNombre}`);
   };
 
-  const handleDeleteConversation = async (convId: string, contactName: string) => {
+  const handleDeleteConversation = async (convId: string, _contactName: string) => {
     if (!isAdmin) return;
-    if (!confirm(`¿Eliminar todo el chat de ${contactName}? Se borrarán todos los mensajes y la conversación. Esta acción no se puede deshacer.`)) return;
+    // Optimistic UI: remove immediately so unread counts (Todos/WhatsApp/Instagram) refresh al instante
+    const prevConvs = conversations;
+    setConversations((prev) => prev.filter((c) => c.id !== convId));
+    if (selectedConvId === convId) {
+      setSelectedConvId(null);
+      setMessages([]);
+    }
     const { error: msgErr } = await supabase.from("messages").delete().eq("conversation_id", convId);
     if (msgErr) {
+      setConversations(prevConvs);
       toast.error("No se pudo eliminar los mensajes");
       return;
     }
     const { error: convErr } = await supabase.from("conversations").delete().eq("id", convId);
     if (convErr) {
+      setConversations(prevConvs);
       toast.error("No se pudo eliminar la conversación");
       return;
-    }
-    setConversations((prev) => prev.filter((c) => c.id !== convId));
-    if (selectedConvId === convId) {
-      setSelectedConvId(null);
-      setMessages([]);
     }
     toast.success("Chat eliminado");
   };
