@@ -875,7 +875,7 @@ function TabLeads() {
 
   useEffect(() => {
     const ch = supabase.channel("leads-rt").on("postgres_changes", { event: "*", schema: "public", table: "leads" }, (payload) => {
-      loadData();
+      loadData(true);
       if (payload.eventType === "INSERT") {
         const newLead = normalizeLeadRecord(payload.new as Lead);
         toast(`Nuevo lead: ${newLead.nombre} vía ${newLead.canal || "web"}`, {
