@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     // ── 2. Get or create conversation ────────────────────────────────────────
     const { data: convData } = await supabase
       .from('conversations')
-      .select('id, unread_count, escalated')
+      .select('id, unread_count, escalated, primer_apertura_vendedor')
       .eq('contact_id', contactId)
       .eq('channel', channel)
       .order('created_at', { ascending: false })
