@@ -624,6 +624,46 @@ function TabMensajes() {
                   <Phone size={12} />WhatsApp
                 </a>
               )}
+              {/* Manual seller assignment (admin only) */}
+              {isAdmin && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowAssignMenu((v) => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border"
+                    style={{ borderColor: "hsl(var(--primary))", color: "hsl(var(--primary))", background: "hsl(var(--primary)/0.08)" }}
+                    title="Asignar manualmente a un vendedor"
+                  >
+                    <UserIcon size={12} />
+                    {selectedConv.assigned_to ? `Reasignar` : `Asignar vendedor`}
+                  </button>
+                  {showAssignMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowAssignMenu(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-lg border shadow-lg overflow-hidden" style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
+                        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))", background: "hsl(var(--muted)/0.4)" }}>
+                          Vendedores activos
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          {vendedoresList.length === 0 && (
+                            <div className="px-3 py-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Sin vendedores activos</div>
+                          )}
+                          {vendedoresList.map((v) => (
+                            <button
+                              key={v.id}
+                              onClick={() => handleAssignVendedor(v.nombre)}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-muted flex items-center justify-between"
+                              style={{ color: "hsl(var(--foreground))" }}
+                            >
+                              <span>{v.nombre}</span>
+                              {selectedConv.assigned_to === v.nombre && <CheckCheck size={12} style={{ color: "#22c55e" }} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <button onClick={async () => {
                 const newStatus = selectedConv.status === "active" ? "closed" : "active";
                 await supabase.from("conversations").update({ status: newStatus }).eq("id", selectedConv.id);
