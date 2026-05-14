@@ -562,35 +562,47 @@ function TabMensajes() {
               const cfg = getChannelConfig(conv.channel);
               const contactName = normalizeLeadName(conv.contact?.name || "") || "Desconocido";
               return (
-                <button key={conv.id} onClick={() => { setSelectedConvId(conv.id); markRead(conv.id); }} className="w-full text-left px-3 py-3 flex items-center gap-3 transition-all relative"
-                  style={{ background: isActive ? "rgba(255,255,255,0.1)" : "transparent", borderLeft: isActive ? `3px solid ${cfg.color}` : "3px solid transparent" }}>
-                  <div className="relative">
-                    <Avatar name={contactName} size={40} />
-                    <div className="absolute -bottom-0.5 -right-0.5 rounded-full p-0.5 flex items-center justify-center" style={{ background: "hsl(220 25% 10%)", color: cfg.color, width: 17, height: 17 }}>
-                      <ChannelIcon channel={conv.channel} size={9} />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{contactName}</span>
-                      <span className="text-xs ml-2 flex-shrink-0" style={{ color: "rgba(255,255,255,0.35)" }}>{fmtTime(conv.last_message_at)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.4)" }}>{conv.last_message || "Sin mensajes"}</p>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {conv.escalated && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#f97316", color: "white", fontSize: 9 }}>VENDEDOR</span>
-                        )}
-                        {conv.unread_count > 0 && <span className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ background: cfg.color, fontSize: 10 }}>{conv.unread_count > 9 ? "9+" : conv.unread_count}</span>}
+                <div key={conv.id} className="relative group">
+                  <button onClick={() => { setSelectedConvId(conv.id); markRead(conv.id); }} className="w-full text-left px-3 py-3 flex items-center gap-3 transition-all"
+                    style={{ background: isActive ? "rgba(255,255,255,0.1)" : "transparent", borderLeft: isActive ? `3px solid ${cfg.color}` : "3px solid transparent" }}>
+                    <div className="relative">
+                      <Avatar name={contactName} size={40} />
+                      <div className="absolute -bottom-0.5 -right-0.5 rounded-full p-0.5 flex items-center justify-center" style={{ background: "hsl(220 25% 10%)", color: cfg.color, width: 17, height: 17 }}>
+                        <ChannelIcon channel={conv.channel} size={9} />
                       </div>
                     </div>
-                    {conv.assigned_to && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>👤 {conv.assigned_to}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-sm font-semibold truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{contactName}</span>
+                        <span className="text-xs ml-2 flex-shrink-0" style={{ color: "rgba(255,255,255,0.35)" }}>{fmtTime(conv.last_message_at)}</span>
                       </div>
-                    )}
-                  </div>
-                </button>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.4)" }}>{conv.last_message || "Sin mensajes"}</p>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {conv.escalated && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "#f97316", color: "white", fontSize: 9 }}>VENDEDOR</span>
+                          )}
+                          {conv.unread_count > 0 && <span className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ background: cfg.color, fontSize: 10 }}>{conv.unread_count > 9 ? "9+" : conv.unread_count}</span>}
+                        </div>
+                      </div>
+                      {conv.assigned_to && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>👤 {conv.assigned_to}</span>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id, contactName); }}
+                      className="absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Eliminar chat completo"
+                      style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               );
             })
           )}
