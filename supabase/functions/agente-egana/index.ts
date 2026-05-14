@@ -411,6 +411,132 @@ async function ensureInboundMessage(
   return true;
 }
 
+// ── Lovable AI fallback for already-escalated conversations ───────────────────
+// Keeps the bot conversational with the client while the seller hasn't taken over yet.
+async function generateAIFollowUp(
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+  mensajeCliente: string,
+  vendedorAsignado: string,
+): Promise<string> {
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) {
+    return vendedorAsignado
+      ? `Gracias por tu mensaje. ${vendedorAsignado} ya está al tanto y te contactará a la brevedad. 🙌`
+      : `Gracias por tu mensaje. Un ejecutivo te contactará a la brevedad. 🙌`;
+  }
+
+  const systemPrompt =
+    `Eres un asistente virtual de Egaña Automotriz (concesionario de vehículos en Chile). ` +
+    `El cliente ya fue derivado al ejecutivo${
+      vendedorAsignado ? ` ${vendedorAsignado}` : ""
+    }, pero mientras espera puedes responder dudas generales en español chileno, breve y cordial. ` +
+    `Reglas estrictas:\n` +
+    `- Máximo 2-3 frases por respuesta.\n` +
+    `- NO inventes precios, modelos específicos, stock ni condiciones de financiamiento.\n` +
+    `- Si preguntan por un vehículo o cotización concreta, di que el ejecutivo${
+      vendedorAsignado ? ` ${vendedorAsignado}` : ""
+    } le confirmará los detalles muy pronto.\n` +
+    `- No prometas plazos, descuentos ni aprobaciones.\n` +
+    `- Sé amable, usa máximo un emoji por mensaje.\n` +
+    `- No vuelvas a pedir nombre/teléfono, ya están registrados.`;
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
+    { role: "user", content: mensajeCliente },
+  ];
+
+  try {
+    const resp = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages,
+        }),
+      },
+    );
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(
+        `[AGENTE-IA][followup] Lovable AI error ${resp.status}: ${errText}`,
+      );
+      return vendedorAsignado
+        ? `Gracias por tu mensaje. ${vendedorAsignado} te responderá muy pronto. 🙌`
+        : `Gracias por tu mensaje. Un ejecutivo te responderá muy pronto. 🙌`;
+    }
+
+    const data = await resp.json();
+    const text: string = data?.choices?.[0]?.message?.content?.trim() || "";
+    return text || (vendedorAsignado
+      ? `Gracias por tu mensaje. ${vendedorAsignado} te responderá muy pronto. 🙌`
+      : `Gracias por tu mensaje. Un ejecutivo te responderá muy pronto. 🙌`);
+  } catch (e) {
+    console.error("[AGENTE-IA][followup] Excepción:", e);
+    return vendedorAsignado
+      ? `Gracias por tu mensaje. ${vendedorAsignado} te responderá muy pronto. 🙌`
+      : `Gracias por tu mensaje. Un ejecutivo te responderá muy pronto. 🙌`;
+  }
+}
+
+async function sendViaManychat(
+  supabase: ReturnType<typeof createClient>,
+  contactId: string,
+  canal: string,
+  text: string,
+): Promise<void> {
+  const manychatKey = Deno.env.get("MANYCHAT_API_KEY") || "";
+  if (!manychatKey || !contactId) return;
+
+  const { data: contactData } = await supabase
+    .from("contacts")
+    .select("manychat_subscriber_id")
+    .eq("id", contactId)
+    .single();
+
+  if (!contactData?.manychat_subscriber_id) {
+    console.warn("[AGENTE-IA][followup] Sin manychat_subscriber_id");
+    return;
+  }
+
+  const contentPayload: Record<string, unknown> = {
+    messages: [{ type: "text", text }],
+  };
+  const normalizedCanal = canal.toLowerCase();
+  if (normalizedCanal === "whatsapp") contentPayload.type = "whatsapp";
+  else if (normalizedCanal === "instagram") contentPayload.type = "instagram";
+  else if (normalizedCanal === "messenger" || normalizedCanal === "facebook") {
+    contentPayload.type = "facebook";
+  }
+
+  try {
+    const mcResp = await fetch(
+      "https://api.manychat.com/fb/sending/sendContent",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${manychatKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subscriber_id: contactData.manychat_subscriber_id,
+          data: { version: "v2", content: contentPayload },
+        }),
+      },
+    );
+    const mcText = await mcResp.text();
+    console.log("[AGENTE-IA][followup] ManyChat send response:", mcText);
+  } catch (e) {
+    console.error("[AGENTE-IA][followup] Error enviando via ManyChat:", e);
+  }
+}
+
 // ── Main handler ───────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -486,17 +612,19 @@ Deno.serve(async (req) => {
     }
 
     // ── Check if conversation is already escalated ─────────────────────────────
-    // Once escalated, the bot NEVER responds again unless manually reactivated
-    // (by setting escalated=false on the conversation)
+    // If escalated AND seller already opened the chat → bot stays silent (seller takes over).
+    // If escalated but seller has NOT opened the chat yet → bot keeps replying with Lovable AI
+    // so the client never feels ignored while waiting for the seller.
     if (conversationId) {
       const { data: conv } = await supabase
         .from("conversations")
-        .select("escalated, escalated_at, unread_count")
+        .select(
+          "escalated, escalated_at, unread_count, primer_apertura_vendedor, assigned_to",
+        )
         .eq("id", conversationId)
         .single();
 
       if (conv?.escalated) {
-        // Always save inbound message so the seller can see it
         const nowIso = new Date().toISOString();
         const insertedInbound = await ensureInboundMessage(supabase, {
           conversationId,
@@ -517,9 +645,56 @@ Deno.serve(async (req) => {
           })
           .eq("id", conversationId);
 
-        // Bot does NOT respond — seller handles from now on
+        // Seller already opened the chat → bot stays silent
+        if (conv.primer_apertura_vendedor) {
+          return new Response(
+            JSON.stringify({ messages: [] }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Seller has NOT opened yet → keep client engaged with AI follow-up
+        const followUpHistory = await getConversationHistory(
+          supabase,
+          conversationId,
+          12,
+        );
+        const aiReply = await generateAIFollowUp(
+          followUpHistory,
+          mensajeCliente,
+          conv.assigned_to || "",
+        );
+
+        // Save outbound + update conversation
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          contact_id: contactId || null,
+          direction: "outbound",
+          content: aiReply,
+          channel: canal,
+          sent_at: new Date().toISOString(),
+        });
+        await supabase
+          .from("conversations")
+          .update({
+            last_message: aiReply,
+            last_message_at: new Date().toISOString(),
+          })
+          .eq("id", conversationId);
+
+        // Send to client via ManyChat (only when invoked from manychat webhook)
+        if (source === "manychat") {
+          await sendViaManychat(supabase, contactId, canal, aiReply);
+        }
+
         return new Response(
-          JSON.stringify({ messages: [] }),
+          JSON.stringify({
+            messages: [{ type: "text", text: aiReply }],
+            set_field_values: [
+              { field_name: "ultimo_mensaje_agente", value: aiReply },
+              { field_name: "escalado", value: "true" },
+            ],
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
