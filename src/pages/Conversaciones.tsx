@@ -362,16 +362,25 @@ function TabMensajes() {
     toast.success(`Conversación asignada a ${vendedorNombre}`);
   };
 
-  const handleDeleteMessage = async (msgId: string) => {
+  const handleDeleteConversation = async (convId: string, contactName: string) => {
     if (!isAdmin) return;
-    if (!confirm("¿Eliminar este mensaje? Esta acción no se puede deshacer.")) return;
-    const { error } = await supabase.from("messages").delete().eq("id", msgId);
-    if (error) {
-      toast.error("No se pudo eliminar el mensaje");
+    if (!confirm(`¿Eliminar todo el chat de ${contactName}? Se borrarán todos los mensajes y la conversación. Esta acción no se puede deshacer.`)) return;
+    const { error: msgErr } = await supabase.from("messages").delete().eq("conversation_id", convId);
+    if (msgErr) {
+      toast.error("No se pudo eliminar los mensajes");
       return;
     }
-    setMessages((prev) => prev.filter((m) => m.id !== msgId));
-    toast.success("Mensaje eliminado");
+    const { error: convErr } = await supabase.from("conversations").delete().eq("id", convId);
+    if (convErr) {
+      toast.error("No se pudo eliminar la conversación");
+      return;
+    }
+    setConversations((prev) => prev.filter((c) => c.id !== convId));
+    if (selectedConvId === convId) {
+      setSelectedConvId(null);
+      setMessages([]);
+    }
+    toast.success("Chat eliminado");
   };
 
 
