@@ -817,8 +817,8 @@ function TabLeads() {
   const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
   const vendedorFirstName = usuarioActual?.nombre || "";
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     let leadsQuery = supabase.from("leads").select("*").order("created_at", { ascending: false });
     // Vendedores only see their assigned leads
     if (isVendedor && vendedorName) {
