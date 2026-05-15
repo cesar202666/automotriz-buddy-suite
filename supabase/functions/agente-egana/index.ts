@@ -645,55 +645,12 @@ Deno.serve(async (req) => {
           })
           .eq("id", conversationId);
 
-        // Seller already opened the chat → bot stays silent
-        if (conv.primer_apertura_vendedor) {
-          return new Response(
-            JSON.stringify({ messages: [] }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-
-        // Seller has NOT opened yet → keep client engaged with AI follow-up
-        const followUpHistory = await getConversationHistory(
-          supabase,
-          conversationId,
-          12,
-        );
-        const aiReply = await generateAIFollowUp(
-          followUpHistory,
-          mensajeCliente,
-          conv.assigned_to || "",
-        );
-
-        // Save outbound + update conversation
-        await supabase.from("messages").insert({
-          conversation_id: conversationId,
-          contact_id: contactId || null,
-          direction: "outbound",
-          content: aiReply,
-          channel: canal,
-          sent_at: new Date().toISOString(),
-        });
-        await supabase
-          .from("conversations")
-          .update({
-            last_message: aiReply,
-            last_message_at: new Date().toISOString(),
-          })
-          .eq("id", conversationId);
-
-        // Send to client via ManyChat (only when invoked from manychat webhook)
-        if (source === "manychat") {
-          await sendViaManychat(supabase, contactId, canal, aiReply);
-        }
-
+        // Conversación escalada → bot DESACTIVADO completamente.
+        // No responde más, el vendedor toma el control.
         return new Response(
           JSON.stringify({
-            messages: [{ type: "text", text: aiReply }],
-            set_field_values: [
-              { field_name: "ultimo_mensaje_agente", value: aiReply },
-              { field_name: "escalado", value: "true" },
-            ],
+            messages: [],
+            set_field_values: [{ field_name: "escalado", value: "true" }],
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
