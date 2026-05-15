@@ -104,11 +104,31 @@ Deno.serve(async (req) => {
     // ── Parse ManyChat payload ───────────────────────────────────────────────
     const firstName: string = extractString(body.first_name) || extractString(body.name) || extractString((body.contact as Record<string, unknown> | undefined)?.first_name) || 'Cliente'
     const lastName: string = extractString(body.last_name) || extractString((body.contact as Record<string, unknown> | undefined)?.last_name)
-    const phone: string = cleanTemplateValue(body.phone) || cleanTemplateValue((body.contact as Record<string, unknown> | undefined)?.phone)
+    let phone: string = cleanTemplateValue(body.phone) || cleanTemplateValue((body.contact as Record<string, unknown> | undefined)?.phone)
     const email: string = cleanTemplateValue(body.email) || cleanTemplateValue((body.contact as Record<string, unknown> | undefined)?.email)
     const subscriberId: string = extractSubscriberId(body, phone, email)
     const channelRaw: string = (extractString(body.channel) || extractString(body.platform) || 'whatsapp').toLowerCase()
     const channel: string = ['whatsapp', 'instagram', 'facebook'].includes(channelRaw) ? channelRaw : 'whatsapp'
+
+    // Si es WhatsApp y no llegó el teléfono en el payload, lo pedimos a ManyChat
+    if (channel === 'whatsapp' && !phone && subscriberId && !subscriberId.startsWith('phone:') && !subscriberId.startsWith('email:')) {
+      const apiKey = Deno.env.get('MANYCHAT_API_KEY')
+      if (apiKey) {
+        for (const url of [
+          `https://api.manychat.com/wa/subscriber/getInfo?subscriber_id=${subscriberId}`,
+          `https://api.manychat.com/fb/subscriber/getInfo?subscriber_id=${subscriberId}`,
+        ]) {
+          try {
+            const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } })
+            if (!r.ok) continue
+            const j = await r.json()
+            const d = j?.data ?? j
+            const p = (d?.phone ?? d?.whatsapp_phone ?? '').toString().trim()
+            if (p) { phone = p; break }
+          } catch (_) { /* try next */ }
+        }
+      }
+    }
     const messageText: string = extractMessageText(body)
     const manychatMessageId: string = extractManychatMessageId(body)
 
