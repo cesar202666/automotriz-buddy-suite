@@ -33,12 +33,15 @@ Deno.serve(async (req) => {
   )
   const apiKey = Deno.env.get('MANYCHAT_API_KEY')!
 
-  // contacts WhatsApp sin teléfono
+  const url = new URL(req.url)
+  const limit = Number(url.searchParams.get('limit') ?? 30)
+
   const { data: contacts } = await supabase
     .from('contacts')
     .select('id, manychat_subscriber_id, phone')
     .eq('channel', 'whatsapp')
     .or('phone.is.null,phone.eq.')
+    .limit(limit)
 
   let updated = 0
   const errors: string[] = []
