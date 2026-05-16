@@ -683,67 +683,6 @@ Deno.serve(async (req) => {
         .eq("id", conversationId);
     }
 
-    // ── 3-minute conversational window ────────────────────────────────────────
-    // During the first 3 minutes of a brand new (non-escalated) conversation,
-    // the bot keeps chatting using Lovable AI instead of running the rule-based
-    // escalation logic. This gives the team time to optionally claim the lead
-    // manually, and avoids dumping the client to a seller after 1 message.
-    const ESCALATION_DELAY_MS = 3 * 60 * 1000;
-    if (conversationId) {
-      const { data: convMeta } = await supabase
-        .from("conversations")
-        .select("created_at, escalated, assigned_to")
-        .eq("id", conversationId)
-        .single();
-
-      if (convMeta && !convMeta.escalated) {
-        const createdMs = new Date(convMeta.created_at).getTime();
-        const ageMs = Date.now() - createdMs;
-        if (Number.isFinite(createdMs) && ageMs < ESCALATION_DELAY_MS) {
-          const earlyHistory = await getConversationHistory(
-            supabase,
-            conversationId,
-            12,
-          );
-          const earlyReply = await generateAIFollowUp(
-            earlyHistory,
-            mensajeCliente,
-            convMeta.assigned_to || "",
-          );
-
-          await supabase.from("messages").insert({
-            conversation_id: conversationId,
-            contact_id: contactId || null,
-            direction: "outbound",
-            content: earlyReply,
-            channel: canal,
-            sent_at: new Date().toISOString(),
-          });
-          await supabase
-            .from("conversations")
-            .update({
-              last_message: earlyReply,
-              last_message_at: new Date().toISOString(),
-            })
-            .eq("id", conversationId);
-
-          if (source === "manychat") {
-            await sendViaManychat(supabase, contactId, canal, earlyReply);
-          }
-
-          return new Response(
-            JSON.stringify({
-              messages: [{ type: "text", text: earlyReply }],
-              set_field_values: [
-                { field_name: "ultimo_mensaje_agente", value: earlyReply },
-              ],
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-      }
-    }
-
     const { data: configRows } = await supabase
       .from("configuracion_sistema")
       .select("clave, valor");
