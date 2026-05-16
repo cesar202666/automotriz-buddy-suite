@@ -683,67 +683,6 @@ Deno.serve(async (req) => {
         .eq("id", conversationId);
     }
 
-    // ── 3-minute conversational window ────────────────────────────────────────
-    // During the first 3 minutes of a brand new (non-escalated) conversation,
-    // the bot keeps chatting using Lovable AI instead of running the rule-based
-    // escalation logic. This gives the team time to optionally claim the lead
-    // manually, and avoids dumping the client to a seller after 1 message.
-    const ESCALATION_DELAY_MS = 3 * 60 * 1000;
-    if (conversationId) {
-      const { data: convMeta } = await supabase
-        .from("conversations")
-        .select("created_at, escalated, assigned_to")
-        .eq("id", conversationId)
-        .single();
-
-      if (convMeta && !convMeta.escalated) {
-        const createdMs = new Date(convMeta.created_at).getTime();
-        const ageMs = Date.now() - createdMs;
-        if (Number.isFinite(createdMs) && ageMs < ESCALATION_DELAY_MS) {
-          const earlyHistory = await getConversationHistory(
-            supabase,
-            conversationId,
-            12,
-          );
-          const earlyReply = await generateAIFollowUp(
-            earlyHistory,
-            mensajeCliente,
-            convMeta.assigned_to || "",
-          );
-
-          await supabase.from("messages").insert({
-            conversation_id: conversationId,
-            contact_id: contactId || null,
-            direction: "outbound",
-            content: earlyReply,
-            channel: canal,
-            sent_at: new Date().toISOString(),
-          });
-          await supabase
-            .from("conversations")
-            .update({
-              last_message: earlyReply,
-              last_message_at: new Date().toISOString(),
-            })
-            .eq("id", conversationId);
-
-          if (source === "manychat") {
-            await sendViaManychat(supabase, contactId, canal, earlyReply);
-          }
-
-          return new Response(
-            JSON.stringify({
-              messages: [{ type: "text", text: earlyReply }],
-              set_field_values: [
-                { field_name: "ultimo_mensaje_agente", value: earlyReply },
-              ],
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-      }
-    }
-
     const { data: configRows } = await supabase
       .from("configuracion_sistema")
       .select("clave, valor");
@@ -912,91 +851,23 @@ Deno.serve(async (req) => {
     let capturedClientName = "";
     let capturedClientPhone = "";
 
-    if (isWhatsApp) {
-      if (isFullName(knownClientName)) {
-        capturedClientName = knownClientName;
-        capturedClientPhone = knownClientPhone;
-        const clienteNombre = getFirstName(capturedClientName);
+    // ── Respuesta única: una sola frase fija y traspaso inmediato ─────────────
+    // El bot responde SIEMPRE lo mismo, escala al vendedor y se desactiva.
+    respuesta =
+      `¡Hola! Gracias por escribir a Egaña Automotriz. Un ejecutivo te contactará en breve. 🙌`;
+    shouldEscalate = true;
 
-        const contactUpdates: Record<string, string> = {
-          name: capturedClientName,
-        };
-        if (capturedClientPhone) contactUpdates.phone = capturedClientPhone;
-        await supabase.from("contacts").update(contactUpdates).eq(
-          "id",
-          contactId,
-        );
-
-        respuesta =
-          `¡Perfecto ${clienteNombre}! 🙌 Ya registré tus datos. Nuestro ejecutivo${
-            vendedorAsignado ? ` ${vendedorAsignado}` : ""
-          } te contactará de inmediato. ¡Cualquier consulta no dudes en escribirnos!`;
-        shouldEscalate = true;
-        clienteCreado = true;
-
-        score = 20;
-        if (
-          allUserMessages.includes("presupuesto") ||
-          allUserMessages.includes("precio") ||
-          /\$\d|millones|mil\s/i.test(allUserMessages)
-        ) score += 30;
-        if (
-          allUserMessages.includes("pronto") ||
-          allUserMessages.includes("urgente")
-        ) score += 25;
-        if (capturedClientPhone) score += 10;
-        score = Math.min(100, score);
-      } else if (isFirstContact) {
-        respuesta =
-          `¡Hola! 😊 Bienvenido/a a Egaña Automotriz. Para atenderte de la mejor forma, ¿podrías indicarme tu nombre completo y apellido por favor?`;
-      } else {
-        respuesta =
-          `Para poder derivarte con un ejecutivo, necesito tu nombre completo y apellido 😊`;
+    // Intentar capturar nombre/teléfono del mensaje si vienen, solo para el lead
+    capturedClientName = isFullName(knownClientName) ? knownClientName : "";
+    capturedClientPhone = knownClientPhone || "";
+    if (capturedClientName || capturedClientPhone) {
+      const contactUpdates: Record<string, string> = {};
+      if (capturedClientName) contactUpdates.name = capturedClientName;
+      if (capturedClientPhone) contactUpdates.phone = capturedClientPhone;
+      if (Object.keys(contactUpdates).length && contactId) {
+        await supabase.from("contacts").update(contactUpdates).eq("id", contactId);
       }
-    } else if (isInstagramOrMessenger) {
-      if (isFullName(knownClientName) && knownClientPhone) {
-        capturedClientPhone = knownClientPhone;
-        capturedClientName = knownClientName;
-
-        await supabase.from("contacts").update({
-          phone: knownClientPhone,
-          name: knownClientName,
-        }).eq("id", contactId);
-
-        const waLink = "https://wa.me/message/QCXBGVU5I7MHM1";
-        respuesta = `¡Gracias ${
-          getFirstName(capturedClientName)
-        }! 🙌 Ya registré tus datos. Nuestro ejecutivo${
-          vendedorAsignado ? ` ${vendedorAsignado}` : ""
-        } te contactará de inmediato. También puedes escribirnos por WhatsApp: ${waLink}`;
-        shouldEscalate = true;
-        clienteCreado = true;
-      } else if (isFullName(knownClientName)) {
-        capturedClientName = knownClientName;
-        respuesta = `¡Gracias ${
-          getFirstName(capturedClientName)
-        }! ¿Podrías también darme tu número de teléfono para que un ejecutivo te contacte? 📱`;
-        await supabase.from("contacts").update({ name: capturedClientName }).eq(
-          "id",
-          contactId,
-        );
-      } else if (knownClientPhone) {
-        capturedClientPhone = knownClientPhone;
-        respuesta =
-          `¡Perfecto! Ya tengo tu número. ¿Me compartes tu nombre completo para derivarte con un ejecutivo? 😊`;
-        await supabase.from("contacts").update({ phone: capturedClientPhone })
-          .eq("id", contactId);
-      } else if (isFirstContact) {
-        respuesta =
-          `¡Hola! 😊 Gracias por escribirnos a Egaña Automotriz. Para contactarte, ¿podrías indicarme tu nombre y número de teléfono?`;
-      } else {
-        respuesta =
-          `Para derivarte con un ejecutivo, necesito tu nombre y número de teléfono 😊`;
-      }
-    } else {
-      respuesta =
-        `¡Gracias por contactarnos! Un vendedor te atenderá pronto 🙌`;
-      shouldEscalate = true;
+      clienteCreado = !!capturedClientName;
     }
 
     // ── Reclassify existing lead on every message ───────────────────────────────
