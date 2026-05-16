@@ -851,91 +851,23 @@ Deno.serve(async (req) => {
     let capturedClientName = "";
     let capturedClientPhone = "";
 
-    if (isWhatsApp) {
-      if (isFullName(knownClientName)) {
-        capturedClientName = knownClientName;
-        capturedClientPhone = knownClientPhone;
-        const clienteNombre = getFirstName(capturedClientName);
+    // ── Respuesta única: una sola frase fija y traspaso inmediato ─────────────
+    // El bot responde SIEMPRE lo mismo, escala al vendedor y se desactiva.
+    respuesta =
+      `¡Hola! Gracias por escribir a Egaña Automotriz. Un ejecutivo te contactará en breve. 🙌`;
+    shouldEscalate = true;
 
-        const contactUpdates: Record<string, string> = {
-          name: capturedClientName,
-        };
-        if (capturedClientPhone) contactUpdates.phone = capturedClientPhone;
-        await supabase.from("contacts").update(contactUpdates).eq(
-          "id",
-          contactId,
-        );
-
-        respuesta =
-          `¡Perfecto ${clienteNombre}! 🙌 Ya registré tus datos. Nuestro ejecutivo${
-            vendedorAsignado ? ` ${vendedorAsignado}` : ""
-          } te contactará de inmediato. ¡Cualquier consulta no dudes en escribirnos!`;
-        shouldEscalate = true;
-        clienteCreado = true;
-
-        score = 20;
-        if (
-          allUserMessages.includes("presupuesto") ||
-          allUserMessages.includes("precio") ||
-          /\$\d|millones|mil\s/i.test(allUserMessages)
-        ) score += 30;
-        if (
-          allUserMessages.includes("pronto") ||
-          allUserMessages.includes("urgente")
-        ) score += 25;
-        if (capturedClientPhone) score += 10;
-        score = Math.min(100, score);
-      } else if (isFirstContact) {
-        respuesta =
-          `¡Hola! 😊 Bienvenido/a a Egaña Automotriz. Para atenderte de la mejor forma, ¿podrías indicarme tu nombre completo y apellido por favor?`;
-      } else {
-        respuesta =
-          `Para poder derivarte con un ejecutivo, necesito tu nombre completo y apellido 😊`;
+    // Intentar capturar nombre/teléfono del mensaje si vienen, solo para el lead
+    capturedClientName = isFullName(knownClientName) ? knownClientName : "";
+    capturedClientPhone = knownClientPhone || "";
+    if (capturedClientName || capturedClientPhone) {
+      const contactUpdates: Record<string, string> = {};
+      if (capturedClientName) contactUpdates.name = capturedClientName;
+      if (capturedClientPhone) contactUpdates.phone = capturedClientPhone;
+      if (Object.keys(contactUpdates).length && contactId) {
+        await supabase.from("contacts").update(contactUpdates).eq("id", contactId);
       }
-    } else if (isInstagramOrMessenger) {
-      if (isFullName(knownClientName) && knownClientPhone) {
-        capturedClientPhone = knownClientPhone;
-        capturedClientName = knownClientName;
-
-        await supabase.from("contacts").update({
-          phone: knownClientPhone,
-          name: knownClientName,
-        }).eq("id", contactId);
-
-        const waLink = "https://wa.me/message/QCXBGVU5I7MHM1";
-        respuesta = `¡Gracias ${
-          getFirstName(capturedClientName)
-        }! 🙌 Ya registré tus datos. Nuestro ejecutivo${
-          vendedorAsignado ? ` ${vendedorAsignado}` : ""
-        } te contactará de inmediato. También puedes escribirnos por WhatsApp: ${waLink}`;
-        shouldEscalate = true;
-        clienteCreado = true;
-      } else if (isFullName(knownClientName)) {
-        capturedClientName = knownClientName;
-        respuesta = `¡Gracias ${
-          getFirstName(capturedClientName)
-        }! ¿Podrías también darme tu número de teléfono para que un ejecutivo te contacte? 📱`;
-        await supabase.from("contacts").update({ name: capturedClientName }).eq(
-          "id",
-          contactId,
-        );
-      } else if (knownClientPhone) {
-        capturedClientPhone = knownClientPhone;
-        respuesta =
-          `¡Perfecto! Ya tengo tu número. ¿Me compartes tu nombre completo para derivarte con un ejecutivo? 😊`;
-        await supabase.from("contacts").update({ phone: capturedClientPhone })
-          .eq("id", contactId);
-      } else if (isFirstContact) {
-        respuesta =
-          `¡Hola! 😊 Gracias por escribirnos a Egaña Automotriz. Para contactarte, ¿podrías indicarme tu nombre y número de teléfono?`;
-      } else {
-        respuesta =
-          `Para derivarte con un ejecutivo, necesito tu nombre y número de teléfono 😊`;
-      }
-    } else {
-      respuesta =
-        `¡Gracias por contactarnos! Un vendedor te atenderá pronto 🙌`;
-      shouldEscalate = true;
+      clienteCreado = !!capturedClientName;
     }
 
     // ── Reclassify existing lead on every message ───────────────────────────────
