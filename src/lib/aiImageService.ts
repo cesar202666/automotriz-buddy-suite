@@ -1,7 +1,6 @@
 /**
  * AI Image Service — Egaña Automotriz
  * Edita el fondo de fotos de vehículos usando la API de Gemini directamente.
- * Funciona publicado sin depender de Lovable Cloud.
  */
 
 export interface AiImageResult {

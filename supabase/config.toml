@@ -1,4 +1,5 @@
-project_id = "xzyveouixrqkhwhllprw"
+# Reemplaza con el project_id de tu proyecto Supabase (Settings → General).
+project_id = "rkhijmvilzffahtmjezd"
 
 [functions.edit-vehicle-image]
 verify_jwt = false

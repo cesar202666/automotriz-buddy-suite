@@ -1,73 +1,73 @@
-# Welcome to your Lovable project
+# Egaña Automotriz ERP
 
-## Project info
+Sistema ERP interno para Egaña Automotriz. Stack:
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+- Vite + React + TypeScript
+- shadcn/ui + Tailwind CSS
+- Supabase (base de datos, auth, edge functions)
+- Despliegue en Vercel
 
-## How can I edit this code?
+## Requisitos
 
-There are several ways of editing your application.
+- Node.js 20+
+- Cuenta de Supabase con proyecto creado
+- Cuenta de Vercel para despliegue
 
-**Use Lovable**
+## Variables de entorno
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+Copia `.env.example` a `.env`:
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+cp .env.example .env
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Variables del frontend:
 
-# Step 3: Install the necessary dependencies.
-npm i
+- `VITE_SUPABASE_URL` — URL del proyecto Supabase
+- `VITE_SUPABASE_PUBLISHABLE_KEY` — anon/publishable key
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Variables de las edge functions (en Supabase Dashboard → Edge Functions → Secrets):
+
+- `AI_GATEWAY_URL` — endpoint compatible OpenAI
+- `AI_API_KEY` — API key del proveedor de IA
+- `AI_CHAT_MODEL` / `AI_IMAGE_MODEL` — modelos
+- `MANYCHAT_API_KEY` — opcional
+
+## Desarrollo
+
+```sh
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+App en `http://localhost:8080`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Build
 
-**Use GitHub Codespaces**
+```sh
+npm run build
+npm run preview
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Supabase
 
-## What technologies are used for this project?
+1. Crea proyecto en [supabase.com](https://supabase.com).
+2. Aplica el esquema:
+   - **Rápido:** pega `supabase/setup/00_full_schema.sql` en el SQL Editor del dashboard y dale Run.
+   - **CLI:** `npx supabase link --project-ref <REF>` + `npx supabase db push`.
+3. Despliega las edge functions: `npx supabase functions deploy`.
+4. Configura los secrets en el dashboard.
 
-This project is built with:
+## Despliegue en Vercel
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+1. Importa el repo en [vercel.com](https://vercel.com).
+2. Vercel detecta Vite (build: `npm run build`, output: `dist`).
+3. Si usaste la integración Supabase↔Vercel, las env vars `NEXT_PUBLIC_SUPABASE_*` ya se inyectaron — `vite.config.ts` las acepta automáticamente.
+4. Deploy.
 
-## How can I deploy this project?
+## Tests
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```sh
+npm test                 # unit
+npx playwright test      # e2e
+```

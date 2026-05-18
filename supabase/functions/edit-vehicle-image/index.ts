@@ -6,15 +6,20 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const AI_GATEWAY_URL =
+  Deno.env.get("AI_GATEWAY_URL") ?? "https://api.openai.com/v1/chat/completions";
+const AI_IMAGE_MODEL =
+  Deno.env.get("AI_IMAGE_MODEL") ?? "google/gemini-2.5-flash-image-preview";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY no está configurado");
+    const AI_API_KEY = Deno.env.get("AI_API_KEY");
+    if (!AI_API_KEY) {
+      throw new Error("AI_API_KEY no está configurado");
     }
 
     const { imageDataUrl, prompt } = await req.json();
@@ -26,30 +31,22 @@ serve(async (req) => {
       });
     }
 
-    console.log("[edit-vehicle-image] Llamando a Gemini image editing...");
+    console.log("[edit-vehicle-image] Llamando al gateway de IA...");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(AI_GATEWAY_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${AI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
+        model: AI_IMAGE_MODEL,
         messages: [
           {
             role: "user",
             content: [
-              {
-                type: "text",
-                text: prompt,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: imageDataUrl,
-                },
-              },
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageDataUrl } },
             ],
           },
         ],
@@ -68,7 +65,7 @@ serve(async (req) => {
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos insuficientes en Lovable AI. Ve a Settings → Workspace → Usage." }),
+          JSON.stringify({ error: "Créditos insuficientes en el proveedor de IA." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -81,20 +78,16 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log("[edit-vehicle-image] Respuesta recibida, keys:", Object.keys(data));
-
     const editedImageUrl =
       data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 
     if (!editedImageUrl) {
-      console.error("[edit-vehicle-image] No se encontró imagen en la respuesta:", JSON.stringify(data).slice(0, 500));
+      console.error("[edit-vehicle-image] No se encontró imagen:", JSON.stringify(data).slice(0, 500));
       return new Response(
         JSON.stringify({ error: "La IA no devolvió una imagen. Intenta con un prompt diferente." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log("[edit-vehicle-image] Imagen editada obtenida, longitud dataUrl:", editedImageUrl.length);
 
     return new Response(JSON.stringify({ editedImageUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

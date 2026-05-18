@@ -500,7 +500,7 @@ Deno.serve(async (req) => {
 
     // ── Check if conversation is already escalated ─────────────────────────────
     // If escalated AND seller already opened the chat → bot stays silent (seller takes over).
-    // If escalated but seller has NOT opened the chat yet → bot keeps replying with Lovable AI
+    // If escalated but seller has NOT opened the chat yet → bot keeps replying with AI
     // so the client never feels ignored while waiting for the seller.
     if (conversationId) {
       const { data: conv } = await supabase

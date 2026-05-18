@@ -175,7 +175,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 function AccesoMovilCRM() {
-  const url = "https://automotriz-suite.lovable.app/#/crm-movil";
+  const url = `${import.meta.env.VITE_PUBLIC_APP_URL ?? window.location.origin}/#/crm-movil`;
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
