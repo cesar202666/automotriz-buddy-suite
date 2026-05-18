@@ -533,6 +533,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      asignar_siguiente_vendedor: { Args: { _rotacion: Json }; Returns: string }
       increment_unread: { Args: { conv_id: string }; Returns: undefined }
     }
     Enums: {
