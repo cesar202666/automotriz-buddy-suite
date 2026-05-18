@@ -150,12 +150,36 @@ Deno.serve(async (req) => {
     )
 
     // ── 1. Upsert contact ────────────────────────────────────────────────────
+    // Build full name avoiding duplications (e.g. "Nancy Nancy" when ManyChat
+    // sends the same value in first_name and last_name, or last_name already
+    // contains the first name)
+    const buildFullName = (first: string, last: string): string => {
+      const f = (first || '').trim()
+      const l = (last || '').trim()
+      if (!l) return f
+      if (!f) return l
+      if (l.toLowerCase() === f.toLowerCase()) return f
+      if (l.toLowerCase().startsWith(f.toLowerCase() + ' ')) return l
+      // Dedupe repeated tokens
+      const tokens = `${f} ${l}`.split(/\s+/)
+      const seen = new Set<string>()
+      const deduped: string[] = []
+      for (const t of tokens) {
+        const k = t.toLowerCase()
+        if (seen.has(k)) continue
+        seen.add(k)
+        deduped.push(t)
+      }
+      return deduped.join(' ')
+    }
+    const fullName = buildFullName(firstName, lastName) || 'Cliente'
+
     const { data: contactData, error: contactError } = await supabase
       .from('contacts')
       .upsert(
         {
           manychat_subscriber_id: subscriberId,
-          name: `${firstName}${lastName ? ' ' + lastName : ''}`.trim(),
+          name: fullName,
           phone,
           email,
           channel,
