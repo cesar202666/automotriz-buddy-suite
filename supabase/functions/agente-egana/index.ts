@@ -216,73 +216,17 @@ async function getVendedorAsignado(
   );
 
   if (activeRotacion.length > 0) {
-    // Use rotation-based assignment
-    // Read current rotation index
-    const { data: idxRow } = await supabase
-      .from("configuracion_sistema")
-      .select("valor")
-      .eq("clave", "ROTACION_INDICE")
-      .maybeSingle();
-
-    let currentIdx = 0;
-    let currentCount = 0;
-    let lastAssigned = "";
-    try {
-      const parsed = JSON.parse(idxRow?.valor || "{}");
-      currentIdx = parsed.idx || 0;
-      currentCount = parsed.count || 0;
-      lastAssigned = parsed.lastAssigned || "";
-    } catch {}
-
-    // Ensure index is within bounds (rotation may have changed)
-    if (currentIdx >= activeRotacion.length) {
-      currentIdx = 0;
-      currentCount = 0;
+    // Atomic rotation via Postgres function (SELECT ... FOR UPDATE inside)
+    // This prevents race conditions when multiple webhooks arrive simultaneously
+    // and would otherwise read the same index and assign the same vendor twice.
+    const { data: chosen, error: rpcErr } = await supabase.rpc(
+      "asignar_siguiente_vendedor",
+      { _rotacion: activeRotacion },
+    );
+    if (!rpcErr && typeof chosen === "string" && chosen.trim() && isElegible(chosen)) {
+      return chosen;
     }
-
-    // If last assigned vendor no longer matches the current index name,
-    // realign to that name (preserves order after roster changes)
-    if (lastAssigned) {
-      const realigned = activeRotacion.findIndex(
-        (v) => v.nombre.trim() === lastAssigned.trim(),
-      );
-      if (realigned >= 0 && realigned !== currentIdx) {
-        currentIdx = realigned;
-      }
-    }
-
-    const currentVendedor = activeRotacion[currentIdx];
-    const maxConsecutivos = Math.max(1, currentVendedor.consecutivos || 1);
-
-    // Advance the counter
-    const nextCount = currentCount + 1;
-    let nextIdx = currentIdx;
-    let nextCountSave = nextCount;
-
-    if (nextCount >= maxConsecutivos) {
-      // Move to next vendedor
-      nextIdx = (currentIdx + 1) % activeRotacion.length;
-      nextCountSave = 0;
-    }
-
-    // Save updated index (include lastAssigned for resilience to roster edits)
-    const newIdxVal = JSON.stringify({
-      idx: nextIdx,
-      count: nextCountSave,
-      lastAssigned: activeRotacion[nextIdx]?.nombre || currentVendedor.nombre,
-    });
-    if (idxRow) {
-      await supabase
-        .from("configuracion_sistema")
-        .update({ valor: newIdxVal })
-        .eq("clave", "ROTACION_INDICE");
-    } else {
-      await supabase
-        .from("configuracion_sistema")
-        .insert({ clave: "ROTACION_INDICE", valor: newIdxVal });
-    }
-
-    return currentVendedor.nombre;
+    // If RPC fails for any reason, fall through to the load-balanced fallback
   }
 
   // ── Fallback: original logic ─────────────────────────────────────────────
