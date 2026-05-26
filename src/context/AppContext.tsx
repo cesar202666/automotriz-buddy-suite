@@ -349,6 +349,117 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadVehiculos();
   }, []);
 
+  // ── Load clientes from DB on mount ─────────────────────────────────────────
+  useEffect(() => {
+    const loadClientes = async () => {
+      const { data, error } = await supabase
+        .from("clientes")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error || !data) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapped: Cliente[] = data.map((row: any) => ({
+        id: String(row.id ?? ""),
+        nombres: String(row.nombres ?? ""),
+        apellidos: String(row.apellidos ?? ""),
+        direccion: String(row.direccion ?? ""),
+        telefono: String(row.telefono ?? ""),
+        email: String(row.email ?? ""),
+        rut: row.rut ?? null,
+        comentario: row.comentario ?? null,
+        estadoCivil: row.estado_civil ?? null,
+        ciudad: row.ciudad ?? null,
+        casaHabita: row.casa_habita ?? null,
+        estudios: row.estudios ?? null,
+        seguimiento: row.seguimiento ?? null,
+        seguimientoComentario1: row.seguimiento_comentario_1 ?? null,
+        seguimientoComentario2: row.seguimiento_comentario_2 ?? null,
+        seguimientoComentario3: row.seguimiento_comentario_3 ?? null,
+        creadoPor: row.creado_por ?? null,
+      }));
+      setClientes(mapped);
+    };
+    loadClientes();
+  }, []);
+
+  // ── Load consignatarios from DB on mount ───────────────────────────────────
+  useEffect(() => {
+    const loadConsignatarios = async () => {
+      const { data, error } = await supabase
+        .from("consignatarios")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error || !data) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapped: Consignatario[] = data.map((row: any) => ({
+        id: String(row.id ?? ""),
+        nombre: String(row.nombre ?? "") + (row.apellidos ? ` ${row.apellidos}` : ""),
+        rut: String(row.rut ?? ""),
+        telefono: String(row.telefono ?? ""),
+        email: String(row.email ?? ""),
+        vehiculo: String(row.vehiculo ?? ""),
+        patente: String(row.patente ?? ""),
+        precio: Number(row.precio ?? 0),
+        estado: String(row.estado ?? "ACTIVO"),
+        contrato: row.contrato ?? null,
+        contratoName: row.contrato_name ?? null,
+        fechaIngreso: String(row.fecha_ingreso ?? row.created_at ?? ""),
+      }));
+      setConsignatarios(mapped);
+    };
+    loadConsignatarios();
+  }, []);
+
+  // ── Load ventas from DB on mount ───────────────────────────────────────────
+  useEffect(() => {
+    const loadVentas = async () => {
+      const { data, error } = await supabase
+        .from("ventas")
+        .select("*")
+        .order("fecha_venta", { ascending: false });
+      if (error || !data) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapped: Venta[] = data.map((row: any) => ({
+        id: String(row.id ?? ""),
+        ejecutiva: String(row.ejecutiva ?? ""),
+        fechaVenta: String(row.fecha_venta ?? ""),
+        sucursal: String(row.sucursal ?? ""),
+        clienteId: String(row.cliente_id ?? ""),
+        clienteNombre: String(row.cliente_nombre ?? ""),
+        informeTecnico: row.informe_tecnico ?? null,
+        informeTecnicoName: row.informe_tecnico_name ?? null,
+        patente: String(row.patente ?? ""),
+        marca: String(row.marca ?? ""),
+        modelo: String(row.modelo ?? ""),
+        anioVehiculo: String(row.anio_vehiculo ?? ""),
+        colorVehiculo: String(row.color_vehiculo ?? ""),
+        kilometrajeVehiculo: Number(row.kilometraje_vehiculo ?? 0),
+        precioRetoma: Number(row.precio_retoma ?? 0),
+        precioPublicado: Number(row.precio_publicado ?? 0),
+        precioVenta: Number(row.precio_venta ?? 0),
+        margenBruto: Number(row.margen_bruto ?? 0),
+        nCredito: String(row.n_credito ?? ""),
+        comisionCredito: Number(row.comision_credito ?? 0),
+        gastosAdmin: Number(row.gastos_admin ?? 0),
+        precioVtaFinal: Number(row.precio_vta_final ?? 0),
+        creditoFirmado: String(row.credito_firmado ?? ""),
+        creditoFirmadoDoc: row.credito_firmado_doc ?? null,
+        creditoFirmadoDocName: row.credito_firmado_doc_name ?? null,
+        montoPieCaja: Number(row.monto_pie_caja ?? 0),
+        prepago: String(row.prepago ?? ""),
+        prepagoDoc: row.prepago_doc ?? null,
+        prepagoDocName: row.prepago_doc_name ?? null,
+        documentacionVenta: row.documentacion_venta ?? null,
+        documentacionVentaName: row.documentacion_venta_name ?? null,
+        tipoVenta: (row.tipo_venta ?? "EFECTIVO") as Venta["tipoVenta"],
+        estado: (row.estado ?? "BORRADOR") as Venta["estado"],
+        verificacion: Boolean(row.verificacion ?? false),
+      }));
+      setVentas(mapped);
+    };
+    loadVentas();
+  }, []);
+
   // ── CRUD ────────────────────────────────────────────────────────────────────
   const addVehiculo = async (v: Vehiculo) => {
     const { data, error } = await supabase
