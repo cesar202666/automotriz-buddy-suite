@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Plus, Search, FileText, Eye, Upload, Download, Table } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Consignatario {
   id: string;
@@ -258,6 +259,68 @@ function DeleteConsigModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
 
 export default function Consignatarios() {
   const [consignatarios, setConsignatarios] = useState<Consignatario[]>(initialConsignatarios);
+
+  // Cargar consignatarios desde Supabase al montar
+  useEffect(() => {
+    const loadFromDb = async () => {
+      const { data, error } = await supabase
+        .from("consignatarios")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error || !data) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapped: Consignatario[] = data.map((row: any) => ({
+        id: String(row.id ?? ""),
+        folio: String(row.vehiculo ?? "").split(" - ")[0] || "",
+        nombre: String(row.nombre ?? ""),
+        apellidos: String(row.apellidos ?? ""),
+        rut: String(row.rut ?? ""),
+        telefono: String(row.telefono ?? ""),
+        email: String(row.email ?? ""),
+        direccion: String(row.direccion ?? ""),
+        ciudad: "",
+        vehiculo: String(row.vehiculo ?? ""),
+        marca: String(row.marca ?? ""),
+        modelo: String(row.modelo ?? ""),
+        patente: String(row.patente ?? ""),
+        anio: String(row.anio ?? ""),
+        color: String(row.color ?? ""),
+        kilometraje: "0",
+        valorPactado: Number(row.precio ?? 0),
+        valorConsig: 0,
+        disponibilidad: String(row.estado ?? "DISPONIBLE"),
+        permisoCirulacion: false,
+        seguroObligatorio: false,
+        revisionTecnica: false,
+        padron: false,
+        certMultas: false,
+        carroceria: "",
+        pintura: "",
+        neumaticos: "",
+        vidrios: "",
+        focos: "",
+        tapiz: "",
+        gata: false,
+        llaveRueda: false,
+        radio: false,
+        encendedor: false,
+        extintor: false,
+        manibela: false,
+        repuesto: false,
+        cenicero: false,
+        tresLuz: false,
+        triangulos: false,
+        observaciones: String(row.descripcion ?? ""),
+        automotrizRut: "",
+        automotrizNombre: "",
+        lugar: "",
+        fecha: String(row.fecha_ingreso ?? row.created_at ?? "").slice(0, 10),
+      }));
+      setConsignatarios(mapped);
+    };
+    loadFromDb();
+  }, []);
+
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("Todos");
   const [showModal, setShowModal] = useState(false);
