@@ -421,6 +421,86 @@ function sanitizarRespuesta(texto: string): string {
   return limpio.slice(0, 347) + "...";
 }
 
+// ── Quitar el nombre del cliente del saludo ─────────────────────────────────
+// Política: el bot NUNCA debe dirigirse al cliente por su nombre.
+// Convierte "Hola Juan," / "Buenos días, María Pérez!" → "Hola," / "Buenos días!"
+function quitarNombreCliente(texto: string, clientName?: string): string {
+  let t = texto;
+
+  // (1) Si conocemos el nombre del cliente, removerlo en cualquier posición
+  //     (con o sin tildes), siempre que esté rodeado por puntuación o espacios.
+  if (clientName && clientName.trim()) {
+    const tokens = clientName
+      .trim()
+      .split(/\s+/)
+      .map((s) => s.normalize("NFD").replace(/[̀-ͯ]/g, ""))
+      .filter((s) => s.length >= 3);
+    for (const tok of tokens) {
+      const esc = tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Variante con tildes: usamos un patrón laxo que matchee la versión sin tilde
+      // del texto. Construimos un regex sobre una version normalizada.
+      const reBoundary = new RegExp(`(^|[\\s,!.:;¡¿])${esc}(?=[\\s,!.:;]|$)`, "giu");
+      // Trabajamos sobre la version SIN tildes para detectar, pero reemplazamos
+      // en el texto original usando indices. Como JS regex es complejo aquí,
+      // usamos un enfoque más simple: normalizamos para chequear y reconstruimos.
+      const normT = t.normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const matches: Array<{ start: number; end: number }> = [];
+      let m: RegExpExecArray | null;
+      const re2 = new RegExp(reBoundary.source, reBoundary.flags);
+      while ((m = re2.exec(normT)) !== null) {
+        // m[0] empieza por el separador (o vacío al inicio)
+        const sepLen = m[1] ? m[1].length : 0;
+        matches.push({ start: m.index + sepLen, end: m.index + m[0].length });
+        if (m.index === re2.lastIndex) re2.lastIndex++;
+      }
+      // Aplicar reemplazos de derecha a izquierda para no corromper indices
+      for (let i = matches.length - 1; i >= 0; i--) {
+        const { start, end } = matches[i];
+        t = t.slice(0, start) + t.slice(end);
+      }
+    }
+  }
+
+  // (2) Patrón genérico: tras un saludo conocido, eliminar cualquier palabra
+  //     capitalizada que aparezca como vocativo (el modelo solo pondría ahí
+  //     el nombre del cliente).
+  //     "Hola Juan," → "Hola,"
+  //     "Buenos días, María Pérez!" → "Buenos días!"
+  //     "¡Hola Juan!" → "¡Hola!"
+  const saludos =
+    "(¡?\\s*(?:Hola|Buenos\\s+d[ií]as|Buenas\\s+tardes|Buenas\\s+noches|Buen\\s+d[ií]a|Saludos|Estimad[oa]s?|Bienvenid[oa]s?))";
+  // Captura: <saludo> [coma/espacios] <Nombre(s) Capitalizado(s)> <puntuación o espacio>
+  const re = new RegExp(
+    `${saludos}\\s*,?\\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,2})\\s*([,!.])`,
+    "giu",
+  );
+  t = t.replace(re, (full, saludo: string, vocativo: string, sign: string) => {
+    // Solo recortar si el vocativo arranca con mayúscula (probable nombre).
+    // Conservar saludos legítimos como "Hola, gracias por escribir" donde
+    // "gracias" empieza minúscula y no haría match con el patrón.
+    if (!/^[A-ZÁÉÍÓÚÑ]/.test(vocativo)) return full;
+    // Si el vocativo es una palabra común que no es un nombre, conservar
+    const minus = vocativo.toLowerCase();
+    if (/^(gracias|bienvenid|por\b|cómo|como|cuál|cual|qué|que)/.test(minus)) {
+      return full;
+    }
+    return `${saludo}${sign}`;
+  });
+
+  // (3) Limpieza de artefactos: dobles comas, espacios duplicados, puntuación pegada.
+  t = t
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/,\s*,/g, ",")
+    // Si quedó ",." o ",!" o ",?" (comma sobrante antes de fin de frase) → solo el signo
+    .replace(/[,;:]+\s*([.!?])/g, "$1")
+    // Saludo seguido directamente de coma final como "Estimado," al inicio
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,;:]+/, "")
+    .trim();
+
+  return t;
+}
+
 // ── Generador de respuestas IA con guardrails ─────────────────────────────────
 async function generateAIFollowUp(
   history: Array<{ role: "user" | "assistant"; content: string }>,
@@ -454,13 +534,16 @@ REGLAS INVIOLABLES (si violas alguna, el cliente se molesta y pierdes la venta):
 8. NO repitas palabras del cliente literalmente. Sé natural.
 9. JAMÁS hagas promesas absolutas ("te garantizo", "100% seguro", "lo prometo").
 10. Si dudas qué responder o el mensaje es confuso, di simplemente que el ejecutivo lo contactará pronto.
+11. JAMÁS uses el nombre del cliente. NO digas "Hola Juan", "Buenos días María", etc. Saluda SOLO con "Hola" o "Buenos días" y continúa con tu mensaje. El nombre del cliente NO debe aparecer en tu respuesta bajo ningún motivo, ni siquiera al cerrar.
 `;
 
   const systemPrompt = (systemPromptCustom && systemPromptCustom.trim()
     ? systemPromptCustom.trim() + "\n\n"
     : "Eres el asistente virtual de Egaña Automotriz, una automotora ubicada en Chile (Puerto Montt). Tu objetivo: dar la bienvenida al cliente y derivarlo a un ejecutivo de manera cordial y profesional.\n\n") +
     reglasEstrictas +
-    (clientName ? `\nNombre del cliente: ${clientName}` : "") +
+    // NOTA: deliberadamente NO inyectamos el nombre del cliente al prompt
+    // para no tentar al modelo a usarlo. El nombre solo se usa post-proceso
+    // como filtro en quitarNombreCliente() si por alguna razón se cuela.
     (vendedorAsignado ? `\nEjecutivo asignado: ${vendedorAsignado}` : "");
 
   const messages = [
@@ -506,7 +589,10 @@ REGLAS INVIOLABLES (si violas alguna, el cliente se molesta y pierdes la venta):
       return FRASE_UNICA;
     }
 
-    return sanitizarRespuesta(textoLlm);
+    // Quitar el nombre del cliente si el modelo lo metió igual,
+    // y aplicar truncado de longitud.
+    const sinNombre = quitarNombreCliente(textoLlm, clientName);
+    return sanitizarRespuesta(sinNombre);
   } catch (e) {
     console.error("[AGENTE-IA] Excepción generando respuesta:", e);
     return FRASE_UNICA;
