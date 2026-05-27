@@ -355,20 +355,162 @@ async function ensureInboundMessage(
   return true;
 }
 
-// ── Respuesta fija para conversaciones ya escaladas ───────────────────────────
-// IMPORTANTE: El bot NO debe generar texto propio. Siempre responde la MISMA frase.
-// No se llama a ningún modelo de IA aquí para evitar variaciones o invenciones.
+// ── Respuesta fija (fallback seguro) ──────────────────────────────────────────
 const FRASE_UNICA =
   `¡Hola! Gracias por escribir a Egaña Automotriz. Un ejecutivo te contactará en breve. 🙌`;
 
+// ── Lista negra de palabras/frases que NO deben aparecer NUNCA ────────────────
+// Si la respuesta del LLM contiene cualquiera de estas → se reemplaza por FRASE_UNICA
+const FRASES_PROHIBIDAS = [
+  // Rechazos de venta
+  "no le venderé",
+  "no le venderemos",
+  "no le vendemos",
+  "no podemos venderle",
+  "no podemos atenderle",
+  "no atendemos",
+  "no le atenderemos",
+  // Mención de ubicaciones que confunden
+  "otra ciudad",
+  "no estamos en",
+  "no operamos en",
+  "no llegamos a",
+  "fuera de nuestra zona",
+  "fuera de cobertura",
+  // Lenguaje grosero o despectivo
+  "estúpido",
+  "idiota",
+  "tonto",
+  "estupidez",
+  "no sea",
+  "callate",
+  "cállate",
+  // Promesas que el bot no puede cumplir
+  "te garantizo",
+  "garantizamos que",
+  "100% seguro",
+  "te prometo",
+  "te lo aseguro",
+  // Frases que sugieren que el cliente está equivocado
+  "estás equivocado",
+  "está equivocado",
+  "no entiendes",
+  "no entendiste",
+  // Datos inventados que no debe dar
+  "el precio es",
+  "el valor es",
+  "cuesta exactamente",
+  "te queda en",
+];
+
+// Validar que una respuesta del LLM sea segura para enviar al cliente
+function esRespuestaSegura(texto: string): boolean {
+  if (!texto || texto.length < 5) return false;
+  if (texto.length > 400) return false;
+  const lower = texto.toLowerCase();
+  for (const prohibida of FRASES_PROHIBIDAS) {
+    if (lower.includes(prohibida.toLowerCase())) return false;
+  }
+  return true;
+}
+
+// Sanitizar: recortar a máximo 3 líneas y 350 caracteres
+function sanitizarRespuesta(texto: string): string {
+  const limpio = texto.trim().replace(/\n{3,}/g, "\n\n");
+  if (limpio.length <= 350) return limpio;
+  return limpio.slice(0, 347) + "...";
+}
+
+// ── Generador de respuestas IA con guardrails ─────────────────────────────────
 async function generateAIFollowUp(
-  _history: Array<{ role: "user" | "assistant"; content: string }>,
-  _mensajeCliente: string,
-  _vendedorAsignado: string,
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+  mensajeCliente: string,
+  vendedorAsignado: string,
+  clientName?: string,
+  systemPromptCustom?: string,
 ): Promise<string> {
-  // REGLA ESTRICTA: prohibido inventar palabras. Solo se devuelve la frase única
-  // definida por el negocio. No se consulta ningún LLM bajo ninguna circunstancia.
-  return FRASE_UNICA;
+  // Si no hay API key configurada → fallback inmediato a frase única
+  const apiKey = Deno.env.get("AI_API_KEY");
+  if (!apiKey) {
+    console.warn("[AGENTE-IA] AI_API_KEY no configurado → frase única");
+    return FRASE_UNICA;
+  }
+
+  const gatewayUrl =
+    Deno.env.get("AI_GATEWAY_URL") ??
+    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+  const chatModel = Deno.env.get("AI_CHAT_MODEL") ?? "gemini-2.0-flash";
+
+  // Prompt blindado: con reglas estrictas para evitar alucinaciones
+  const reglasEstrictas = `
+REGLAS INVIOLABLES (si violas alguna, el cliente se molesta y pierdes la venta):
+1. SIEMPRE saluda con cordialidad y empatía. JAMÁS seas grosero, despectivo o irónico.
+2. NUNCA rechaces atender al cliente. NUNCA digas "no podemos venderle", "no atendemos en X ciudad", etc. Egaña atiende a TODA persona que escriba, sin importar dónde esté.
+3. NUNCA inventes precios, modelos específicos, plazos, descuentos, ni condiciones de financiamiento. Si te preguntan precio, di que el ejecutivo confirmará todos los detalles.
+4. Máximo 2-3 líneas por respuesta. Breve, claro y amable.
+5. Usa español chileno respetuoso pero cercano (puedes usar "tú" o "usted"). Sin garabatos.
+6. SIEMPRE termina indicando que un ejecutivo${vendedorAsignado ? ` (${vendedorAsignado})` : ""} contactará al cliente pronto.
+7. NO uses más de 1 emoji por mensaje. Recomendado: 🙌 🚗 ✨
+8. NO repitas palabras del cliente literalmente. Sé natural.
+9. JAMÁS hagas promesas absolutas ("te garantizo", "100% seguro", "lo prometo").
+10. Si dudas qué responder o el mensaje es confuso, di simplemente que el ejecutivo lo contactará pronto.
+`;
+
+  const systemPrompt = (systemPromptCustom && systemPromptCustom.trim()
+    ? systemPromptCustom.trim() + "\n\n"
+    : "Eres el asistente virtual de Egaña Automotriz, una automotora ubicada en Chile (Puerto Montt). Tu objetivo: dar la bienvenida al cliente y derivarlo a un ejecutivo de manera cordial y profesional.\n\n") +
+    reglasEstrictas +
+    (clientName ? `\nNombre del cliente: ${clientName}` : "") +
+    (vendedorAsignado ? `\nEjecutivo asignado: ${vendedorAsignado}` : "");
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    // Solo últimos 6 mensajes para contexto, evitando confundir al modelo
+    ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+    { role: "user", content: mensajeCliente },
+  ];
+
+  try {
+    // Timeout corto: si tarda más de 10s, descartamos
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const resp = await fetch(gatewayUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: chatModel,
+        messages,
+        temperature: 0.4, // baja temperatura = respuestas más consistentes
+        max_tokens: 200,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(`[AGENTE-IA] LLM error ${resp.status}: ${errText.slice(0, 200)}`);
+      return FRASE_UNICA;
+    }
+
+    const data = await resp.json();
+    const textoLlm: string = (data?.choices?.[0]?.message?.content ?? "").trim();
+
+    // Validar respuesta. Si no es segura, fallback.
+    if (!esRespuestaSegura(textoLlm)) {
+      console.warn("[AGENTE-IA] Respuesta LLM rechazada por guardrails:", textoLlm.slice(0, 100));
+      return FRASE_UNICA;
+    }
+
+    return sanitizarRespuesta(textoLlm);
+  } catch (e) {
+    console.error("[AGENTE-IA] Excepción generando respuesta:", e);
+    return FRASE_UNICA;
+  }
 }
 
 
@@ -716,10 +858,22 @@ Deno.serve(async (req) => {
     let capturedClientName = "";
     let capturedClientPhone = "";
 
-    // ── Respuesta única: una sola frase fija y traspaso inmediato ─────────────
-    // El bot responde SIEMPRE lo mismo, escala al vendedor y se desactiva.
-    respuesta =
-      `¡Hola! Gracias por escribir a Egaña Automotriz. Un ejecutivo te contactará en breve. 🙌`;
+    // ── Generar respuesta con IA + guardrails ─────────────────────────────────
+    // 1. Intenta generar respuesta con Gemini usando el system prompt de la DB
+    // 2. Si la respuesta del LLM no es segura (alucinación, grosería, rechazo) → fallback a FRASE_UNICA
+    // 3. Si el LLM falla por timeout o error → fallback a FRASE_UNICA
+    // 4. Después escala al vendedor para que tome el control humano
+    const systemPromptCustom = cfg.AGENT_SYSTEM_PROMPT || "";
+    const nombreParaIA = isFullName(knownClientName)
+      ? knownClientName
+      : (nombre || "").trim();
+    respuesta = await generateAIFollowUp(
+      sessionHistory.map((m) => ({ role: m.role, content: m.content })),
+      mensajeCliente,
+      vendedorAsignado || "",
+      nombreParaIA,
+      systemPromptCustom,
+    );
     shouldEscalate = true;
 
     // Intentar capturar nombre/teléfono del mensaje si vienen, solo para el lead

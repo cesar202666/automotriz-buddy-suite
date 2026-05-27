@@ -21,7 +21,20 @@ const PROCEDENCIAS = ["Propio", "Consignado"];
 
 const MASTER_PASS = "ankker2026$$";
 
-const DEFAULT_BG_PROMPT = "Keep the car exactly as it is — do not modify the vehicle at all. Only replace the background. Place the car on a professional automotive studio floor: light grey polished concrete, subtle reflection under the car, clean white seamless background wall. The car should occupy about 70% of the frame centered, leaving visible floor space below and sides. Soft even studio lighting, no harsh shadows, photorealistic, high quality dealership photo.";
+const DEFAULT_BG_PROMPT = `CRITICAL RULES — DO NOT VIOLATE:
+1. PRESERVE the vehicle EXACTLY as it appears: same model, exact color, exact body shape, exact wheels/rims, exact license plate, exact angle and proportions. DO NOT change, recolor, restyle, or "improve" the car in any way.
+2. KEEP the same camera angle, perspective and framing of the original photo.
+3. KEEP the lighting direction on the vehicle consistent with the original.
+
+TASK:
+Replace ONLY the background with a clean professional automotive studio setting:
+- Floor: light grey polished concrete with subtle, natural reflection of the car underneath
+- Wall: clean white-to-light-grey seamless backdrop, no patterns, no objects
+- Soft, even, diffused studio lighting (key + fill), no harsh shadows on the vehicle
+- Photorealistic, high-resolution dealership quality photo
+- Car should occupy ~70% of the frame, centered, with visible floor space below and to both sides
+
+OUTPUT FORMAT: high-quality photo of the SAME vehicle on the new background. No text overlays, no logos, no watermarks, no people, no other cars.`;
 
 const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: string; consignatarioId: string }> => ({
   folio: "", patente: "", tipo: "Sedan", marca: "", modelo: "", anio: "2026",
