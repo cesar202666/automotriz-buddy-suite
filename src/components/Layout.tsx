@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
-  ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut,
+  ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut, BarChart3,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import { useApp, type Usuario } from "@/context/AppContext";
@@ -12,6 +12,7 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
   { label: "Clientes", icon: Users, path: "/clientes" },
   { label: "Vehículos", icon: Car, path: "/vehiculos" },
+  { label: "AutoRed", icon: BarChart3, path: "/autored" },
   { label: "Consignatarios", icon: UserCheck, path: "/consignatarios" },
   { label: "Créditos", icon: CreditCard, path: "/creditos" },
   { label: "Ventas", icon: ShoppingCart, path: "/ventas" },
