@@ -174,14 +174,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const nombreIngresado = nombreEnviado.trim();
     if (!claveIngresada || !nombreIngresado) return false;
 
-    const nombreNorm = nombreIngresado.toLowerCase();
+    // Normaliza: quita tildes/acentos y pasa a minusculas para comparacion flexible.
+    // ̀-ͯ = rango Unicode de marcas combinantes (tildes y acentos).
+    const norm = (s: string) =>
+      s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+    const nombreNorm = norm(nombreIngresado);
 
     // 1. Buscar en usuarios locales por nombre (primer nombre, nombre+apellido, o email)
     const found = usuarios.find((u) => {
       if (u.clave.trim() !== claveIngresada) return false;
-      const primer = u.nombre.trim().toLowerCase();
-      const completo = `${u.nombre} ${u.apellido}`.trim().toLowerCase();
-      const email = (u.email || "").trim().toLowerCase();
+      const primer = norm(u.nombre);
+      const completo = norm(`${u.nombre} ${u.apellido}`);
+      const email = norm(u.email || "");
       return primer === nombreNorm || completo === nombreNorm || email === nombreNorm;
     });
     if (found) {
@@ -189,7 +194,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return true;
     }
 
-    // 2. Consultar Supabase: clave + nombre/email coincide
+    // 2. Consultar Supabase: clave + nombre/email coincide (ignora tildes)
     const { data: rows, error } = await supabase
       .from("vendedores")
       .select("id, nombre, email, telefono, clave, activo, rol")
@@ -198,11 +203,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     if (error || !rows || rows.length === 0) return false;
 
-    // Filtrar por nombre/email
+    // Filtrar por nombre/email — comparacion sin tildes y case-insensitive
     const data = (rows as BackendLoginRow[]).find((row) => {
-      const nombreCompleto = (row.nombre || "").trim().toLowerCase();
+      const nombreCompleto = norm(row.nombre || "");
       const primerNombre = nombreCompleto.split(/\s+/)[0] || "";
-      const emailNorm = (row.email || "").trim().toLowerCase();
+      const emailNorm = norm(row.email || "");
       return nombreCompleto === nombreNorm || primerNombre === nombreNorm || emailNorm === nombreNorm;
     });
 
