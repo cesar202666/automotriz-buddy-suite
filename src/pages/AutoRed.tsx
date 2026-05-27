@@ -10,6 +10,7 @@ import {
   Tag,
   Briefcase,
   Car,
+  CheckCircle2,
 } from "lucide-react";
 import {
   fetchBrands,
@@ -22,6 +23,21 @@ import {
   type SearchParams,
   type PriceSearchResponse,
 } from "@/lib/autoredService";
+import { supabase } from "@/integrations/supabase/client";
+
+// Normaliza una patente: elimina espacios/guiones y pasa a mayúsculas
+function normalizePlate(s: string): string {
+  return s.replace(/[\s-]/g, "").toUpperCase();
+}
+
+// Quita acentos/diacríticos y pasa a mayúsculas para comparar marcas/modelos
+function normalizeName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .trim();
+}
 
 export default function AutoRed() {
   // ── Estado de marcas/modelos ────────────────────────────────────
@@ -30,15 +46,19 @@ export default function AutoRed() {
   const [brandsError, setBrandsError] = useState("");
 
   // ── Formulario ──────────────────────────────────────────────────
+  const [licensePlate, setLicensePlate] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState<number | "">("");
   const [selectedModelId, setSelectedModelId] = useState<number | "">("");
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [km, setKm] = useState<number>(0);
   const [regionId, setRegionId] = useState<number>(13); // Metropolitana
-  const [licensePlate, setLicensePlate] = useState("");
   const [versionId, setVersionId] = useState<string>("");
 
-  // ── Búsqueda ────────────────────────────────────────────────────
+  // ── Búsqueda por patente en DB ──────────────────────────────────
+  const [searchingPlate, setSearchingPlate] = useState(false);
+  const [plateLookupMsg, setPlateLookupMsg] = useState<{ type: "success" | "warning" | "error"; text: string } | null>(null);
+
+  // ── Búsqueda de precios ────────────────────────────────────────
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<PriceSearchResponse | null>(null);
   const [searchError, setSearchError] = useState("");
@@ -79,10 +99,98 @@ export default function AutoRed() {
     }));
   }, [result]);
 
-  // ── Handler de búsqueda ────────────────────────────────────────
+  // ── Búsqueda por patente en inventario local ────────────────────
+  const lookupByPlate = async () => {
+    const plate = normalizePlate(licensePlate);
+    if (!plate) {
+      setPlateLookupMsg({ type: "warning", text: "Ingresa una patente para buscar" });
+      return;
+    }
+    setSearchingPlate(true);
+    setPlateLookupMsg(null);
+
+    try {
+      const { data, error } = await supabase
+        .from("vehiculos")
+        .select("patente, marca, modelo, anio, kilometraje")
+        .ilike("patente", plate)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        setPlateLookupMsg({ type: "error", text: `Error: ${error.message}` });
+        return;
+      }
+      if (!data) {
+        setPlateLookupMsg({
+          type: "warning",
+          text: `Patente "${plate}" no encontrada en el inventario. Ingresa los datos manualmente.`,
+        });
+        return;
+      }
+
+      // Mapear marca → brand_id
+      const marcaNorm = normalizeName(String(data.marca || ""));
+      const matchedBrand = brands.find((b) => {
+        const bNorm = normalizeName(b.name);
+        return bNorm === marcaNorm || bNorm.includes(marcaNorm) || marcaNorm.includes(bNorm);
+      });
+
+      if (!matchedBrand) {
+        setPlateLookupMsg({
+          type: "warning",
+          text: `Vehículo encontrado (${data.marca} ${data.modelo}) pero la marca no existe en AutoRed.`,
+        });
+        return;
+      }
+
+      // Mapear modelo → model_id (busca primer modelo que coincida o contenga)
+      const modeloNorm = normalizeName(String(data.modelo || ""));
+      const primerToken = modeloNorm.split(/\s+/)[0]; // ej "NEW RANGER XLT 4X4" → "NEW"
+      const matchedModel =
+        matchedBrand.Models.find((m) => normalizeName(m.name) === modeloNorm) ||
+        matchedBrand.Models.find((m) => modeloNorm.includes(normalizeName(m.name))) ||
+        matchedBrand.Models.find((m) => normalizeName(m.name).includes(primerToken));
+
+      setSelectedBrandId(matchedBrand.id);
+      if (matchedModel) {
+        setSelectedModelId(matchedModel.id);
+      } else {
+        setSelectedModelId("");
+      }
+
+      // Año
+      const anioNum = parseInt(String(data.anio || ""), 10);
+      if (anioNum && anioNum >= 1990 && anioNum <= new Date().getFullYear() + 1) {
+        setYear(anioNum);
+      }
+
+      // Km
+      const kmNum = Number(data.kilometraje) || 0;
+      if (kmNum > 0) setKm(kmNum);
+
+      // Limpiar resultados previos
+      setResult(null);
+      setVersionId("");
+
+      setPlateLookupMsg({
+        type: "success",
+        text: matchedModel
+          ? `✓ ${data.marca} ${data.modelo} ${data.anio} · ${kmNum.toLocaleString("es-CL")} km. Click "Consultar precios" para tasar.`
+          : `✓ ${data.marca} encontrado, pero el modelo "${data.modelo}" no coincide exactamente con AutoRed. Selecciónalo manualmente.`,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlateLookupMsg({ type: "error", text: `Error: ${msg}` });
+    } finally {
+      setSearchingPlate(false);
+    }
+  };
+
+  // ── Handler de búsqueda de precios ─────────────────────────────
   const handleSearch = async () => {
     if (!selectedBrandId || !selectedModelId) {
-      setSearchError("Selecciona Marca y Modelo");
+      setSearchError("Selecciona Marca y Modelo (o busca por patente)");
       return;
     }
     if (!year || year < 1990 || year > new Date().getFullYear() + 1) {
@@ -95,7 +203,7 @@ export default function AutoRed() {
     setResult(null);
 
     const params: SearchParams = {
-      license_plate: licensePlate.trim().toUpperCase(),
+      license_plate: normalizePlate(licensePlate),
       brand_id: Number(selectedBrandId),
       model_id: Number(selectedModelId),
       version_id: versionId || "",
@@ -114,10 +222,6 @@ export default function AutoRed() {
   };
 
   // ── Helper para cards de precios ────────────────────────────────
-  // Cards muestran:
-  //   - Precio principal (real o estimado desde SII)
-  //   - Rango de precios mín/máx (calculado a partir del % range que devuelve AutoRed)
-  //   - Badge "est." si es estimación
   const PriceCard = ({
     icon,
     label,
@@ -137,12 +241,10 @@ export default function AutoRed() {
   }) => {
     const isReal = value !== null && value !== undefined && value > 0;
     const showValue = isReal ? value : estimatedFromSII;
-    // AutoRed devuelve "range" como porcentaje total del intervalo de confianza.
-    // Para los estimados desde SII, usamos un range fijo de 10% por defecto.
     const effectiveRange = isReal ? rangePercent : 10;
     const halfPct = effectiveRange && effectiveRange > 0 ? effectiveRange / 200 : 0;
-    const low = showValue && halfPct ? Math.round(showValue * (1 - halfPct) / 1000) * 1000 : null;
-    const high = showValue && halfPct ? Math.round(showValue * (1 + halfPct) / 1000) * 1000 : null;
+    const low = showValue && halfPct ? Math.round((showValue * (1 - halfPct)) / 1000) * 1000 : null;
+    const high = showValue && halfPct ? Math.round((showValue * (1 + halfPct)) / 1000) * 1000 : null;
 
     return (
       <div
@@ -161,16 +263,13 @@ export default function AutoRed() {
             {icon}
           </div>
           <div className="min-w-0 flex-1">
-            <p
-              className="text-xs font-medium flex items-center gap-1"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
+            <p className="text-xs font-medium flex items-center gap-1" style={{ color: "hsl(var(--muted-foreground))" }}>
               {label}
               {!isReal && estimatedFromSII && (
                 <span
                   className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
                   style={{ background: "#fef3c7", color: "#92400e" }}
-                  title="Valor estimado basado en la tasación SII porque AutoRed no tiene datos de mercado para esta combinación"
+                  title="Estimado basado en tasación SII"
                 >
                   est.
                 </span>
@@ -180,14 +279,10 @@ export default function AutoRed() {
           </div>
         </div>
 
-        {/* Rango mín ← → máx, solo para cards Venta y Publicación */}
         {showRange && showValue && low && high && (
-          <div
-            className="pt-2 mt-1 border-t"
-            style={{ borderColor: "hsl(var(--border))" }}
-          >
+          <div className="pt-2 mt-1 border-t" style={{ borderColor: "hsl(var(--border))" }}>
             <p
-              className="text-[10px] font-semibold uppercase mb-1.5 flex items-center gap-1"
+              className="text-[10px] font-semibold uppercase mb-1.5"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
               Rango de precios
@@ -195,27 +290,14 @@ export default function AutoRed() {
             <div className="flex items-center gap-2">
               <span
                 className="text-xs font-semibold px-2 py-1 rounded-full border whitespace-nowrap"
-                style={{
-                  borderColor: accent + "60",
-                  color: accent,
-                  background: accent + "10",
-                }}
+                style={{ borderColor: accent + "60", color: accent, background: accent + "10" }}
               >
                 {formatCLP(low)}
               </span>
-              <span
-                className="text-xs"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                ⟷
-              </span>
+              <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>⟷</span>
               <span
                 className="text-xs font-semibold px-2 py-1 rounded-full border whitespace-nowrap"
-                style={{
-                  borderColor: accent + "60",
-                  color: accent,
-                  background: accent + "10",
-                }}
+                style={{ borderColor: accent + "60", color: accent, background: accent + "10" }}
               >
                 {formatCLP(high)}
               </span>
@@ -226,15 +308,11 @@ export default function AutoRed() {
     );
   };
 
-  // ── Calcular estimados desde la tasación SII ─────────────────────
-  // Coeficientes empíricos del mercado chileno (referencia aproximada).
-  // SII < Retoma < Venta ≈ Publicación < Negocio
+  // ── Estimados desde tasación SII ─────────────────────────────────
   const sii = useMemo(() => {
     if (!result?.list_taxations || result.list_taxations.length === 0) return null;
-    // Si hay versión seleccionada, usar esa tasación; si no, promedio o máxima
     const taxs = result.list_taxations.map((t) => t.taxation).filter((n) => n > 0);
     if (taxs.length === 0) return null;
-    // Tomamos el mayor (versión más equipada) para que el estimado no quede bajo
     return Math.max(...taxs);
   }, [result]);
 
@@ -251,7 +329,6 @@ export default function AutoRed() {
   // ── Render ─────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2">
@@ -272,34 +349,97 @@ export default function AutoRed() {
         </button>
       </div>
 
-      {/* Aviso si hay error cargando marcas */}
       {brandsError && (
         <div
           className="border rounded-lg px-4 py-3 text-xs flex items-start gap-2"
-          style={{ borderColor: "hsl(var(--destructive))", background: "hsl(var(--destructive)/0.08)", color: "hsl(var(--destructive))" }}
+          style={{
+            borderColor: "hsl(var(--destructive))",
+            background: "hsl(var(--destructive)/0.08)",
+            color: "hsl(var(--destructive))",
+          }}
         >
           <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold">Error cargando marcas</p>
             <p className="opacity-90">{brandsError}</p>
-            <p className="opacity-75 mt-1">
-              Si el problema persiste, contacta al administrador para actualizar el token de AutoRed
-              en Supabase secrets.
-            </p>
           </div>
         </div>
       )}
 
-      {/* Formulario */}
+      {/* ── Búsqueda por patente (sección destacada arriba) ─────── */}
+      <div
+        className="border rounded-xl p-5"
+        style={{ borderColor: "hsl(var(--primary)/0.3)", background: "hsl(var(--primary)/0.04)" }}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <Car size={18} style={{ color: "hsl(var(--primary))" }} />
+          <h2 className="text-sm font-bold">Buscar por patente (recomendado)</h2>
+        </div>
+        <p className="text-xs mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>
+          Ingresa la patente de un vehículo de tu inventario y se autocompletan marca, modelo, año y kilometraje.
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            value={licensePlate}
+            onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && lookupByPlate()}
+            placeholder="ABCD12"
+            maxLength={8}
+            className="flex-1 min-w-[140px] border rounded-lg px-3 py-2 text-sm bg-background uppercase font-mono tracking-wider"
+            style={{ borderColor: "hsl(var(--border))" }}
+          />
+          <button
+            onClick={lookupByPlate}
+            disabled={searchingPlate || !licensePlate.trim()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap"
+            style={{ background: "hsl(var(--primary))" }}
+          >
+            {searchingPlate ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
+            Buscar patente
+          </button>
+        </div>
+        {plateLookupMsg && (
+          <div
+            className="mt-3 px-3 py-2 rounded-lg text-xs flex items-start gap-2"
+            style={{
+              background:
+                plateLookupMsg.type === "success"
+                  ? "#dcfce7"
+                  : plateLookupMsg.type === "warning"
+                  ? "#fef3c7"
+                  : "#fee2e2",
+              color:
+                plateLookupMsg.type === "success"
+                  ? "#16a34a"
+                  : plateLookupMsg.type === "warning"
+                  ? "#92400e"
+                  : "#dc2626",
+            }}
+          >
+            {plateLookupMsg.type === "success" ? (
+              <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+            )}
+            <span>{plateLookupMsg.text}</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Formulario manual (datos del vehículo) ─────────────── */}
       <div
         className="border rounded-xl p-5 space-y-4"
         style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
       >
+        <p className="text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>
+          O ingresa los datos manualmente:
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {/* Marca */}
           <div>
             <label className="block text-xs font-medium mb-1">
-              Marca {brands.length > 0 && <span className="font-normal" style={{ color: "hsl(var(--muted-foreground))" }}>({brands.length})</span>}
+              Marca {brands.length > 0 && (
+                <span className="font-normal" style={{ color: "hsl(var(--muted-foreground))" }}>({brands.length})</span>
+              )}
             </label>
             <select
               value={selectedBrandId}
@@ -314,9 +454,7 @@ export default function AutoRed() {
               className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
               style={{ borderColor: "hsl(var(--border))" }}
             >
-              <option value="">
-                {loadingBrands ? "Cargando..." : brands.length === 0 ? "Sin marcas disponibles" : "Selecciona marca"}
-              </option>
+              <option value="">{loadingBrands ? "Cargando..." : "Selecciona marca"}</option>
               {brands.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name} ({b.Models?.length ?? 0})
@@ -325,10 +463,11 @@ export default function AutoRed() {
             </select>
           </div>
 
-          {/* Modelo */}
           <div>
             <label className="block text-xs font-medium mb-1">
-              Modelo {availableModels.length > 0 && <span className="font-normal" style={{ color: "hsl(var(--muted-foreground))" }}>({availableModels.length})</span>}
+              Modelo {availableModels.length > 0 && (
+                <span className="font-normal" style={{ color: "hsl(var(--muted-foreground))" }}>({availableModels.length})</span>
+              )}
             </label>
             <select
               value={selectedModelId}
@@ -341,18 +480,13 @@ export default function AutoRed() {
               className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
               style={{ borderColor: "hsl(var(--border))" }}
             >
-              <option value="">
-                {selectedBrandId ? "Selecciona modelo" : "Selecciona marca primero"}
-              </option>
+              <option value="">{selectedBrandId ? "Selecciona modelo" : "Selecciona marca primero"}</option>
               {availableModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
+                <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Año */}
           <div>
             <label className="block text-xs font-medium mb-1">Año</label>
             <select
@@ -362,14 +496,11 @@ export default function AutoRed() {
               style={{ borderColor: "hsl(var(--border))" }}
             >
               {generateYears().map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
+                <option key={y} value={y}>{y}</option>
               ))}
             </select>
           </div>
 
-          {/* Kilometraje */}
           <div>
             <label className="block text-xs font-medium mb-1">Kilometraje</label>
             <input
@@ -383,7 +514,6 @@ export default function AutoRed() {
             />
           </div>
 
-          {/* Región */}
           <div>
             <label className="block text-xs font-medium mb-1">Región</label>
             <select
@@ -393,32 +523,14 @@ export default function AutoRed() {
               style={{ borderColor: "hsl(var(--border))" }}
             >
               {CHILE_REGIONS.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
+                <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Patente */}
-          <div>
-            <label className="block text-xs font-medium mb-1">Patente (opcional)</label>
-            <input
-              value={licensePlate}
-              onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
-              placeholder="ABCD12"
-              maxLength={8}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background uppercase"
-              style={{ borderColor: "hsl(var(--border))" }}
-            />
-          </div>
-
-          {/* Versión (aparece después de la primera búsqueda) */}
           {availableVersions.length > 0 && (
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className="block text-xs font-medium mb-1">
-                Versión (opcional, refina la búsqueda)
-              </label>
+            <div>
+              <label className="block text-xs font-medium mb-1">Versión (opcional)</label>
               <select
                 value={versionId}
                 onChange={(e) => setVersionId(e.target.value)}
@@ -427,16 +539,13 @@ export default function AutoRed() {
               >
                 <option value="">Todas las versiones</option>
                 {availableVersions.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
+                  <option key={v.id} value={v.id}>{v.label}</option>
                 ))}
               </select>
             </div>
           )}
         </div>
 
-        {/* Botón buscar */}
         <div className="flex items-center gap-3">
           <button
             onClick={handleSearch}
@@ -453,7 +562,6 @@ export default function AutoRed() {
         </div>
       </div>
 
-      {/* Resultados */}
       {result && (
         <div className="space-y-4">
           <h2 className="text-base font-bold flex items-center gap-2">
@@ -461,7 +569,6 @@ export default function AutoRed() {
             Resultados
           </h2>
 
-          {/* Precios de mercado */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <PriceCard
               icon={<ShoppingCart size={18} />}
@@ -498,7 +605,6 @@ export default function AutoRed() {
             />
           </div>
 
-          {/* Aviso si los precios son estimados (no de AutoRed) */}
           {!result.pm_retake?.price && !result.pm_sale?.price && est && (
             <div
               className="border rounded-lg px-4 py-3 text-xs flex items-start gap-2"
@@ -508,17 +614,13 @@ export default function AutoRed() {
               <div>
                 <p className="font-semibold mb-0.5">Precios estimados — referencia</p>
                 <p className="opacity-90">
-                  AutoRed no tiene precios de mercado para este modelo (probablemente por volumen
-                  bajo de ventas). Los valores mostrados son <strong>estimaciones</strong> calculadas
-                  a partir de la tasación fiscal SII × coeficientes promedio del mercado chileno
-                  (Retoma 1.25x · Negocio 1.35x · Venta 1.5x · Publicación 1.7x). Úsalos como
-                  referencia, no como precio definitivo.
+                  AutoRed no tiene precios de mercado para este modelo. Los valores son <strong>estimaciones</strong> calculadas
+                  desde la tasación SII × coeficientes promedio (Retoma 1.25x · Negocio 1.35x · Venta 1.5x · Publicación 1.7x).
                 </p>
               </div>
             </div>
           )}
 
-          {/* Tasaciones */}
           {result.list_taxations && result.list_taxations.length > 0 && (
             <div
               className="border rounded-xl p-5"
@@ -553,23 +655,20 @@ export default function AutoRed() {
             </div>
           )}
 
-          {/* Aviso si no hay NADA: ni precios ni tasación */}
-          {!result.pm_retake?.price && !result.pm_sale?.price && !result.pm_publication?.price && !sii && (
-            <div
-              className="border rounded-lg px-4 py-3 text-xs flex items-center gap-2"
-              style={{
-                borderColor: "hsl(var(--border))",
-                background: "hsl(var(--muted)/0.3)",
-              }}
-            >
-              <AlertTriangle size={16} style={{ color: "#d97706" }} />
-              <span>
-                AutoRed no encontró información para esta combinación. Verifica que la marca/modelo
-                exista realmente con el año seleccionado. Algunas combinaciones (marcas
-                descontinuadas, modelos muy nuevos o muy antiguos) no tienen datos disponibles.
-              </span>
-            </div>
-          )}
+          {!result.pm_retake?.price &&
+            !result.pm_sale?.price &&
+            !result.pm_publication?.price &&
+            !sii && (
+              <div
+                className="border rounded-lg px-4 py-3 text-xs flex items-center gap-2"
+                style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted)/0.3)" }}
+              >
+                <AlertTriangle size={16} style={{ color: "#d97706" }} />
+                <span>
+                  AutoRed no encontró información para esta combinación. Verifica marca/modelo/año.
+                </span>
+              </div>
+            )}
         </div>
       )}
     </div>
