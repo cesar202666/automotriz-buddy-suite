@@ -1084,10 +1084,27 @@ export default function Configuracion() {
           />
           <div className="space-y-4">
             <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-              Ordena los vendedores de arriba a abajo. El agente asignará clientes en ese orden. 
-              Puedes definir cuántos clientes consecutivos recibe cada vendedor antes de pasar al siguiente, 
+              Ordena los vendedores de arriba a abajo. El agente asignará clientes en ese orden.
+              Puedes definir cuántos clientes consecutivos recibe cada vendedor antes de pasar al siguiente,
               y desactivar vendedores que no quieras incluir en la rotación.
             </p>
+
+            <div
+              className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs"
+              style={{ background: "#dbeafe", color: "#1e3a8a", border: "1px solid #93c5fd" }}
+            >
+              <span className="text-base leading-none mt-0.5">🛡️</span>
+              <div>
+                <p className="font-semibold mb-0.5">Política de asignación</p>
+                <p>
+                  En esta lista solo aparecen usuarios con rol <strong>vendedor</strong>.
+                  Los administradores y el master <strong>nunca</strong> reciben leads automáticos —
+                  ni desde el agente IA, ni desde una reasignación manual. El orden que
+                  guardes aquí es respetado tal cual por el agente, con bloqueo atómico en
+                  base de datos para evitar duplicaciones.
+                </p>
+              </div>
+            </div>
 
             <div className="border rounded-lg overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
               <table className="w-full text-sm">

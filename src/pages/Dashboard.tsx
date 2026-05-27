@@ -4,12 +4,12 @@ import {
   Car,
   Users,
   UserCheck,
-  CreditCard,
   ShoppingCart,
   TrendingUp,
   Calendar,
   RefreshCw,
   DollarSign,
+  Layers,
 } from "lucide-react";
 import {
   BarChart,
@@ -38,9 +38,24 @@ interface DashboardData {
   clientes: { id: string; created_at: string }[];
   vehiculos: { id: string; estado: string; precio_venta: number; created_at: string }[];
   consignatarios: { id: string; precio: number; created_at: string }[];
-  creditos: { id: string; created_at: string }[];
-  ventas: { id: string; precio_venta: number; precio_vta_final: number; margen_bruto: number; fecha_venta: string; ejecutiva: string; marca: string }[];
+  ventas: { id: string; precio_venta: number; precio_vta_final: number; margen_bruto: number; fecha_venta: string; ejecutiva: string; marca: string; tipo: string | null }[];
 }
+
+/** Normaliza un valor de "tipo" de vehículo (quita tildes, mayúsculas, agrupa variantes). */
+const normalizarTipo = (raw: string | null | undefined): string => {
+  if (!raw) return "SIN TIPO";
+  const t = raw
+    .toString()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .trim();
+  // Agrupa "FURGON"/"FURGÓN"; "AUTO"/"AUTOMOVIL"
+  if (t.startsWith("FURGON")) return "FURGON";
+  if (t.startsWith("AUTOMO") || t === "AUTO") return "AUTOMOVIL";
+  if (t === "STATION WAGON" || t === "STATIONWAGON") return "STATION WAGON";
+  return t;
+};
 
 const fmt = (n: number) => "$" + Math.round(n).toLocaleString("es-CL");
 const fmtCompact = (n: number) => {
@@ -62,7 +77,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [data, setData] = useState<DashboardData>({
-    clientes: [], vehiculos: [], consignatarios: [], creditos: [], ventas: [],
+    clientes: [], vehiculos: [], consignatarios: [], ventas: [],
   });
   const [periodo, setPeriodo] = useState<FiltroPeriodo>("ultimos_6");
 
@@ -74,23 +89,13 @@ export default function Dashboard() {
         supabase.from("clientes").select("id, created_at"),
         supabase.from("vehiculos").select("id, estado, precio_venta, created_at"),
         supabase.from("consignatarios").select("id, precio, created_at"),
-        supabase.from("ventas").select("id, precio_venta, precio_vta_final, margen_bruto, fecha_venta, ejecutiva, marca"),
+        supabase.from("ventas").select("id, precio_venta, precio_vta_final, margen_bruto, fecha_venta, ejecutiva, marca, tipo"),
       ]);
-
-      // Cargar tabla "creditos" si existe (sino, arr vacío)
-      let creditos: { id: string; created_at: string }[] = [];
-      const creditosR = await supabase.from("clientes").select("id, created_at").limit(0);
-      // Intento con un tabla diferente si "creditos" no existe
-      try {
-        const cr = await supabase.from("leads").select("id, created_at");
-        if (!cr.error && cr.data) creditos = cr.data;
-      } catch (e) { void e; }
 
       setData({
         clientes: clientesR.data || [],
         vehiculos: vehiculosR.data || [],
         consignatarios: consigR.data || [],
-        creditos,
         ventas: ventasR.data || [],
       });
       setLoading(false);
@@ -151,7 +156,6 @@ export default function Dashboard() {
       clientes: data.clientes.filter((c) => inRange(c.created_at)),
       vehiculos: data.vehiculos.filter((v) => inRange(v.created_at)),
       consignatarios: data.consignatarios.filter((c) => inRange(c.created_at)),
-      creditos: data.creditos.filter((c) => inRange(c.created_at)),
       ventas: data.ventas.filter((v) => inRange(v.fecha_venta)),
     };
   }, [data, desde, hasta]);
@@ -184,14 +188,6 @@ export default function Dashboard() {
         icon: UserCheck,
         path: "/consignatarios",
         color: "hsl(38,92%,50%)",
-      },
-      {
-        label: "Leads",
-        valueTotal: data.creditos.length,
-        valuePeriodo: filtered.creditos.length,
-        icon: CreditCard,
-        path: "/conversaciones",
-        color: "hsl(0,84%,60%)",
       },
       {
         label: "Ventas",
@@ -274,6 +270,19 @@ export default function Dashboard() {
       .slice(0, 8);
   }, [filtered.ventas]);
 
+  // ── Top tipos de vehículo vendidos ──────────────────────────
+  const topTipos = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const v of filtered.ventas) {
+      const tipo = normalizarTipo(v.tipo);
+      m.set(tipo, (m.get(tipo) || 0) + 1);
+    }
+    const total = Array.from(m.values()).reduce((s, n) => s + n, 0) || 1;
+    return Array.from(m.entries())
+      .map(([name, value]) => ({ name, value, pct: Math.round((value / total) * 100) }))
+      .sort((a, b) => b.value - a.value);
+  }, [filtered.ventas]);
+
   // ── Clientes nuevos por mes (12 meses) ──────────────────────
   const clientesPorMes = useMemo(() => {
     const buckets = new Map<string, { mes: string; clientes: number }>();
@@ -342,7 +351,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs principales */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpis.map((k) => {
           const Icon = k.icon;
           const inner = (
@@ -572,6 +581,81 @@ export default function Dashboard() {
             </ResponsiveContainer>
           )}
         </div>
+      </div>
+
+      {/* Top tipos de vehículo vendidos — inclinación del mercado */}
+      <div
+        className="border rounded-xl p-5"
+        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold flex items-center gap-2">
+            <Layers size={16} style={{ color: "hsl(173,80%,40%)" }} />
+            Tipos de vehículo vendidos — inclinación del mercado ({periodoLabel})
+          </h3>
+          <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+            {topTipos.length} {topTipos.length === 1 ? "categoría" : "categorías"}
+          </span>
+        </div>
+        {topTipos.length === 0 ? (
+          <p className="text-xs text-center py-8" style={{ color: "hsl(var(--muted-foreground))" }}>
+            Sin ventas en el periodo
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Barra horizontal */}
+            <ResponsiveContainer width="100%" height={Math.max(180, topTipos.length * 32)}>
+              <BarChart data={topTipos} layout="vertical" margin={{ top: 5, right: 30, left: 70, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: number, _name, props: { payload?: { pct?: number } }) => [
+                    `${v} (${props.payload?.pct ?? 0}%)`,
+                    "Ventas",
+                  ]}
+                />
+                <Bar dataKey="value" name="Ventas" radius={[0, 4, 4, 0]}>
+                  {topTipos.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+
+            {/* Donut con porcentajes */}
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={topTipos}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  label={(entry: { name?: string; pct?: number }) =>
+                    `${entry.name}: ${entry.pct ?? 0}%`
+                  }
+                  labelLine={false}
+                  style={{ fontSize: 11 }}
+                >
+                  {topTipos.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v: number, _name, props: { payload?: { pct?: number } }) =>
+                    `${v} (${props.payload?.pct ?? 0}%)`
+                  }
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     </div>
   );
