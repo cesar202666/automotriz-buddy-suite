@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { supabase } from "@/integrations/supabase/client";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "$0";
-const CLAVE_ADMIN = "123cuatro";
+const CLAVE_ADMIN = "ankker2026$$";
 
 type AdminTab = "usuarios" | "ventas" | "cuentas_pagar" | "cuentas_cobrar" | "kpi";
 
@@ -123,10 +123,16 @@ async function syncUserToVendedores(previousUser: Usuario | null, nextUser: Usua
 export default function Administracion() {
   const { ventas, setVentas, clientes, vehiculos, usuarios, setUsuarios, cuentasPagar, setCuentasPagar, cuentasCobrar, setCuentasCobrar, usuarioActual, setUsuarioActual } = useApp();
 
-  const [unlocked, setUnlocked] = useState(false);
+  // Master + admin pueden entrar sin pedir clave; vendedor debe ingresar clave
+  const hasAdminAccess = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
+  const [unlocked, setUnlocked] = useState(hasAdminAccess);
   const [clave, setClave] = useState("");
   const [claveError, setClaveError] = useState("");
   const [tab, setTab] = useState<AdminTab>("usuarios");
+
+  useEffect(() => {
+    if (hasAdminAccess && !unlocked) setUnlocked(true);
+  }, [hasAdminAccess, unlocked]);
 
   // DB is the single source of truth — no local sync needed
 

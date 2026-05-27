@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
@@ -19,7 +19,7 @@ const TIPOS_VEHICULO = ["Camioneta", "Sedan", "Hatchback", "SUV / 3C", "Furgon",
 const ESTADOS_VEHICULO: VehiculoEstado[] = ["DISPONIBLE", "RESERVADO", "VENDIDO", "RETIRADO"];
 const PROCEDENCIAS = ["Propio", "Consignado"];
 
-const MASTER_PASS = "123cuatro";
+const MASTER_PASS = "ankker2026$$";
 
 const DEFAULT_BG_PROMPT = "Keep the car exactly as it is — do not modify the vehicle at all. Only replace the background. Place the car on a professional automotive studio floor: light grey polished concrete, subtle reflection under the car, clean white seamless background wall. The car should occupy about 70% of the frame centered, leaving visible floor space below and sides. Soft even studio lighting, no harsh shadows, photorealistic, high quality dealership photo.";
 
@@ -43,8 +43,17 @@ const statusBadge = (estado: string) => {
 
 // --- Delete password modal ---
 function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  const { usuarioActual } = useApp();
   const [pass, setPass] = useState("");
   const [err, setErr] = useState(false);
+  const isMaster = usuarioActual?.rol === "master";
+
+  useEffect(() => {
+    if (isMaster) onConfirm();
+  }, [isMaster, onConfirm]);
+
+  if (isMaster) return null;
+
   const submit = () => {
     if (pass === MASTER_PASS) { onConfirm(); }
     else { setErr(true); setPass(""); }

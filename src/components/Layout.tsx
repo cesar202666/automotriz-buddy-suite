@@ -56,7 +56,8 @@ function resolveUserRole(email: string, matchedUser: Usuario | null, dbRol: stri
   return "vendedor";
 }
 
-function LoginScreen({ onLogin }: { onLogin: (clave: string) => Promise<boolean> }) {
+function LoginScreen({ onLogin }: { onLogin: (nombre: string, clave: string) => Promise<boolean> }) {
+  const [nombre, setNombre] = useState("");
   const [clave, setClave] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,9 +69,9 @@ function LoginScreen({ onLogin }: { onLogin: (clave: string) => Promise<boolean>
     setIsSubmitting(true);
 
     try {
-      const ok = await onLogin(clave);
+      const ok = await onLogin(nombre, clave);
       if (!ok) {
-        setError("Clave incorrecta");
+        setError("Nombre o contraseña incorrectos");
         setClave("");
       }
     } finally {
@@ -92,12 +93,22 @@ function LoginScreen({ onLogin }: { onLogin: (clave: string) => Promise<boolean>
           <Lock size={18} />
           <h2 className="text-base font-bold">Iniciar Sesión</h2>
         </div>
-        <p className="text-xs mb-5" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa tu contraseña para acceder al sistema.</p>
+        <p className="text-xs mb-5" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa tu nombre y contraseña para acceder al sistema.</p>
         <form onSubmit={handleSubmit}>
+          <label className="block text-xs font-medium mb-1">Nombre</label>
+          <input
+            type="text"
+            autoFocus
+            disabled={isSubmitting}
+            className="w-full border rounded-lg px-4 py-3 text-sm bg-background mb-3 focus:outline-none focus:ring-2"
+            style={{ borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
+            placeholder="Tu nombre..."
+            value={nombre}
+            onChange={e => { setNombre(e.target.value); setError(""); }}
+          />
           <label className="block text-xs font-medium mb-1">Contraseña</label>
           <input
             type="password"
-            autoFocus
             disabled={isSubmitting}
             className="w-full border rounded-lg px-4 py-3 text-sm bg-background mb-2 focus:outline-none focus:ring-2"
             style={{ borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
@@ -138,27 +149,46 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => { supabase.removeChannel(ch); };
   }, [usuarioActual]);
 
-  const handleLogin = async (clave: string): Promise<boolean> => {
+  const handleLogin = async (nombreEnviado: string, clave: string): Promise<boolean> => {
     const claveIngresada = clave.trim();
-    if (!claveIngresada) return false;
+    const nombreIngresado = nombreEnviado.trim();
+    if (!claveIngresada || !nombreIngresado) return false;
 
-    const found = usuarios.find((u) => u.clave.trim() === claveIngresada);
+    const nombreNorm = nombreIngresado.toLowerCase();
+
+    // 1. Buscar en usuarios locales por nombre (primer nombre, nombre+apellido, o email)
+    const found = usuarios.find((u) => {
+      if (u.clave.trim() !== claveIngresada) return false;
+      const primer = u.nombre.trim().toLowerCase();
+      const completo = `${u.nombre} ${u.apellido}`.trim().toLowerCase();
+      const email = (u.email || "").trim().toLowerCase();
+      return primer === nombreNorm || completo === nombreNorm || email === nombreNorm;
+    });
     if (found) {
       setUsuarioActual(found);
       return true;
     }
 
-    const { data, error } = await supabase
+    // 2. Consultar Supabase: clave + nombre/email coincide
+    const { data: rows, error } = await supabase
       .from("vendedores")
       .select("id, nombre, email, telefono, clave, activo, rol")
       .eq("activo", true)
-      .eq("clave", claveIngresada)
-      .limit(1)
-      .maybeSingle();
+      .eq("clave", claveIngresada);
 
-    if (error || !data) return false;
+    if (error || !rows || rows.length === 0) return false;
 
-    const vendedor = data as unknown as BackendLoginRow;
+    // Filtrar por nombre/email
+    const data = (rows as BackendLoginRow[]).find((row) => {
+      const nombreCompleto = (row.nombre || "").trim().toLowerCase();
+      const primerNombre = nombreCompleto.split(/\s+/)[0] || "";
+      const emailNorm = (row.email || "").trim().toLowerCase();
+      return nombreCompleto === nombreNorm || primerNombre === nombreNorm || emailNorm === nombreNorm;
+    });
+
+    if (!data) return false;
+
+    const vendedor = data;
     const email = normalizeLoginValue(vendedor.email);
     const nombreNormalizado = normalizeLoginValue(vendedor.nombre);
     const telefono = (vendedor.telefono ?? "").trim();

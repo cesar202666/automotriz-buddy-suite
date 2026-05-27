@@ -218,11 +218,18 @@ export default function Ventas() {
   };
 
   const iniciarValidacion = (id: string) => {
+    // Master valida directo sin pedir clave
+    if (usuarioActual?.rol === "master") {
+      setVentas(ventas.map(v => v.id === id ? { ...v, estado: "VALIDADA", verificacion: true } : v));
+      return;
+    }
     setValidarId(id); setClaveValidar(""); setClaveError(""); setShowValidarModal(true);
   };
 
   const confirmarValidacion = () => {
-    if (claveValidar !== "123cuatro") { setClaveError("Clave incorrecta"); return; }
+    if (usuarioActual?.rol !== "master" && claveValidar !== "ankker2026$$") {
+      setClaveError("Clave incorrecta"); return;
+    }
     setVentas(ventas.map(v => v.id === validarId ? { ...v, estado: "VALIDADA", verificacion: true } : v));
     setShowValidarModal(false);
   };

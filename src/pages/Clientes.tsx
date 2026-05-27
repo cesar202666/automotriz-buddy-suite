@@ -1,9 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2, Phone, Mail, Download, Upload, X, Table } from "lucide-react";
 import { useApp, Cliente } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 
-const MASTER_PASS = "123cuatro";
+const MASTER_PASS = "ankker2026$$";
 
 interface SeguimientoEntry {
   tipo: string;
@@ -22,8 +22,18 @@ const emptyForm = (): Omit<Cliente, "id"> & { seguimientos: SeguimientoEntry[] }
 });
 
 function DeleteModal({ label, onConfirm, onCancel }: { label: string; onConfirm: () => void; onCancel: () => void }) {
+  const { usuarioActual } = useApp();
   const [pass, setPass] = useState("");
   const [err, setErr] = useState(false);
+  const isMaster = usuarioActual?.rol === "master";
+
+  // Si el usuario es master, ejecutar acción automáticamente sin pedir clave
+  useEffect(() => {
+    if (isMaster) onConfirm();
+  }, [isMaster, onConfirm]);
+
+  if (isMaster) return null;
+
   const submit = () => {
     if (pass === MASTER_PASS) onConfirm();
     else { setErr(true); setPass(""); }

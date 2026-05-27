@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lock, Plus, Trash2, TrendingUp, Car, DollarSign, BarChart2 } from "lucide-react";
 import { useApp, Adquisicion } from "@/context/AppContext";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
 
 const fmt = (n: number) => "$" + n.toLocaleString("es-CL");
-const CLAVE_GERENCIA = "123cuatro";
+const CLAVE_GERENCIA = "ankker2026$$";
 
 const emptyAdq = (): Omit<Adquisicion, "id"> => ({
   empresa: "", tipoProcedencia: "", observaciones: "", patente: "", marca: "", modelo: "",
@@ -13,13 +13,19 @@ const emptyAdq = (): Omit<Adquisicion, "id"> => ({
 });
 
 export default function Gerencia() {
-  const { adquisiciones, setAdquisiciones, vehiculos, ventas } = useApp();
-  const [unlocked, setUnlocked] = useState(false);
+  const { adquisiciones, setAdquisiciones, vehiculos, ventas, usuarioActual } = useApp();
+  // Solo master puede entrar a Gerencia sin clave; otros deben ingresarla
+  const isMaster = usuarioActual?.rol === "master";
+  const [unlocked, setUnlocked] = useState(isMaster);
   const [clave, setClave] = useState("");
   const [claveError, setClaveError] = useState("");
   const [tab, setTab] = useState<"ficha" | "inventario">("ficha");
   const [form, setForm] = useState<Omit<Adquisicion, "id">>(emptyAdq());
   const [nuevoGasto, setNuevoGasto] = useState({ descripcion: "", monto: 0 });
+
+  useEffect(() => {
+    if (isMaster && !unlocked) setUnlocked(true);
+  }, [isMaster, unlocked]);
 
   const tryUnlock = () => {
     if (clave === CLAVE_GERENCIA) { setUnlocked(true); setClaveError(""); }

@@ -3,11 +3,13 @@ import {
   Wrench, Key, Lock, CheckCircle, XCircle, Loader2, Eye, EyeOff,
   Cpu, Globe, Copy, ChevronDown, ChevronUp, Bot, Users, Clock,
   AlertCircle, Settings2, ArrowUp, ArrowDown, RotateCw, Smartphone,
+  UserPlus, Trash2, Shield,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/integrations/supabase/client";
+import { useApp, type Usuario } from "@/context/AppContext";
 
-const MASTER_PASS = "123cuatro";
+const MASTER_PASS = "ankker2026$$";
 
 const PROVIDERS = [
   { id: "openai", label: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"] },
@@ -232,11 +234,19 @@ function AccesoMovilCRM() {
 }
 
 export default function Configuracion() {
-  const [authenticated, setAuthenticated] = useState(false);
+  const { usuarioActual } = useApp();
+  const isMaster = usuarioActual?.rol === "master";
+  // Master entra sin pedir clave; otros usuarios deben ingresar la clave master
+  const [authenticated, setAuthenticated] = useState(isMaster);
   const [passInput, setPassInput] = useState("");
   const [passError, setPassError] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+
+  // Si el usuario master se loguea después del primer render, autenticar automáticamente
+  useEffect(() => {
+    if (isMaster && !authenticated) setAuthenticated(true);
+  }, [isMaster, authenticated]);
 
   // IA providers
   const [configs, setConfigs] = useState<ApiConfig[]>(() => {

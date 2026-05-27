@@ -2072,6 +2072,8 @@ function TabCampanas() {
 
 // ── MAIN CRM ──────────────────────────────────────────────────────────────────
 export default function Conversaciones() {
+  const { usuarioActual: usuarioActivo } = useApp();
+  const esMasterPrincipal = usuarioActivo?.rol === "master";
   const [activeTab, setActiveTab] = useState<Tab>("mensajes");
 
   const TABS = [
@@ -2097,10 +2099,13 @@ export default function Conversaciones() {
   }, []);
 
   const toggleAgente = async () => {
-    const clave = prompt("Ingresa la clave de Admin Master para confirmar:");
-    if (clave !== "123cuatro") {
-      toast.error("Clave incorrecta");
-      return;
+    // Master prende/apaga el agente sin pedir clave
+    if (!esMasterPrincipal) {
+      const clave = prompt("Ingresa la clave de Admin Master para confirmar:");
+      if (clave !== "ankker2026$$") {
+        toast.error("Clave incorrecta");
+        return;
+      }
     }
     setLoadingAgente(true);
     const nuevoValor = !agenteActivo;

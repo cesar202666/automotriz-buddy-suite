@@ -3,6 +3,7 @@ import { Plus, Search, FileText, Eye, Upload, Download, Table } from "lucide-rea
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
+import { useApp } from "@/context/AppContext";
 
 interface Consignatario {
   id: string;
@@ -229,11 +230,20 @@ function generateContratoPDF(c: Consignatario) {
   doc.save(`Contrato_Consignacion_${c.apellidos}_${c.patente}.pdf`);
 }
 
-const MASTER_PASS = "123cuatro";
+const MASTER_PASS = "ankker2026$$";
 
 function DeleteConsigModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  const { usuarioActual } = useApp();
   const [pass, setPass] = useState("");
   const [err, setErr] = useState(false);
+  const isMaster = usuarioActual?.rol === "master";
+
+  useEffect(() => {
+    if (isMaster) onConfirm();
+  }, [isMaster, onConfirm]);
+
+  if (isMaster) return null;
+
   const submit = () => {
     if (pass === MASTER_PASS) onConfirm();
     else { setErr(true); setPass(""); }
