@@ -114,35 +114,81 @@ export default function AutoRed() {
   };
 
   // ── Helper para cards de precios ────────────────────────────────
+  // Si no hay precio real de AutoRed, calculamos uno estimado basado en la
+  // tasación fiscal SII (referencia aproximada del mercado chileno).
   const PriceCard = ({
     icon,
     label,
     value,
     accent,
+    estimatedFromSII,
   }: {
     icon: React.ReactNode;
     label: string;
     value: number | null | undefined;
     accent: string;
-  }) => (
-    <div
-      className="border rounded-xl p-4 flex items-start gap-3"
-      style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
-    >
+    estimatedFromSII?: number | null;
+  }) => {
+    const isReal = value !== null && value !== undefined && value > 0;
+    const showValue = isReal ? value : estimatedFromSII;
+    return (
       <div
-        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{ background: accent + "20", color: accent }}
+        className="border rounded-xl p-4 flex items-start gap-3"
+        style={{
+          borderColor: isReal ? accent + "40" : "hsl(var(--border))",
+          background: "hsl(var(--card))",
+          opacity: isReal ? 1 : 0.85,
+        }}
       >
-        {icon}
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: accent + "20", color: accent }}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p
+            className="text-xs font-medium flex items-center gap-1"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {label}
+            {!isReal && estimatedFromSII && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                style={{ background: "#fef3c7", color: "#92400e" }}
+                title="Valor estimado basado en la tasación SII porque AutoRed no tiene datos de mercado para esta combinación"
+              >
+                est.
+              </span>
+            )}
+          </p>
+          <p className="text-xl font-bold mt-0.5">{formatCLP(showValue)}</p>
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className="text-xs font-medium" style={{ color: "hsl(var(--muted-foreground))" }}>
-          {label}
-        </p>
-        <p className="text-xl font-bold mt-0.5">{formatCLP(value)}</p>
-      </div>
-    </div>
-  );
+    );
+  };
+
+  // ── Calcular estimados desde la tasación SII ─────────────────────
+  // Coeficientes empíricos del mercado chileno (referencia aproximada).
+  // SII < Retoma < Venta ≈ Publicación < Negocio
+  const sii = useMemo(() => {
+    if (!result?.list_taxations || result.list_taxations.length === 0) return null;
+    // Si hay versión seleccionada, usar esa tasación; si no, promedio o máxima
+    const taxs = result.list_taxations.map((t) => t.taxation).filter((n) => n > 0);
+    if (taxs.length === 0) return null;
+    // Tomamos el mayor (versión más equipada) para que el estimado no quede bajo
+    return Math.max(...taxs);
+  }, [result]);
+
+  const est = useMemo(() => {
+    if (!sii) return null;
+    return {
+      retoma: Math.round((sii * 1.25) / 1000) * 1000,
+      publicacion: Math.round((sii * 1.7) / 1000) * 1000,
+      venta: Math.round((sii * 1.5) / 1000) * 1000,
+      negocio: Math.round((sii * 1.35) / 1000) * 1000,
+    };
+  }, [sii]);
 
   // ── Render ─────────────────────────────────────────────────────
   return (
@@ -363,27 +409,51 @@ export default function AutoRed() {
               icon={<ShoppingCart size={18} />}
               label="Precio Retoma"
               value={result.pm_retake?.price ?? null}
+              estimatedFromSII={est?.retoma ?? null}
               accent="#16a34a"
             />
             <PriceCard
               icon={<Tag size={18} />}
               label="Precio Publicación"
               value={result.pm_publication?.price ?? null}
+              estimatedFromSII={est?.publicacion ?? null}
               accent="#2563eb"
             />
             <PriceCard
               icon={<Banknote size={18} />}
               label="Precio Venta"
               value={result.pm_sale?.price ?? null}
+              estimatedFromSII={est?.venta ?? null}
               accent="#d97706"
             />
             <PriceCard
               icon={<Briefcase size={18} />}
               label="Precio Negocio"
               value={result.pm_business?.price ?? null}
+              estimatedFromSII={est?.negocio ?? null}
               accent="#7c3aed"
             />
           </div>
+
+          {/* Aviso si los precios son estimados (no de AutoRed) */}
+          {!result.pm_retake?.price && !result.pm_sale?.price && est && (
+            <div
+              className="border rounded-lg px-4 py-3 text-xs flex items-start gap-2"
+              style={{ borderColor: "#d97706", background: "#fef3c7", color: "#92400e" }}
+            >
+              <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-0.5">Precios estimados — referencia</p>
+                <p className="opacity-90">
+                  AutoRed no tiene precios de mercado para este modelo (probablemente por volumen
+                  bajo de ventas). Los valores mostrados son <strong>estimaciones</strong> calculadas
+                  a partir de la tasación fiscal SII × coeficientes promedio del mercado chileno
+                  (Retoma 1.25x · Negocio 1.35x · Venta 1.5x · Publicación 1.7x). Úsalos como
+                  referencia, no como precio definitivo.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Tasaciones */}
           {result.list_taxations && result.list_taxations.length > 0 && (
@@ -420,8 +490,8 @@ export default function AutoRed() {
             </div>
           )}
 
-          {/* Aviso si no hay precios */}
-          {!result.pm_retake?.price && !result.pm_sale?.price && !result.pm_publication?.price && (
+          {/* Aviso si no hay NADA: ni precios ni tasación */}
+          {!result.pm_retake?.price && !result.pm_sale?.price && !result.pm_publication?.price && !sii && (
             <div
               className="border rounded-lg px-4 py-3 text-xs flex items-center gap-2"
               style={{
@@ -431,9 +501,9 @@ export default function AutoRed() {
             >
               <AlertTriangle size={16} style={{ color: "#d97706" }} />
               <span>
-                AutoRed no devolvió precios de mercado para esta combinación. Esto puede ocurrir si
-                el modelo es muy reciente, muy antiguo, o no hay suficientes ventas en la región.
-                Solo se muestra la tasación fiscal.
+                AutoRed no encontró información para esta combinación. Verifica que la marca/modelo
+                exista realmente con el año seleccionado. Algunas combinaciones (marcas
+                descontinuadas, modelos muy nuevos o muy antiguos) no tienen datos disponibles.
               </span>
             </div>
           )}
