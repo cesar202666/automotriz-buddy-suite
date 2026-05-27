@@ -1463,6 +1463,11 @@ function TabLeads() {
 
 // ── PESTAÑA CONTACTOS ─────────────────────────────────────────────────────────
 function TabContactos() {
+  const { usuarioActual } = useApp();
+  const isVendedor = usuarioActual?.rol === "vendedor";
+  const vendedorName = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
+  const vendedorFirstName = usuarioActual?.nombre || "";
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -1474,11 +1479,33 @@ function TabContactos() {
 
   useEffect(() => {
     setLoading(true);
-    supabase.from("contacts").select("*").order("last_seen", { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1).then(({ data }) => {
+    (async () => {
+      // Si es vendedor: primero buscar contact_ids de sus conversaciones asignadas
+      let allowedContactIds: string[] | null = null;
+      if (isVendedor && vendedorName) {
+        const { data: convs } = await supabase
+          .from("conversations")
+          .select("contact_id")
+          .or(`assigned_to.eq.${vendedorName},assigned_to.eq.${vendedorFirstName}`);
+        allowedContactIds = Array.from(
+          new Set((convs || []).map((c) => (c as { contact_id: string }).contact_id).filter(Boolean))
+        );
+        if (allowedContactIds.length === 0) {
+          setContacts([]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      let query = supabase.from("contacts").select("*").order("last_seen", { ascending: false });
+      if (allowedContactIds) {
+        query = query.in("id", allowedContactIds);
+      }
+      const { data } = await query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
       if (data) setContacts(data as Contact[]);
       setLoading(false);
-    });
-  }, [page]);
+    })();
+  }, [page, isVendedor, vendedorName, vendedorFirstName]);
 
   useEffect(() => {
     if (!selectedContact) return;
@@ -2087,14 +2114,16 @@ function TabCampanas() {
 export default function Conversaciones() {
   const { usuarioActual: usuarioActivo } = useApp();
   const esMasterPrincipal = usuarioActivo?.rol === "master";
+  const esVendedorPrincipal = usuarioActivo?.rol === "vendedor";
   const [activeTab, setActiveTab] = useState<Tab>("mensajes");
 
+  // Vendedor solo ve: Mensajes, Leads, Contactos, Métricas (NO Campañas)
   const TABS = [
     { id: "mensajes" as Tab, label: "Mensajes", icon: MessageSquare },
     { id: "leads" as Tab, label: "Leads", icon: Target },
     { id: "contactos" as Tab, label: "Contactos", icon: Users },
     { id: "metricas" as Tab, label: "Métricas", icon: BarChart3 },
-    { id: "campanas" as Tab, label: "Campañas", icon: Megaphone },
+    ...(esVendedorPrincipal ? [] : [{ id: "campanas" as Tab, label: "Campañas", icon: Megaphone }]),
   ];
 
   const [agenteActivo, setAgenteActivo] = useState(true);
@@ -2156,20 +2185,23 @@ export default function Conversaciones() {
             <p className="text-[10px] md:text-xs truncate hidden sm:block" style={{ color: "hsl(var(--muted-foreground))" }}>Gestión de clientes y conversaciones</p>
           </div>
         </div>
-        <button
-          onClick={toggleAgente}
-          disabled={loadingAgente}
-          className="flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-[11px] md:text-xs font-medium transition-all active:scale-95 flex-shrink-0"
-          style={{
-            background: agenteActivo ? "hsl(142 71% 45% / 0.15)" : "hsl(0 84% 60% / 0.15)",
-            color: agenteActivo ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)",
-            border: `1px solid ${agenteActivo ? "hsl(142 71% 45% / 0.3)" : "hsl(0 84% 60% / 0.3)"}`,
-          }}
-        >
-          <Bot size={13} />
-          <span className="hidden sm:inline">{loadingAgente ? "..." : agenteActivo ? "Agente IA Activo" : "Agente IA Apagado"}</span>
-          <span className="sm:hidden">{loadingAgente ? "..." : agenteActivo ? "IA ON" : "IA OFF"}</span>
-        </button>
+        {/* Solo master/administracion pueden ver/cambiar el toggle del agente */}
+        {!esVendedorPrincipal && (
+          <button
+            onClick={toggleAgente}
+            disabled={loadingAgente}
+            className="flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-[11px] md:text-xs font-medium transition-all active:scale-95 flex-shrink-0"
+            style={{
+              background: agenteActivo ? "hsl(142 71% 45% / 0.15)" : "hsl(0 84% 60% / 0.15)",
+              color: agenteActivo ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)",
+              border: `1px solid ${agenteActivo ? "hsl(142 71% 45% / 0.3)" : "hsl(0 84% 60% / 0.3)"}`,
+            }}
+          >
+            <Bot size={13} />
+            <span className="hidden sm:inline">{loadingAgente ? "..." : agenteActivo ? "Agente IA Activo" : "Agente IA Apagado"}</span>
+            <span className="sm:hidden">{loadingAgente ? "..." : agenteActivo ? "IA ON" : "IA OFF"}</span>
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
