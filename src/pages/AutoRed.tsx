@@ -114,56 +114,114 @@ export default function AutoRed() {
   };
 
   // ── Helper para cards de precios ────────────────────────────────
-  // Si no hay precio real de AutoRed, calculamos uno estimado basado en la
-  // tasación fiscal SII (referencia aproximada del mercado chileno).
+  // Cards muestran:
+  //   - Precio principal (real o estimado desde SII)
+  //   - Rango de precios mín/máx (calculado a partir del % range que devuelve AutoRed)
+  //   - Badge "est." si es estimación
   const PriceCard = ({
     icon,
     label,
     value,
     accent,
+    rangePercent,
     estimatedFromSII,
+    showRange = false,
   }: {
     icon: React.ReactNode;
     label: string;
     value: number | null | undefined;
     accent: string;
+    rangePercent?: number | null;
     estimatedFromSII?: number | null;
+    showRange?: boolean;
   }) => {
     const isReal = value !== null && value !== undefined && value > 0;
     const showValue = isReal ? value : estimatedFromSII;
+    // AutoRed devuelve "range" como porcentaje total del intervalo de confianza.
+    // Para los estimados desde SII, usamos un range fijo de 10% por defecto.
+    const effectiveRange = isReal ? rangePercent : 10;
+    const halfPct = effectiveRange && effectiveRange > 0 ? effectiveRange / 200 : 0;
+    const low = showValue && halfPct ? Math.round(showValue * (1 - halfPct) / 1000) * 1000 : null;
+    const high = showValue && halfPct ? Math.round(showValue * (1 + halfPct) / 1000) * 1000 : null;
+
     return (
       <div
-        className="border rounded-xl p-4 flex items-start gap-3"
+        className="border rounded-xl p-4"
         style={{
           borderColor: isReal ? accent + "40" : "hsl(var(--border))",
           background: "hsl(var(--card))",
-          opacity: isReal ? 1 : 0.85,
+          opacity: isReal ? 1 : 0.9,
         }}
       >
-        <div
-          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: accent + "20", color: accent }}
-        >
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p
-            className="text-xs font-medium flex items-center gap-1"
-            style={{ color: "hsl(var(--muted-foreground))" }}
+        <div className="flex items-start gap-3 mb-2">
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: accent + "20", color: accent }}
           >
-            {label}
-            {!isReal && estimatedFromSII && (
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
-                style={{ background: "#fef3c7", color: "#92400e" }}
-                title="Valor estimado basado en la tasación SII porque AutoRed no tiene datos de mercado para esta combinación"
-              >
-                est.
-              </span>
-            )}
-          </p>
-          <p className="text-xl font-bold mt-0.5">{formatCLP(showValue)}</p>
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-xs font-medium flex items-center gap-1"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {label}
+              {!isReal && estimatedFromSII && (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                  style={{ background: "#fef3c7", color: "#92400e" }}
+                  title="Valor estimado basado en la tasación SII porque AutoRed no tiene datos de mercado para esta combinación"
+                >
+                  est.
+                </span>
+              )}
+            </p>
+            <p className="text-xl font-bold mt-0.5">{formatCLP(showValue)}</p>
+          </div>
         </div>
+
+        {/* Rango mín ← → máx, solo para cards Venta y Publicación */}
+        {showRange && showValue && low && high && (
+          <div
+            className="pt-2 mt-1 border-t"
+            style={{ borderColor: "hsl(var(--border))" }}
+          >
+            <p
+              className="text-[10px] font-semibold uppercase mb-1.5 flex items-center gap-1"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Rango de precios
+            </p>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded-full border whitespace-nowrap"
+                style={{
+                  borderColor: accent + "60",
+                  color: accent,
+                  background: accent + "10",
+                }}
+              >
+                {formatCLP(low)}
+              </span>
+              <span
+                className="text-xs"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                ⟷
+              </span>
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded-full border whitespace-nowrap"
+                style={{
+                  borderColor: accent + "60",
+                  color: accent,
+                  background: accent + "10",
+                }}
+              >
+                {formatCLP(high)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -410,6 +468,7 @@ export default function AutoRed() {
               label="Precio Retoma"
               value={result.pm_retake?.price ?? null}
               estimatedFromSII={est?.retoma ?? null}
+              rangePercent={result.pm_retake?.range ?? null}
               accent="#16a34a"
             />
             <PriceCard
@@ -417,14 +476,18 @@ export default function AutoRed() {
               label="Precio Publicación"
               value={result.pm_publication?.price ?? null}
               estimatedFromSII={est?.publicacion ?? null}
+              rangePercent={result.pm_publication?.range ?? null}
               accent="#2563eb"
+              showRange
             />
             <PriceCard
               icon={<Banknote size={18} />}
               label="Precio Venta"
               value={result.pm_sale?.price ?? null}
               estimatedFromSII={est?.venta ?? null}
+              rangePercent={result.pm_sale?.range ?? null}
               accent="#d97706"
+              showRange
             />
             <PriceCard
               icon={<Briefcase size={18} />}
