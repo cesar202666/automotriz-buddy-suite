@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
   ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut, BarChart3,
+  Eye, EyeOff,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import { useApp, type Usuario } from "@/context/AppContext";
@@ -63,6 +64,7 @@ function resolveUserRole(email: string, matchedUser: Usuario | null, dbRol: stri
 function LoginScreen({ onLogin }: { onLogin: (nombre: string, clave: string) => Promise<boolean> }) {
   const [nombre, setNombre] = useState("");
   const [clave, setClave] = useState("");
+  const [showClave, setShowClave] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -77,6 +79,7 @@ function LoginScreen({ onLogin }: { onLogin: (nombre: string, clave: string) => 
       if (!ok) {
         setError("Nombre o contraseña incorrectos");
         setClave("");
+        setShowClave(false);
       }
     } finally {
       setIsSubmitting(false);
@@ -111,15 +114,28 @@ function LoginScreen({ onLogin }: { onLogin: (nombre: string, clave: string) => 
             onChange={e => { setNombre(e.target.value); setError(""); }}
           />
           <label className="block text-xs font-medium mb-1">Contraseña</label>
-          <input
-            type="password"
-            disabled={isSubmitting}
-            className="w-full border rounded-lg px-4 py-3 text-sm bg-background mb-2 focus:outline-none focus:ring-2"
-            style={{ borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
-            placeholder="Tu contraseña..."
-            value={clave}
-            onChange={e => { setClave(e.target.value); setError(""); }}
-          />
+          <div className="relative mb-2">
+            <input
+              type={showClave ? "text" : "password"}
+              disabled={isSubmitting}
+              className="w-full border rounded-lg px-4 py-3 pr-11 text-sm bg-background focus:outline-none focus:ring-2"
+              style={{ borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
+              placeholder="Tu contraseña..."
+              value={clave}
+              onChange={e => { setClave(e.target.value); setError(""); }}
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowClave(s => !s)}
+              disabled={isSubmitting}
+              aria-label={showClave ? "Ocultar contraseña" : "Mostrar contraseña"}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted transition-colors"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {showClave ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
           {error && <p className="text-xs mb-3" style={{ color: "hsl(var(--destructive))" }}>{error}</p>}
           <button type="submit" disabled={isSubmitting} className="w-full py-2.5 rounded-lg text-sm font-medium text-white mt-1 disabled:opacity-70" style={{ background: "hsl(var(--primary))" }}>
             {isSubmitting ? "Ingresando..." : "Ingresar"}
