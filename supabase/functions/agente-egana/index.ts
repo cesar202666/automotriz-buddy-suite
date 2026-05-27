@@ -356,8 +356,11 @@ async function ensureInboundMessage(
 }
 
 // ── Respuesta fija (fallback seguro) ──────────────────────────────────────────
+// Saludo NEUTRAL en género: no usamos "Estimado/Estimada", "Bienvenido/a", etc.
+// porque muchas veces no sabemos si el cliente es hombre o mujer y la imparcialidad
+// es mejor.
 const FRASE_UNICA =
-  `¡Hola! Gracias por escribir a Egaña Automotriz. Un ejecutivo te contactará en breve. 🙌`;
+  `¡Hola 👋 Gracias por escribirnos a Egaña Automotriz. Un ejecutivo te contactará en unos minutos para resolver todas tus dudas. ¡Quedamos atentos!`;
 
 // ── Lista negra de palabras/frases que NO deben aparecer NUNCA ────────────────
 // Si la respuesta del LLM contiene cualquiera de estas → se reemplaza por FRASE_UNICA
@@ -402,6 +405,36 @@ const FRASES_PROHIBIDAS = [
   "cuesta exactamente",
   "te queda en",
 ];
+
+/**
+ * Reemplaza formas con género por equivalentes neutrales.
+ * - "Estimado/Estimada" → "Hola"
+ * - "Bienvenido/Bienvenida" → "Bienvenido/a"
+ * - "Sr." / "Sra." / "señor" / "señora" → eliminado
+ * - "querido/a", "amigo/a" → eliminado
+ */
+function neutralizarGenero(texto: string): string {
+  let t = texto;
+  // "Estimado/a" o "Estimados/as" en cualquier posición → "Hola"
+  t = t.replace(/\bEstimad[oa]s?\b/gi, "Hola");
+  // "Bienvenido/a" → forma neutral "Bienvenido/a" (case-insensitive)
+  t = t.replace(/\bBienvenid[oa]s?\b/gi, (m) =>
+    /^[A-Z]/.test(m) ? "Bienvenido/a" : "bienvenido/a",
+  );
+  // Tratamientos con género: borrar
+  t = t.replace(/\b(querid|amig)[oa]s?\b/gi, "");
+  // Sr. / Sra. / Señor / Señora: borrar
+  t = t.replace(/\b(sr\.?|sra\.?|señor(?:a)?|senor(?:a)?)\b\s*/gi, "");
+  // Cleanup
+  t = t
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/,\s*,/g, ",")
+    .replace(/[,;:]+\s*([.!?])/g, "$1")
+    .replace(/^[\s,;:]+/, "")
+    .trim();
+  return t;
+}
 
 // Validar que una respuesta del LLM sea segura para enviar al cliente
 function esRespuestaSegura(texto: string): boolean {
@@ -535,6 +568,8 @@ REGLAS INVIOLABLES (si violas alguna, el cliente se molesta y pierdes la venta):
 9. JAMÁS hagas promesas absolutas ("te garantizo", "100% seguro", "lo prometo").
 10. Si dudas qué responder o el mensaje es confuso, di simplemente que el ejecutivo lo contactará pronto.
 11. JAMÁS uses el nombre del cliente. NO digas "Hola Juan", "Buenos días María", etc. Saluda SOLO con "Hola" o "Buenos días" y continúa con tu mensaje. El nombre del cliente NO debe aparecer en tu respuesta bajo ningún motivo, ni siquiera al cerrar.
+12. SIEMPRE usa lenguaje NEUTRO en género. NO digas "Estimado", "Estimada", "Bienvenido", "Bienvenida", "querido/a", "amigo/a", ni ninguna forma que asuma si el cliente es hombre o mujer. Usa fórmulas neutrales como "Hola", "Gracias por escribirnos", "Quedamos atentos", "Te contactaremos". Esto es obligatorio porque no sabemos el género del cliente.
+13. Ejemplo de respuesta ideal: "¡Hola 👋 Gracias por escribirnos a Egaña Automotriz. Un ejecutivo te contactará en unos minutos para resolver todas tus dudas. ¡Quedamos atentos!"
 `;
 
   const systemPrompt = (systemPromptCustom && systemPromptCustom.trim()
@@ -589,10 +624,13 @@ REGLAS INVIOLABLES (si violas alguna, el cliente se molesta y pierdes la venta):
       return FRASE_UNICA;
     }
 
-    // Quitar el nombre del cliente si el modelo lo metió igual,
-    // y aplicar truncado de longitud.
+    // Pipeline post-LLM:
+    // 1) Quitar el nombre del cliente si el modelo lo metió
+    // 2) Neutralizar género (Estimado/a → Hola, etc)
+    // 3) Recortar longitud
     const sinNombre = quitarNombreCliente(textoLlm, clientName);
-    return sanitizarRespuesta(sinNombre);
+    const neutro = neutralizarGenero(sinNombre);
+    return sanitizarRespuesta(neutro);
   } catch (e) {
     console.error("[AGENTE-IA] Excepción generando respuesta:", e);
     return FRASE_UNICA;

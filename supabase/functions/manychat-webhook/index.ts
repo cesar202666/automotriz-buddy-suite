@@ -17,6 +17,57 @@ function cleanTemplateValue(value: unknown): string {
   return str.startsWith('{{') && str.endsWith('}}') ? '' : str
 }
 
+/** Normaliza un número de teléfono: deja solo dígitos (y opcional + al inicio). */
+function normalizePhone(raw: string): string {
+  if (!raw) return ''
+  const cleaned = raw.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '')
+  // Filtrar valores claramente inválidos (menos de 7 dígitos)
+  const digits = cleaned.replace(/^\+/, '')
+  if (digits.length < 7) return ''
+  return cleaned
+}
+
+/**
+ * Extrae el teléfono de cualquier campo posible del payload de ManyChat.
+ * WhatsApp SIEMPRE expone el numero del suscriptor — buscamos en todos los
+ * campos conocidos para garantizar que lo capturamos.
+ */
+function extractPhoneFromPayload(payload: Record<string, unknown>): string {
+  const contact = payload.contact as Record<string, unknown> | undefined
+  const subscriber = payload.subscriber as Record<string, unknown> | undefined
+  const sender = payload.sender as Record<string, unknown> | undefined
+  const from = payload.from as Record<string, unknown> | undefined
+
+  const candidates: unknown[] = [
+    payload.phone,
+    payload.phone_number,
+    payload.whatsapp_phone,
+    payload.whatsapp_id,
+    payload.wa_id,
+    payload.wa_number,
+    payload.wa_phone,
+    payload.mobile,
+    payload.mobile_phone,
+    contact?.phone,
+    contact?.phone_number,
+    contact?.whatsapp_phone,
+    contact?.wa_id,
+    subscriber?.phone,
+    subscriber?.whatsapp_phone,
+    subscriber?.wa_id,
+    sender?.phone,
+    sender?.wa_id,
+    from?.phone,
+    from?.wa_id,
+  ]
+
+  for (const c of candidates) {
+    const cleaned = normalizePhone(cleanTemplateValue(c))
+    if (cleaned) return cleaned
+  }
+  return ''
+}
+
 function extractMessageText(payload: Record<string, unknown>): string {
   const queue: unknown[] = [
     payload.last_input_text,
@@ -104,13 +155,20 @@ Deno.serve(async (req) => {
     // ── Parse ManyChat payload ───────────────────────────────────────────────
     const firstName: string = extractString(body.first_name) || extractString(body.name) || extractString((body.contact as Record<string, unknown> | undefined)?.first_name) || 'Cliente'
     const lastName: string = extractString(body.last_name) || extractString((body.contact as Record<string, unknown> | undefined)?.last_name)
-    let phone: string = cleanTemplateValue(body.phone) || cleanTemplateValue((body.contact as Record<string, unknown> | undefined)?.phone)
+    // (1) Intenta extraer el teléfono de cualquier campo conocido del payload
+    let phone: string = extractPhoneFromPayload(body)
     const email: string = cleanTemplateValue(body.email) || cleanTemplateValue((body.contact as Record<string, unknown> | undefined)?.email)
     const subscriberId: string = extractSubscriberId(body, phone, email)
     const channelRaw: string = (extractString(body.channel) || extractString(body.platform) || 'whatsapp').toLowerCase()
     const channel: string = ['whatsapp', 'instagram', 'facebook'].includes(channelRaw) ? channelRaw : 'whatsapp'
 
-    // Si es WhatsApp y no llegó el teléfono en el payload, lo pedimos a ManyChat
+    // (2) Si el subscriberId viene como "phone:<numero>", usar eso como respaldo
+    if (!phone && subscriberId.startsWith('phone:')) {
+      const fromSub = normalizePhone(subscriberId.slice('phone:'.length))
+      if (fromSub) phone = fromSub
+    }
+
+    // (3) Si es WhatsApp y aún no tenemos teléfono, consultar ManyChat API
     if (channel === 'whatsapp' && !phone && subscriberId && !subscriberId.startsWith('phone:') && !subscriberId.startsWith('email:')) {
       const apiKey = Deno.env.get('MANYCHAT_API_KEY')
       if (apiKey) {
@@ -123,12 +181,27 @@ Deno.serve(async (req) => {
             if (!r.ok) continue
             const j = await r.json()
             const d = j?.data ?? j
-            const p = (d?.phone ?? d?.whatsapp_phone ?? '').toString().trim()
-            if (p) { phone = p; break }
+            // Buscar el teléfono en todos los campos posibles que retorna ManyChat
+            const candidates = [
+              d?.phone,
+              d?.whatsapp_phone,
+              d?.wa_id,
+              d?.whatsapp_id,
+              d?.phone_number,
+              d?.mobile,
+            ]
+            for (const c of candidates) {
+              const cleaned = normalizePhone(String(c ?? '').trim())
+              if (cleaned) { phone = cleaned; break }
+            }
+            if (phone) break
           } catch (_) { /* try next */ }
         }
       }
     }
+
+    // Aseguramos que el teléfono final esté normalizado
+    if (phone) phone = normalizePhone(phone)
     const messageText: string = extractMessageText(body)
     const manychatMessageId: string = extractManychatMessageId(body)
 
@@ -187,7 +260,7 @@ Deno.serve(async (req) => {
         },
         { onConflict: 'manychat_subscriber_id', ignoreDuplicates: false }
       )
-      .select('id')
+      .select('id, phone')
       .single()
 
     if (contactError || !contactData) {
@@ -196,6 +269,15 @@ Deno.serve(async (req) => {
     }
 
     const contactId: string = contactData.id  // UUID real del contacto
+
+    // Backfill: si el upsert no actualizó el phone (porque el valor entrante era
+    // vacío) pero ahora SI tenemos un phone valido, forzar el update.
+    if (phone && !contactData.phone) {
+      await supabase
+        .from('contacts')
+        .update({ phone })
+        .eq('id', contactId)
+    }
 
     // ── 2. Get or create conversation ────────────────────────────────────────
     const { data: convData } = await supabase
