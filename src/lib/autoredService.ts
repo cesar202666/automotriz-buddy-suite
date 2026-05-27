@@ -1,18 +1,17 @@
 /**
  * AutoRed Analytics — Servicio de integración API
  *
- * Endpoints utilizados (descubiertos vía pruebas):
- * - GET  /api/brands             → marcas + modelos anidados (Brands[].Models[])
- * - GET  /api/models?id={id}     → modelo específico
- * - POST /api/prices/search      → búsqueda de precios y tasaciones
+ * Arquitectura: el frontend llama a una edge function (autored-proxy) en
+ * Supabase. La edge function tiene el token JWT guardado como secret
+ * (AUTORED_TOKEN) y reenvía la request a AutoRed con el Origin correcto.
  *
- * Token JWT:
- * - Se guarda en localStorage bajo "autored_token"
- * - Si expira (HTTP 401) → se notifica al usuario para que lo renueve
+ * Ventajas:
+ * - El token nunca está expuesto en el navegador
+ * - Si el token expira, basta actualizar el secret una sola vez en Supabase
+ * - Resuelve el problema de CORS (la API de AutoRed no permite browsers directos)
  */
 
-const API_BASE = "https://analytics.autored.cl/api";
-const TOKEN_KEY = "autored_token";
+import { supabase } from "@/integrations/supabase/client";
 
 // ─── Tipos ─────────────────────────────────────────────────────
 
@@ -75,129 +74,54 @@ export interface ApiResult<T> {
   errorCode?: "no_token" | "expired" | "network" | "server" | "unknown";
 }
 
-// ─── Token management ──────────────────────────────────────────
+// ─── HTTP via Supabase edge function (autored-proxy) ───────────
 
-export function getToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setToken(token: string): void {
-  try {
-    localStorage.setItem(TOKEN_KEY, token.trim());
-  } catch (e) {
-    console.error("[autored] Error guardando token:", e);
-  }
-}
-
-export function clearToken(): void {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Decodifica el JWT para extraer la fecha de expiración (sin verificar firma). */
-export function getTokenExpiry(token?: string | null): Date | null {
-  const t = token ?? getToken();
-  if (!t) return null;
-  try {
-    const parts = t.split(".");
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    if (typeof payload.exp === "number") return new Date(payload.exp * 1000);
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export function isTokenExpired(): boolean {
-  const exp = getTokenExpiry();
-  if (!exp) return false;
-  return exp.getTime() <= Date.now();
-}
-
-// ─── HTTP helpers ──────────────────────────────────────────────
-
-async function request<T>(
+async function callProxy<T>(
   path: string,
-  options: { method?: string; body?: unknown; query?: Record<string, string | number> } = {},
+  method: "GET" | "POST" = "GET",
+  body?: unknown,
 ): Promise<ApiResult<T>> {
-  const token = getToken();
-  if (!token) {
-    return { ok: false, error: "Token no configurado. Ve a Configuración → AutoRed Analytics.", errorCode: "no_token" };
-  }
-
-  let url = `${API_BASE}${path}`;
-  if (options.query) {
-    const qs = new URLSearchParams();
-    for (const [k, v] of Object.entries(options.query)) qs.append(k, String(v));
-    url += "?" + qs.toString();
-  }
-
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20_000);
-
-    const res = await fetch(url, {
-      method: options.method ?? "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/json, text/plain, */*",
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-      signal: controller.signal,
+    const { data, error } = await supabase.functions.invoke("autored-proxy", {
+      body: { path, method, body },
     });
-    clearTimeout(timeoutId);
 
-    if (res.status === 401 || res.status === 403) {
+    if (error) {
+      const msg = error.message || String(error);
+      return { ok: false, error: msg, errorCode: "network" };
+    }
+
+    // La edge function devuelve el payload de AutoRed directamente.
+    // Si AutoRed devolvió error (401, 500, etc), 'data' contiene { error: "..." } o similar.
+    if (data && typeof data === "object" && "error" in data && Object.keys(data).length <= 3) {
+      const errObj = data as { error?: string; status?: number };
+      const errStr = errObj.error || "Error desconocido";
+      const isAuth = /token|unauthor|expired|401|403/i.test(errStr);
       return {
         ok: false,
-        error: "Token expirado o inválido. Renueva el token en Configuración → AutoRed.",
-        errorCode: "expired",
+        error: errStr,
+        errorCode: isAuth ? "expired" : "server",
       };
     }
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      return {
-        ok: false,
-        error: `HTTP ${res.status}: ${text.slice(0, 200) || res.statusText}`,
-        errorCode: "server",
-      };
-    }
-
-    const data = (await res.json()) as T;
-    return { ok: true, data };
+    return { ok: true, data: data as T };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("aborted") || msg.includes("timeout")) {
-      return { ok: false, error: "Tiempo de espera agotado (20s). Verifica tu conexión.", errorCode: "network" };
-    }
-    return { ok: false, error: `Error de red: ${msg}`, errorCode: "network" };
+    return { ok: false, error: `Error de conexión: ${msg}`, errorCode: "network" };
   }
 }
 
 // ─── API pública ───────────────────────────────────────────────
 
 export async function fetchBrands(): Promise<ApiResult<AutoRedBrand[]>> {
-  return request<AutoRedBrand[]>("/brands");
+  return callProxy<AutoRedBrand[]>("/brands");
 }
 
 export async function searchPrices(params: SearchParams): Promise<ApiResult<PriceSearchResponse>> {
-  return request<PriceSearchResponse>("/prices/search", {
-    method: "POST",
-    body: { search_data: params },
-  });
+  return callProxy<PriceSearchResponse>("/prices/search", "POST", { search_data: params });
 }
 
-// ─── Datos estáticos auxiliares (no devueltos por la API) ──────
+// ─── Datos estáticos auxiliares ────────────────────────────────
 
 /** 16 regiones de Chile con su numeración oficial (CUT). */
 export const CHILE_REGIONS: { id: number; name: string }[] = [
@@ -219,7 +143,6 @@ export const CHILE_REGIONS: { id: number; name: string }[] = [
   { id: 12, name: "Magallanes" },
 ];
 
-/** Rango de años razonable para vehículos. */
 export function generateYears(): number[] {
   const currentYear = new Date().getFullYear();
   const years: number[] = [];
@@ -227,7 +150,6 @@ export function generateYears(): number[] {
   return years;
 }
 
-/** Helper para formatear pesos chilenos. */
 export function formatCLP(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return "—";
   return "$" + amount.toLocaleString("es-CL");

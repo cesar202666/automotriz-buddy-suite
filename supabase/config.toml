@@ -21,3 +21,6 @@ verify_jwt = false
 
 [functions.manychat-send-message]
 verify_jwt = false
+
+[functions.autored-proxy]
+verify_jwt = false
