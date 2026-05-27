@@ -1752,19 +1752,32 @@ function TabMetricas() {
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+      {/* KPIs — diseño compacto y responsivo */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-2.5">
         {KPIS.map(kpi => {
           const Icon = kpi.icon;
           return (
-            <div key={kpi.label} className="border rounded-xl p-4" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: kpi.color + "20" }}>
-                  <Icon size={16} style={{ color: kpi.color }} />
-                </div>
+            <div
+              key={kpi.label}
+              className="border rounded-lg p-3 flex items-center gap-2.5 hover:shadow-sm transition-shadow"
+              style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
+            >
+              <div
+                className="w-9 h-9 rounded-md flex items-center justify-center shrink-0"
+                style={{ background: kpi.color + "20" }}
+              >
+                <Icon size={16} style={{ color: kpi.color }} />
               </div>
-              <p className="text-2xl font-bold">{kpi.value}</p>
-              <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>{kpi.label}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-lg font-bold leading-tight truncate" title={String(kpi.value)}>{kpi.value}</p>
+                <p
+                  className="text-[11px] leading-tight mt-0.5 truncate"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                  title={kpi.label}
+                >
+                  {kpi.label}
+                </p>
+              </div>
             </div>
           );
         })}

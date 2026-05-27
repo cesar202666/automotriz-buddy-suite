@@ -21,8 +21,11 @@ const navItems = [
   { label: "Configuración", icon: Wrench, path: "/configuracion" },
 ];
 
-// Roles que pueden ver admin/gerencia
-const VENDEDOR_HIDDEN = ["/administracion", "/gerencia"];
+// Restricciones de navegación por rol:
+// - vendedor: no ve Administración, Gerencia ni Configuración
+// - administracion: no ve Gerencia
+// - master: ve todo
+const VENDEDOR_HIDDEN = ["/administracion", "/gerencia", "/configuracion"];
 const ADMIN_HIDDEN = ["/gerencia"];
 
 type BackendLoginRow = {

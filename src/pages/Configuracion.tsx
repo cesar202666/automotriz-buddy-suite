@@ -175,6 +175,321 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   );
 }
 
+// ── GESTIÓN DE USUARIOS ──────────────────────────────────────────────────────
+interface VendedorDB {
+  id: string;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  clave: string | null;
+  activo: boolean | null;
+  rol: string | null;
+}
+
+function GestionUsuarios({ rolActual }: { rolActual: Usuario["rol"] | undefined }) {
+  const [usuarios, setUsuariosLocal] = useState<VendedorDB[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<{ nombre: string; email: string; telefono: string; clave: string; rol: Usuario["rol"]; activo: boolean }>({
+    nombre: "", email: "", telefono: "", clave: "", rol: "vendedor", activo: true,
+  });
+  const [showClavePlain, setShowClavePlain] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string>("");
+
+  const esMaster = rolActual === "master";
+  const esAdmin = rolActual === "administracion";
+  const puedeCrear = esMaster || esAdmin;
+
+  const cargar = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("vendedores")
+      .select("id, nombre, email, telefono, clave, activo, rol")
+      .order("created_at", { ascending: true });
+    if (!error && data) setUsuariosLocal(data as VendedorDB[]);
+    setLoading(false);
+  };
+
+  useEffect(() => { cargar(); }, []);
+
+  const abrirNuevo = () => {
+    setEditId(null);
+    setForm({ nombre: "", email: "", telefono: "", clave: "", rol: "vendedor", activo: true });
+    setShowClavePlain(false);
+    setShowModal(true);
+  };
+
+  const abrirEditar = (u: VendedorDB) => {
+    setEditId(u.id);
+    setForm({
+      nombre: u.nombre || "",
+      email: u.email || "",
+      telefono: u.telefono || "",
+      clave: u.clave || "",
+      rol: (u.rol as Usuario["rol"]) || "vendedor",
+      activo: u.activo !== false,
+    });
+    setShowClavePlain(false);
+    setShowModal(true);
+  };
+
+  const guardar = async () => {
+    if (!form.nombre.trim() || !form.clave.trim()) {
+      setSaveMsg("Nombre y clave son obligatorios");
+      return;
+    }
+    // Restricción: admin no puede crear/editar master
+    if (esAdmin && form.rol === "master") {
+      setSaveMsg("Solo el master puede crear o asignar el rol master");
+      return;
+    }
+    const payload = {
+      nombre: form.nombre.trim(),
+      email: form.email.trim() || null,
+      telefono: form.telefono.trim() || null,
+      clave: form.clave.trim(),
+      rol: form.rol,
+      activo: form.activo,
+    };
+    if (editId) {
+      await supabase.from("vendedores").update(payload).eq("id", editId);
+    } else {
+      await supabase.from("vendedores").insert(payload);
+    }
+    setShowModal(false);
+    setSaveMsg("");
+    await cargar();
+  };
+
+  const borrar = async (u: VendedorDB) => {
+    // Restricción: admin no puede borrar master
+    if (esAdmin && u.rol === "master") {
+      setSaveMsg("Solo el master puede eliminar a otro master");
+      setTimeout(() => setSaveMsg(""), 3000);
+      return;
+    }
+    if (!confirm(`¿Eliminar usuario "${u.nombre}"?`)) return;
+    await supabase.from("vendedores").delete().eq("id", u.id);
+    await cargar();
+  };
+
+  const roleBadgeColor = (rol: string | null) => {
+    if (rol === "master") return { bg: "#fee2e2", color: "#dc2626" };
+    if (rol === "administracion") return { bg: "#fef3c7", color: "#d97706" };
+    return { bg: "#dbeafe", color: "#2563eb" };
+  };
+
+  const roleLabel = (rol: string | null) => {
+    if (rol === "master") return "Master";
+    if (rol === "administracion") return "Administración";
+    return "Vendedor";
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        icon={<Users size={18} style={{ color: "hsl(var(--primary))" }} />}
+        title="Gestión de Usuarios"
+        subtitle="Crear, editar y eliminar accesos al sistema"
+        badge={
+          puedeCrear ? (
+            <button
+              onClick={abrirNuevo}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-medium"
+              style={{ background: "hsl(var(--primary))" }}
+            >
+              <UserPlus size={13} /> Nuevo Usuario
+            </button>
+          ) : null
+        }
+      />
+
+      {loading ? (
+        <div className="text-xs text-center py-6" style={{ color: "hsl(var(--muted-foreground))" }}>Cargando...</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs" style={{ color: "hsl(var(--muted-foreground))", borderBottom: "1px solid hsl(var(--border))" }}>
+                <th className="py-2 pr-3">Nombre</th>
+                <th className="py-2 pr-3">Email</th>
+                <th className="py-2 pr-3">Rol</th>
+                <th className="py-2 pr-3">Estado</th>
+                <th className="py-2 pr-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => {
+                const colors = roleBadgeColor(u.rol);
+                return (
+                  <tr key={u.id} style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+                    <td className="py-2 pr-3 font-medium">{u.nombre}</td>
+                    <td className="py-2 pr-3 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>{u.email || "—"}</td>
+                    <td className="py-2 pr-3">
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: colors.bg, color: colors.color }}>
+                        {roleLabel(u.rol)}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-xs">
+                      {u.activo !== false ? (
+                        <span style={{ color: "#16a34a" }}>● Activo</span>
+                      ) : (
+                        <span style={{ color: "hsl(var(--muted-foreground))" }}>○ Inactivo</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right">
+                      {puedeCrear && (
+                        <div className="inline-flex gap-1">
+                          <button
+                            onClick={() => abrirEditar(u)}
+                            className="p-1.5 rounded hover:bg-muted"
+                            title="Editar"
+                          >
+                            <Settings2 size={14} />
+                          </button>
+                          {esMaster && (
+                            <button
+                              onClick={() => borrar(u)}
+                              className="p-1.5 rounded hover:bg-muted"
+                              title="Eliminar"
+                              style={{ color: "hsl(var(--destructive))" }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {usuarios.length === 0 && (
+                <tr><td colSpan={5} className="py-6 text-center text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>No hay usuarios registrados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {saveMsg && (
+        <p className="text-xs mt-2" style={{ color: "hsl(var(--destructive))" }}>{saveMsg}</p>
+      )}
+
+      {/* Modal Crear/Editar */}
+      {showModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <div className="bg-card rounded-xl shadow-2xl p-6 w-full max-w-md border" style={{ borderColor: "hsl(var(--border))" }}>
+            <h3 className="text-base font-bold mb-4 flex items-center gap-2">
+              <Shield size={16} style={{ color: "hsl(var(--primary))" }} />
+              {editId ? "Editar usuario" : "Nuevo usuario"}
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Nombre <span style={{ color: "hsl(var(--destructive))" }}>*</span></label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                  placeholder="Ej: César Mansilla"
+                  value={form.nombre}
+                  onChange={e => setForm({ ...form, nombre: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Email</label>
+                <input
+                  type="email"
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                  placeholder="usuario@egana.cl"
+                  value={form.email}
+                  onChange={e => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Teléfono</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                  placeholder="+569..."
+                  value={form.telefono}
+                  onChange={e => setForm({ ...form, telefono: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Contraseña <span style={{ color: "hsl(var(--destructive))" }}>*</span></label>
+                <div className="relative">
+                  <input
+                    type={showClavePlain ? "text" : "password"}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background pr-10"
+                    style={{ borderColor: "hsl(var(--border))" }}
+                    placeholder="Ingresa una contraseña"
+                    value={form.clave}
+                    onChange={e => setForm({ ...form, clave: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowClavePlain(s => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {showClavePlain ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Rol</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                  value={form.rol}
+                  onChange={e => setForm({ ...form, rol: e.target.value as Usuario["rol"] })}
+                >
+                  <option value="vendedor">Vendedor</option>
+                  <option value="administracion">Administración</option>
+                  {esMaster && <option value="master">Master</option>}
+                </select>
+                <p className="text-[11px] mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+                  {form.rol === "master" && "Acceso total al sistema, sin restricciones."}
+                  {form.rol === "administracion" && "Todo excepto crear masters y acceder a Gerencia."}
+                  {form.rol === "vendedor" && "Acceso limitado a Clientes, Vehículos, Ventas, CRM (sin Configuración ni Gerencia)."}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="user-activo"
+                  checked={form.activo}
+                  onChange={e => setForm({ ...form, activo: e.target.checked })}
+                />
+                <label htmlFor="user-activo" className="text-xs">Usuario activo</label>
+              </div>
+            </div>
+
+            {saveMsg && (
+              <p className="text-xs mt-3" style={{ color: "hsl(var(--destructive))" }}>{saveMsg}</p>
+            )}
+
+            <div className="flex gap-2 justify-end mt-5">
+              <button
+                onClick={() => { setShowModal(false); setSaveMsg(""); }}
+                className="px-4 py-2 rounded-lg border text-sm hover:bg-muted"
+                style={{ borderColor: "hsl(var(--border))" }}
+              >Cancelar</button>
+              <button
+                onClick={guardar}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                style={{ background: "hsl(var(--primary))" }}
+              >Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 function AccesoMovilCRM() {
   const url = `${import.meta.env.VITE_PUBLIC_APP_URL ?? window.location.origin}/#/crm-movil`;
@@ -548,6 +863,9 @@ export default function Configuracion() {
 
         {/* ── Acceso Móvil CRM ─────────────────────────────────────────────── */}
         <AccesoMovilCRM />
+
+        {/* ── Gestión de Usuarios ──────────────────────────────────────────── */}
+        <GestionUsuarios rolActual={usuarioActual?.rol} />
 
         {/* ── IA Providers ─────────────────────────────────────────────────── */}
         {PROVIDERS.map(provider => {
