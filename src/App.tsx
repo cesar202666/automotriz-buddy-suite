@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import Vehiculos from "./pages/Vehiculos";
 import AutoRed from "./pages/AutoRed";
+import Global from "./pages/Global";
 import Consignatarios from "./pages/Consignatarios";
 import Creditos from "./pages/Creditos";
 import Ventas from "./pages/Ventas";
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/clientes" element={<Layout><Clientes /></Layout>} />
             <Route path="/vehiculos" element={<Layout><Vehiculos /></Layout>} />
             <Route path="/autored" element={<Layout><AutoRed /></Layout>} />
+            <Route path="/global" element={<Layout><Global /></Layout>} />
             <Route path="/consignatarios" element={<Layout><Consignatarios /></Layout>} />
             <Route path="/creditos" element={<Layout><Creditos /></Layout>} />
             <Route path="/ventas" element={<Layout><Ventas /></Layout>} />

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
   ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut, BarChart3,
-  Eye, EyeOff,
+  Eye, EyeOff, Globe2,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import { useApp, type Usuario } from "@/context/AppContext";
@@ -14,6 +14,7 @@ const navItems = [
   { label: "Clientes", icon: Users, path: "/clientes" },
   { label: "Vehículos", icon: Car, path: "/vehiculos" },
   { label: "AutoRed", icon: BarChart3, path: "/autored" },
+  { label: "Global", icon: Globe2, path: "/global" },
   { label: "Consignatarios", icon: UserCheck, path: "/consignatarios" },
   { label: "Créditos", icon: CreditCard, path: "/creditos" },
   { label: "Ventas", icon: ShoppingCart, path: "/ventas" },
@@ -27,7 +28,7 @@ const navItems = [
 // - vendedor: no ve Administración, Gerencia ni Configuración
 // - administracion: no ve Gerencia
 // - master: ve todo
-const VENDEDOR_HIDDEN = ["/administracion", "/gerencia", "/configuracion"];
+const VENDEDOR_HIDDEN = ["/administracion", "/gerencia", "/configuracion", "/global"];
 const ADMIN_HIDDEN = ["/gerencia"];
 
 type BackendLoginRow = {
