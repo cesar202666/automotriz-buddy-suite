@@ -29,6 +29,15 @@ import {
   CartesianGrid,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { useApp } from "@/context/AppContext";
+
+/** Normaliza nombre para comparación (sin tildes, minúsculas, trim). */
+const normName = (s: string): string =>
+  (s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
 
 // ─── Tipos y helpers ──────────────────────────────────────────
 
@@ -74,6 +83,19 @@ const PIE_COLORS = ["#16a34a", "#dc2626", "#f59e0b", "#3b82f6", "#7c3aed"];
 // ─── Componente ───────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { usuarioActual } = useApp();
+  const esVendedor = usuarioActual?.rol === "vendedor";
+  // Nombres a buscar para el filtro: nombre completo + primer nombre
+  const vendedorNombres = useMemo(() => {
+    if (!usuarioActual) return [] as string[];
+    const completo = `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim();
+    const primero = usuarioActual.nombre || "";
+    const set = new Set<string>();
+    if (completo) set.add(normName(completo));
+    if (primero) set.add(normName(primero));
+    return Array.from(set);
+  }, [usuarioActual]);
+
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [data, setData] = useState<DashboardData>({
@@ -92,16 +114,25 @@ export default function Dashboard() {
         supabase.from("ventas").select("id, precio_venta, precio_vta_final, margen_bruto, fecha_venta, ejecutiva, marca, tipo"),
       ]);
 
+      // Si es vendedor → filtramos ventas a las suyas (ejecutiva matchea su nombre)
+      let ventasFiltered = ventasR.data || [];
+      if (esVendedor && vendedorNombres.length > 0) {
+        ventasFiltered = ventasFiltered.filter((v: { ejecutiva: string | null }) => {
+          const ej = normName(v.ejecutiva || "");
+          return vendedorNombres.some((n) => ej === n || ej.startsWith(n + " ") || ej.includes(" " + n));
+        });
+      }
+
       setData({
         clientes: clientesR.data || [],
         vehiculos: vehiculosR.data || [],
         consignatarios: consigR.data || [],
-        ventas: ventasR.data || [],
+        ventas: ventasFiltered,
       });
       setLoading(false);
     };
     load();
-  }, [refreshKey]);
+  }, [refreshKey, esVendedor, vendedorNombres]);
 
   // ── Determinar rango de fechas para filtro ────────────────────
   const { desde, hasta, periodoLabel } = useMemo(() => {
@@ -318,8 +349,14 @@ export default function Dashboard() {
       {/* Header con filtro de periodo */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">Bienvenido a Egaña Automotriz · {periodoLabel}</p>
+          <h1 className="page-title">
+            {esVendedor ? `Mi panel${usuarioActual?.nombre ? ` · ${usuarioActual.nombre}` : ""}` : "Dashboard"}
+          </h1>
+          <p className="page-subtitle">
+            {esVendedor
+              ? `Tus ventas y desempeño · ${periodoLabel}`
+              : `Bienvenido a Egaña Automotriz · ${periodoLabel}`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -511,8 +548,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Grid 2 columnas: Top vendedores + Top marcas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Grid: Top vendedores (solo admin/master) + Top marcas */}
+      <div className={`grid grid-cols-1 ${esVendedor ? "" : "lg:grid-cols-2"} gap-4`}>
+        {!esVendedor && (
         <div
           className="border rounded-xl p-5"
           style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
@@ -556,6 +594,7 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+        )}
 
         <div
           className="border rounded-xl p-5"
@@ -563,7 +602,7 @@ export default function Dashboard() {
         >
           <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
             <Car size={16} style={{ color: "hsl(38,92%,50%)" }} />
-            Top marcas vendidas ({periodoLabel})
+            {esVendedor ? "Mis marcas vendidas" : "Top marcas vendidas"} ({periodoLabel})
           </h3>
           {topMarcas.length === 0 ? (
             <p className="text-xs text-center py-8" style={{ color: "hsl(var(--muted-foreground))" }}>

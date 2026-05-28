@@ -429,10 +429,14 @@ export default function AutoRed() {
       {/* ── Formulario manual (datos del vehículo) ─────────────── */}
       <div
         className="border rounded-xl p-5 space-y-4"
-        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
+        style={{ borderColor: "hsl(var(--primary)/0.2)", background: "hsl(var(--card))" }}
       >
-        <p className="text-xs font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>
-          O ingresa los datos manualmente:
+        <div className="flex items-center gap-2">
+          <Tag size={18} style={{ color: "hsl(var(--primary))" }} />
+          <h2 className="text-sm font-bold">Consultar precios manualmente</h2>
+        </div>
+        <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+          Selecciona Marca, Modelo, Año y completa los datos para obtener tasación, precio de publicación, precio de venta y precio de negocio.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div>
@@ -546,7 +550,7 @@ export default function AutoRed() {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={handleSearch}
             disabled={searching || !selectedBrandId || !selectedModelId}
@@ -556,6 +560,17 @@ export default function AutoRed() {
             {searching ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
             {searching ? "Buscando..." : "Consultar precios"}
           </button>
+          {/* Hint claro de qué falta para habilitar el botón */}
+          {!searching && (!selectedBrandId || !selectedModelId) && (
+            <p className="text-xs flex items-center gap-1" style={{ color: "hsl(38,92%,50%)" }}>
+              <AlertTriangle size={12} />
+              {!selectedBrandId && !selectedModelId
+                ? "Selecciona Marca y Modelo para habilitar"
+                : !selectedBrandId
+                  ? "Falta seleccionar Marca"
+                  : "Falta seleccionar Modelo"}
+            </p>
+          )}
           {searchError && (
             <p className="text-xs" style={{ color: "hsl(var(--destructive))" }}>{searchError}</p>
           )}
