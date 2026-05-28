@@ -53,6 +53,7 @@ import {
   type EstadisticaVendedor,
   type CasoAbierto,
 } from "@/lib/gemmaService";
+import { GemmaSessionExpiredBanner } from "@/components/GemmaSessionExpiredBanner";
 import { useApp } from "@/context/AppContext";
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -107,6 +108,7 @@ export default function Global() {
   const [estadisticas, setEstadisticas] = useState<EstadisticaVendedor[]>([]);
   const [serieSemanal, setSerieSemanal] = useState<{ fecha: string; ingresados: number }[]>([]);
   const [serieMensual, setSerieMensual] = useState<{ fecha: string; ingresados: number }[]>([]);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // ── Cargar todo en paralelo ────────────────────────────────────
   useEffect(() => {
@@ -130,7 +132,9 @@ export default function Global() {
         ]);
         if (cancelled) return;
 
-        if (!dash.ok) {
+        const anyExpired = !!(dash.sessionExpired || ests.sessionExpired || semana.sessionExpired || mes.sessionExpired);
+        setSessionExpired(anyExpired);
+        if (!dash.ok && !anyExpired) {
           setErrorMsg(dash.error || "No se pudo cargar el dashboard de Gemma");
         }
         setDashboard(dash);
@@ -222,8 +226,11 @@ export default function Global() {
         </div>
       </div>
 
-      {/* Error banner */}
-      {errorMsg && !loading && (
+      {/* Session expired banner: prioridad sobre error genérico */}
+      {sessionExpired && !loading && <GemmaSessionExpiredBanner />}
+
+      {/* Error banner genérico */}
+      {errorMsg && !loading && !sessionExpired && (
         <div
           className="flex items-start gap-3 border rounded-xl p-4"
           style={{ borderColor: "#fecaca", background: "#fef2f2", color: "#991b1b" }}

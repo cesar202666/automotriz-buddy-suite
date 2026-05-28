@@ -66,6 +66,7 @@ export interface DashboardResponse {
     validar: number;
   };
   error?: string;
+  sessionExpired?: boolean;
 }
 
 export interface EstadisticaVendedor {
@@ -82,6 +83,7 @@ export interface EstadisticasResponse {
   ok: boolean;
   estadisticas?: EstadisticaVendedor[];
   error?: string;
+  sessionExpired?: boolean;
 }
 
 export interface IngresadosRangoResponse {
@@ -91,6 +93,15 @@ export interface IngresadosRangoResponse {
   total?: number;
   serie?: { fecha: string; ingresados: number }[];
   error?: string;
+  sessionExpired?: boolean;
+}
+
+export interface HealthResponse {
+  ok: boolean;
+  sessionExpired?: boolean;
+  status?: number;
+  cookies_set?: boolean;
+  reason?: string;
 }
 
 // ── Vendedores conocidos en Gemma (con RUT) ──────────────────────
@@ -111,7 +122,7 @@ export const GEMMA_SUCURSALES = [
 // ── Llamadas ─────────────────────────────────────────────────────
 
 async function call<T>(
-  action: "dashboard" | "estadisticas" | "ingresados_rango",
+  action: "dashboard" | "estadisticas" | "ingresados_rango" | "health",
   params: Record<string, string> = {},
 ): Promise<T> {
   const { data, error } = await supabase.functions.invoke("gemma-proxy", {
@@ -121,6 +132,10 @@ async function call<T>(
     return { ok: false, error: error.message || String(error) } as unknown as T;
   }
   return data as T;
+}
+
+export function checkGemmaHealth(): Promise<HealthResponse> {
+  return call<HealthResponse>("health");
 }
 
 export function fetchGemmaDashboard(

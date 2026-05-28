@@ -1,24 +1,28 @@
 /**
  * gemma-proxy — Proxy hacia Gemma.cl (CRM automotriz GeneXus + ASP.NET WebForms)
  *
- * Características:
- * 1. Login con cookies (GX_SESSION_ID, ASP.NET_SessionId, GX_CLIENT_ID)
- *    guardadas en cache en memoria del worker.
- * 2. Auto-refresh: si Gemma redirige a seclogin.aspx, hace login de nuevo
- *    automáticamente y reintenta la request.
- * 3. Parser GeneXus → JSON limpio: convierte arrays-de-arrays con campos
- *    posicionales en objetos con nombres legibles.
+ * Auth: Gemma es una SPA GeneXus que construye GXState con JS del cliente —
+ * el login programático no funciona sin un browser headless. Por eso usamos
+ * **inyección manual de cookies**:
  *
- * Secrets necesarios en Supabase:
- *   - GEMMA_USUARIO: RUT con guión (ej: 16911092-1)
- *   - GEMMA_CLAVE: contraseña
- *   - GEMMA_DISTRIBUIDOR_ID: id de URL alternativo (default 1257261690)
- *   - GEMMA_DISTRIBUIDOR_FILTER: id filtro distribuidor (default 647)
+ *   1. El usuario loguea en gemma.cl desde Chrome.
+ *   2. Abre DevTools → Application → Cookies → www.gemma.cl
+ *   3. Copia los valores de GX_SESSION_ID, ASP.NET_SessionId, GX_CLIENT_ID
+ *   4. Los guarda en el secret GEMMA_COOKIES con formato:
+ *        "GX_SESSION_ID=xxx; ASP.NET_SessionId=yyy; GX_CLIENT_ID=zzz"
  *
- * Endpoints expuestos (POST con { action, params }):
+ * Cuando la sesión expira, la página Global avisa "sesión expirada" con el
+ * link a /configuracion para actualizar el secret.
+ *
+ * Secrets necesarios:
+ *   - GEMMA_COOKIES: cookie string (ver arriba)
+ *   - GEMMA_DISTRIBUIDOR_FILTER: id distribuidor de filtro (default 647)
+ *
+ * Acciones (POST con { action, params }):
  *   - "dashboard"        → estados + casos abiertos + cursar + validar
- *   - "estadisticas"     → tabla de eficiencia por vendedor
- *   - "ingresados_rango" → ingresados entre dos fechas (para charts semanal/mensual)
+ *   - "estadisticas"     → eficiencia por vendedor
+ *   - "ingresados_rango" → conteo por día para charts semanal/mensual
+ *   - "health"           → verifica si las cookies actuales son válidas
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -32,123 +36,85 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// ── Sesión en memoria del worker (vive mientras dure el contenedor) ──
-let cachedCookies: string = "";
-let cachedAt: number = 0;
-const COOKIE_TTL_MS = 25 * 60 * 1000; // 25 min (sesión típica ASP.NET = 30 min)
-
 interface GemmaRequest {
-  action: "dashboard" | "estadisticas" | "ingresados_rango" | "raw";
+  action: "dashboard" | "estadisticas" | "ingresados_rango" | "health" | "raw";
   params?: Record<string, string>;
   /** Para action=raw: path relativo al endpoint Gemma (ej "/home.aspx") */
   path?: string;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────
-
-/** Extrae cookies relevantes (GX_SESSION_ID, ASP.NET_SessionId, GX_CLIENT_ID) de Set-Cookie. */
-function extractCookies(setCookieHeaders: string[]): string {
-  const cookies: Record<string, string> = {};
-  for (const sc of setCookieHeaders) {
-    // Tomar solo "nombre=valor" antes del primer ;
-    const firstPart = sc.split(";")[0];
-    const eq = firstPart.indexOf("=");
-    if (eq < 0) continue;
-    const name = firstPart.slice(0, eq).trim();
-    const value = firstPart.slice(eq + 1).trim();
-    if (/^(GX_SESSION_ID|ASP\.NET_SessionId|GX_CLIENT_ID)$/i.test(name)) {
-      cookies[name] = value;
-    }
-  }
-  return Object.entries(cookies)
-    .map(([k, v]) => `${k}=${v}`)
+/** Devuelve las cookies guardadas en el secret GEMMA_COOKIES, o "" si no está configurado. */
+function getStoredCookies(): string {
+  const raw = (Deno.env.get("GEMMA_COOKIES") ?? "").trim();
+  if (!raw) return "";
+  // Si el usuario pega varios formatos diferentes, normalizamos a "name=value; name=value"
+  return raw
+    .split(/[;\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.includes("="))
     .join("; ");
 }
 
-/** Hace login en Gemma y devuelve el cookie string, o null si falla. */
-async function doGemmaLogin(): Promise<string | null> {
-  const usuario = Deno.env.get("GEMMA_USUARIO") ?? "";
-  const clave = Deno.env.get("GEMMA_CLAVE") ?? "";
-  const distribuidorAlt = Deno.env.get("GEMMA_DISTRIBUIDOR_ID") ?? "1257261690";
+const SESSION_EXPIRED_MARKERS = /seclogin\.aspx|vUSUARIO|vCLAVE|notauthorized/i;
 
-  if (!usuario || !clave) {
-    console.error("[gemma-proxy] Faltan secrets GEMMA_USUARIO/GEMMA_CLAVE");
-    return null;
+// ── Helpers ────────────────────────────────────────────────────────
+
+/** Acumula Set-Cookie headers en un cookie string usable. */
+function collectSetCookies(resp: Response): string[] {
+  const out: string[] = [];
+  for (const [k, v] of resp.headers.entries()) {
+    if (k.toLowerCase() === "set-cookie") out.push(v);
   }
-
-  try {
-    const body = new URLSearchParams({
-      vUSUARIO: usuario,
-      vCLAVE: clave,
-      _EventName: "EACEPTAR",
-    }).toString();
-
-    const resp = await fetch(`${GEMMA_BASE}/seclogin.aspx?${distribuidorAlt}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "User-Agent": "Mozilla/5.0 (Egana-Automotriz-ERP/1.0)",
-        Origin: "https://www.gemma.cl",
-        Referer: `${GEMMA_BASE}/seclogin.aspx`,
-      },
-      body,
-      redirect: "manual",
-    });
-
-    // Recoger TODAS las cookies de Set-Cookie (puede haber varias)
-    const setCookieHeaders: string[] = [];
-    // Deno fetch expone Set-Cookie como entries múltiples
-    for (const [k, v] of resp.headers.entries()) {
-      if (k.toLowerCase() === "set-cookie") setCookieHeaders.push(v);
-    }
-    // Algunos runtimes concatenan con coma; tratamos también ese caso
+  if (out.length === 0) {
     const concat = resp.headers.get("set-cookie");
-    if (concat && setCookieHeaders.length === 0) {
-      // Separar respetando "expires=Day, DD-MMM-YYYY" que contiene coma
-      const parts = concat.split(/,(?=\s*[A-Za-z0-9_\-\.]+=)/);
-      setCookieHeaders.push(...parts);
+    if (concat) {
+      const parts = concat.split(/,(?=\s*[A-Za-z0-9_\-.]+=)/);
+      out.push(...parts);
     }
-
-    const cookieStr = extractCookies(setCookieHeaders);
-    if (!cookieStr) {
-      console.error(`[gemma-proxy] Login OK pero no se obtuvieron cookies. Status=${resp.status}`);
-      return null;
-    }
-    console.log(`[gemma-proxy] Login OK. cookies=${cookieStr.length}b`);
-    return cookieStr;
-  } catch (e) {
-    console.error("[gemma-proxy] Excepción en login:", e);
-    return null;
   }
+  return out;
 }
 
-/** Devuelve cookies válidas: usa cache, hace login si caducó. */
-async function getValidCookies(force = false): Promise<string | null> {
-  const now = Date.now();
-  if (!force && cachedCookies && now - cachedAt < COOKIE_TTL_MS) {
-    return cachedCookies;
+/** Une un cookie string anterior con cookies nuevas (las nuevas pisan). */
+function mergeCookies(prev: string, fresh: string[]): string {
+  const map = new Map<string, string>();
+  for (const part of prev.split(";")) {
+    const t = part.trim();
+    const i = t.indexOf("=");
+    if (i > 0) map.set(t.slice(0, i), t.slice(i + 1));
   }
-  const fresh = await doGemmaLogin();
-  if (fresh) {
-    cachedCookies = fresh;
-    cachedAt = now;
-    return fresh;
+  for (const sc of fresh) {
+    const first = sc.split(";")[0];
+    const i = first.indexOf("=");
+    if (i > 0) {
+      const name = first.slice(0, i).trim();
+      const value = first.slice(i + 1).trim();
+      if (/^(GX_SESSION_ID|ASP\.NET_SessionId|GX_CLIENT_ID|GX_AUTH_TOKEN)$/i.test(name)) {
+        map.set(name, value);
+      }
+    }
   }
-  return null;
+  return Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
 /**
- * Hace POST a un endpoint de Gemma con cookies. Si detecta redirect a seclogin.aspx
- * (sesión expiró), hace re-login y reintenta una vez.
+ * POST a un endpoint de Gemma usando las cookies stored.
+ * Si detecta sesión expirada, devuelve un error específico para que el
+ * frontend pueda mostrar el mensaje "actualiza las cookies".
  */
 async function gemmaPost(
   path: string,
   formData: Record<string, string>,
-  retryOn401 = true,
-): Promise<{ ok: boolean; body: string; status: number }> {
-  let cookies = await getValidCookies();
-  if (!cookies) return { ok: false, body: "Sin sesión Gemma", status: 401 };
+): Promise<{ ok: boolean; body: string; status: number; sessionExpired?: boolean }> {
+  const cookies = getStoredCookies();
+  if (!cookies) {
+    return {
+      ok: false,
+      body: "GEMMA_COOKIES no configurado. Debes pegar las cookies de gemma.cl en Configuración.",
+      status: 401,
+      sessionExpired: true,
+    };
+  }
 
   const distribuidorFilter = Deno.env.get("GEMMA_DISTRIBUIDOR_FILTER") ?? "647";
   const merged: Record<string, string> = {
@@ -158,7 +124,7 @@ async function gemmaPost(
 
   const body = new URLSearchParams(merged).toString();
 
-  let resp = await fetch(`${GEMMA_BASE}${path}`, {
+  const r = await fetch(`${GEMMA_BASE}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -173,45 +139,60 @@ async function gemmaPost(
     redirect: "manual",
   });
 
-  // Si redirige a seclogin.aspx, la sesión expiró
-  const expiredByRedirect =
-    (resp.status === 302 || resp.status === 301) &&
-    (resp.headers.get("location") || "").toLowerCase().includes("seclogin.aspx");
-  const expiredByBody = resp.status === 200 && (await peekIfLoginPage(resp));
+  let textBody = "";
+  try {
+    textBody = await r.text();
+  } catch { /* body vacío o error de stream — ok */ }
 
-  if ((expiredByRedirect || expiredByBody) && retryOn401) {
-    console.log("[gemma-proxy] Sesión expirada, re-login y reintento...");
-    cookies = await getValidCookies(true);
-    if (!cookies) return { ok: false, body: "No se pudo re-loguear en Gemma", status: 401 };
-    resp = await fetch(`${GEMMA_BASE}${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json, text/javascript, */*; q=0.01",
-        Cookie: cookies,
-        Gsajaxrequest: "1",
-        Origin: "https://www.gemma.cl",
-        Referer: `${GEMMA_BASE}/`,
-        "User-Agent": "Mozilla/5.0 (Egana-Automotriz-ERP/1.0)",
-      },
-      body,
-      redirect: "manual",
-    });
+  const location = r.headers.get("location") || "";
+  const expiredByRedirect =
+    (r.status === 302 || r.status === 301) &&
+    SESSION_EXPIRED_MARKERS.test(location);
+  const expiredByBody = r.status === 200 && SESSION_EXPIRED_MARKERS.test(textBody.slice(0, 4000));
+
+  if (expiredByRedirect || expiredByBody) {
+    return {
+      ok: false,
+      body: "Sesión Gemma expirada. Actualiza las cookies en Configuración → Gemma.",
+      status: 401,
+      sessionExpired: true,
+    };
   }
 
-  const text = await resp.text();
-  return { ok: resp.ok || resp.status === 200, body: text, status: resp.status };
+  return {
+    ok: r.status >= 200 && r.status < 400,
+    body: textBody,
+    status: r.status,
+  };
 }
 
-/** Peek: lee el principio del body para detectar si Gemma sirvió la página de login. */
-async function peekIfLoginPage(resp: Response): Promise<boolean> {
-  try {
-    const clone = resp.clone();
-    const text = await clone.text();
-    return /seclogin\.aspx|vUSUARIO|vCLAVE/i.test(text.slice(0, 4000));
-  } catch {
-    return false;
+/** Verifica si las cookies actuales son válidas haciendo una request liviana. */
+async function actionHealth() {
+  const cookies = getStoredCookies();
+  if (!cookies) {
+    return { ok: false, sessionExpired: true, reason: "GEMMA_COOKIES vacío" };
   }
+  const r = await fetch(`${GEMMA_BASE}/home.aspx`, {
+    method: "GET",
+    headers: {
+      Accept: "text/html,*/*",
+      Cookie: cookies,
+      "User-Agent": "Mozilla/5.0 (Egana-Automotriz-ERP/1.0)",
+    },
+    redirect: "manual",
+  });
+  const location = r.headers.get("location") || "";
+  const text = (await r.text().catch(() => "")).slice(0, 2000);
+  const expired = SESSION_EXPIRED_MARKERS.test(location) ||
+                  SESSION_EXPIRED_MARKERS.test(text) ||
+                  r.status >= 400;
+  return {
+    ok: !expired,
+    sessionExpired: expired,
+    status: r.status,
+    location,
+    cookies_set: cookies.length > 0,
+  };
 }
 
 // ── Parsers GeneXus → JSON limpio ─────────────────────────────────
@@ -326,8 +307,8 @@ async function actionDashboard(params: Record<string, string>) {
     SIMULACIONESTADO_0001: "4",
     SIMULACIONESTADOCONSOLIDADO_0001: "2",
   };
-  const { ok, body, status } = await gemmaPost("/home.aspx", formData);
-  if (!ok) return { ok: false, status, error: body.slice(0, 300) };
+  const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
+  if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
   const json = extractGenexusJson(body) ?? {};
 
@@ -366,8 +347,8 @@ async function actionEstadisticas(params: Record<string, string>) {
     vFILTERSECUSERRUT: params.vendedor_rut ?? "",
     _EventName: "EREFRESCAR",
   };
-  const { ok, body, status } = await gemmaPost("/consultaretenidos.aspx", formData);
-  if (!ok) return { ok: false, status, error: body.slice(0, 300) };
+  const { ok, body, status, sessionExpired } = await gemmaPost("/consultaretenidos.aspx", formData);
+  if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
   const json = extractGenexusJson(body) ?? {};
   // Buscar la grid principal — el nombre puede variar; aceptamos cualquier
@@ -401,8 +382,8 @@ async function actionIngresadosRango(params: Record<string, string>) {
     vFILTERFECHADESDE: desde,
     vFILTERFECHAHASTA: hasta,
   };
-  const { ok, body, status } = await gemmaPost("/home.aspx", formData);
-  if (!ok) return { ok: false, status, error: body.slice(0, 300) };
+  const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
+  if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
   const json = extractGenexusJson(body) ?? {};
   const casosRaw = (json.GridContainerDataV as unknown[][] | undefined) ?? [];
@@ -454,6 +435,9 @@ serve(async (req) => {
     const { action, params = {} } = reqBody;
     let result: unknown;
     switch (action) {
+      case "health":
+        result = await actionHealth();
+        break;
       case "dashboard":
         result = await actionDashboard(params);
         break;
