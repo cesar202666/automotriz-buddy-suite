@@ -47,6 +47,7 @@ interface GemmaRequest {
     | "dashboard"
     | "estadisticas"
     | "ingresados_rango"
+    | "metricas_periodo"
     | "keepalive"
     | "health"
     | "set_cookies"
@@ -595,6 +596,216 @@ async function actionIngresadosRango(params: Record<string, string>) {
 }
 
 /**
+ * metricas_periodo — Devuelve metricas agregadas por DIA y por VENDEDOR
+ * para un rango de fechas (default: semana actual).
+ *
+ * Hace UN SOLO POST a home.aspx con vFILTERFECHADESDE/HASTA, parsea los
+ * 3 grids (casos_abiertos=Pre-Aprobadas, cursar=Ingresados pendientes,
+ * validar=Precursadas) y agrega:
+ *   - por_dia[]:    { fecha, ingresados, aprobadas, cursar, validar }
+ *   - por_vendedor[]: { vendedor, solicitudes, aprobadas, cursar, validar }
+ *   - totales:    sumas globales del periodo
+ *
+ * Notas:
+ *   - "ingresados" = TODOS los casos del rango (suma de los 3 grids,
+ *     deduplicados por simulacion_id)
+ *   - "aprobadas" = casos del grid GridContainerDataV (estado=4)
+ *   - Las "rechazadas" historicas no estan disponibles en home.aspx — solo
+ *     el total acumulado en sidebar MPW0046EstadoContainerDataV (que NO
+ *     respeta el filtro de fechas). Se devuelve como totales.rechazadas
+ *     SOLO si fecha = "todo el periodo Gemma" (sin filtro).
+ */
+async function actionMetricasPeriodo(params: Record<string, string>) {
+  const desde = params.desde;
+  const hasta = params.hasta;
+  if (!desde || !hasta) {
+    return { ok: false, status: 400, error: "Faltan params desde/hasta (DD/MM/YYYY)" };
+  }
+
+  const formData: Record<string, string> = {
+    vFILTERSECUSERRUT: params.vendedor_rut ?? "",
+    vFILTERSUCURSALID: params.sucursal_id ?? "0",
+    vFILTERSECUSERSECUSEREJECUTIVORUT: "",
+    vFILTERFECHADESDE: desde,
+    vFILTERFECHAHASTA: hasta,
+  };
+
+  const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
+  if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
+
+  const json = extractGemmaDataset(body);
+  const casosRaw = (json.GridContainerDataV as unknown[][] | undefined) ?? [];
+  const cursarRaw = (json.GridcursarContainerDataV as unknown[][] | undefined) ?? [];
+  const validRaw = (json.GridvalContainerDataV as unknown[][] | undefined) ?? [];
+
+  const casosAll = casosRaw.map(mapCasoAbierto);
+  const cursarAll = cursarRaw.map(mapGestion);
+  const validarAll = validRaw.map(mapGestion);
+
+  // ── Filtrar manualmente por rango de fechas: Gemma no aplica
+  //    vFILTERFECHADESDE/HASTA en el HTML/JSON server-side (lo hace en
+  //    el cliente con JS). Tenemos que filtrar acá para que totales y
+  //    por_vendedor sean realmente del periodo solicitado.
+  const parseDate = (s: string): Date | null => {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(s || ""));
+    if (!m) return null;
+    return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  };
+  const dDesde = parseDate(desde);
+  const dHasta = parseDate(hasta);
+  if (dHasta) dHasta.setHours(23, 59, 59, 999);
+  const inRange = (s: unknown): boolean => {
+    const d = parseDate(String(s || "").split(" ")[0]);
+    if (!d || !dDesde || !dHasta) return false;
+    return d >= dDesde && d <= dHasta;
+  };
+  const casos = casosAll.filter((c) => inRange(c.fecha));
+  const cursar = cursarAll.filter((c) => inRange(c.fecha));
+  const validar = validarAll.filter((c) => inRange(c.fecha));
+
+  // Estados sidebar (totales NO filtrados por fecha — son acumulados)
+  const estadosRaw = (json.MPW0046EstadoContainerDataV as unknown[][] | undefined) ?? [];
+  type EstadoOut = { estado: string; cantidad: number };
+  const estados: EstadoOut[] = estadosRaw.map((row) => ({
+    estado: String(row[8] ?? "").trim(),
+    cantidad: Number(row[4] ?? 0),
+  })).filter((e) => e.estado);
+
+  const findEstado = (re: RegExp) =>
+    estados.find((e) => re.test(e.estado))?.cantidad ?? 0;
+
+  // ── Por dia ──────────────────────────────────────────
+  interface DiaAcc {
+    fecha: string;
+    ingresados: number;
+    aprobadas: number;
+    cursar: number;
+    validar: number;
+    seen: Set<string>;
+  }
+  const diaMap = new Map<string, DiaAcc>();
+  const ensureDia = (f: string): DiaAcc => {
+    let d = diaMap.get(f);
+    if (!d) {
+      d = { fecha: f, ingresados: 0, aprobadas: 0, cursar: 0, validar: 0, seen: new Set() };
+      diaMap.set(f, d);
+    }
+    return d;
+  };
+  const extractDay = (s: string): string => String(s || "").split(" ")[0];
+
+  for (const c of casos) {
+    const f = extractDay(String(c.fecha));
+    if (!f) continue;
+    const d = ensureDia(f);
+    const id = String(c.simulacion_id || c.codigo || "");
+    if (!d.seen.has(id)) { d.ingresados += 1; d.seen.add(id); }
+    d.aprobadas += 1;
+  }
+  for (const c of cursar) {
+    const f = extractDay(String(c.fecha));
+    if (!f) continue;
+    const d = ensureDia(f);
+    const id = String(c.simulacion_id || c.codigo || "");
+    if (!d.seen.has(id)) { d.ingresados += 1; d.seen.add(id); }
+    d.cursar += 1;
+  }
+  for (const c of validar) {
+    const f = extractDay(String(c.fecha));
+    if (!f) continue;
+    const d = ensureDia(f);
+    const id = String(c.simulacion_id || c.codigo || "");
+    if (!d.seen.has(id)) { d.ingresados += 1; d.seen.add(id); }
+    d.validar += 1;
+  }
+
+  const por_dia = Array.from(diaMap.values())
+    .map((d) => ({ fecha: d.fecha, ingresados: d.ingresados, aprobadas: d.aprobadas, cursar: d.cursar, validar: d.validar }))
+    .sort((a, b) => {
+      const [dA, mA, yA] = a.fecha.split("/").map(Number);
+      const [dB, mB, yB] = b.fecha.split("/").map(Number);
+      return new Date(yA, mA - 1, dA).getTime() - new Date(yB, mB - 1, dB).getTime();
+    });
+
+  // ── Por vendedor ─────────────────────────────────────
+  interface VendAcc {
+    vendedor: string;
+    solicitudes: number;
+    aprobadas: number;
+    cursar: number;
+    validar: number;
+    monto_total: number;
+    seen: Set<string>;
+  }
+  const vendMap = new Map<string, VendAcc>();
+  const ensureVend = (v: string): VendAcc => {
+    let a = vendMap.get(v);
+    if (!a) {
+      a = { vendedor: v, solicitudes: 0, aprobadas: 0, cursar: 0, validar: 0, monto_total: 0, seen: new Set() };
+      vendMap.set(v, a);
+    }
+    return a;
+  };
+
+  for (const c of casos) {
+    const v = String(c.vendedor || "Sin asignar").trim() || "Sin asignar";
+    const a = ensureVend(v);
+    const id = String(c.simulacion_id || c.codigo || "");
+    if (!a.seen.has(id)) { a.solicitudes += 1; a.seen.add(id); a.monto_total += Number(c.precio || 0); }
+    a.aprobadas += 1;
+  }
+  for (const c of cursar) {
+    const v = String(c.vendedor || "Sin asignar").trim() || "Sin asignar";
+    const a = ensureVend(v);
+    const id = String(c.simulacion_id || c.codigo || "");
+    if (!a.seen.has(id)) { a.solicitudes += 1; a.seen.add(id); }
+    a.cursar += 1;
+  }
+  for (const c of validar) {
+    const v = String(c.vendedor || "Sin asignar").trim() || "Sin asignar";
+    const a = ensureVend(v);
+    const id = String(c.simulacion_id || c.codigo || "");
+    if (!a.seen.has(id)) { a.solicitudes += 1; a.seen.add(id); }
+    a.validar += 1;
+  }
+
+  const por_vendedor = Array.from(vendMap.values())
+    .map((a) => ({
+      vendedor: a.vendedor,
+      solicitudes: a.solicitudes,
+      aprobadas: a.aprobadas,
+      cursar: a.cursar,
+      validar: a.validar,
+      monto_total: a.monto_total,
+      pct_aprobacion: a.solicitudes > 0 ? Math.round((a.aprobadas / a.solicitudes) * 100) : 0,
+    }))
+    .sort((a, b) => b.solicitudes - a.solicitudes);
+
+  // Totales del periodo
+  const totalIngresados = por_dia.reduce((s, d) => s + d.ingresados, 0);
+  const totalAprobadas = por_dia.reduce((s, d) => s + d.aprobadas, 0);
+  const totalCursar = por_dia.reduce((s, d) => s + d.cursar, 0);
+  const totalValidar = por_dia.reduce((s, d) => s + d.validar, 0);
+
+  return {
+    ok: true,
+    desde,
+    hasta,
+    por_dia,
+    por_vendedor,
+    totales: {
+      ingresados: totalIngresados,
+      aprobadas: totalAprobadas,
+      cursar: totalCursar,
+      validar: totalValidar,
+      // Estos vienen del sidebar — son acumulados de Gemma, no filtrados por fecha
+      aprobadas_total_acumulado: findEstado(/aprobad/i),
+      rechazadas_total_acumulado: findEstado(/rechazad/i),
+    },
+  };
+}
+
+/**
  * keepalive — Hace un GET ligero a home.aspx para extender la session.
  * Captura el Set-Cookie y persiste la actualizacion en BD.
  * Llamado por cron pg_cron cada 5 minutos.
@@ -721,6 +932,7 @@ serve(async (req) => {
       case "dashboard":      result = await actionDashboard(params); break;
       case "estadisticas":   result = await actionEstadisticas(params); break;
       case "ingresados_rango": result = await actionIngresadosRango(params); break;
+      case "metricas_periodo": result = await actionMetricasPeriodo(params); break;
       case "raw": {
         const { ok, body, status } = await gemmaPost(reqBody.path ?? "/home.aspx", params);
         result = { ok, status, body };

@@ -1,16 +1,15 @@
 /**
  * Global — Vista ejecutiva con datos de Gemma.cl (CRM de financieras).
  *
- * Solo visible para master / administracion (filtro de menú en Layout.tsx,
- * y guardia adicional en este componente).
+ * Solo visible para master / administracion. Default = última semana.
  *
  * Estructura:
- *  - Header con filtro de vendedor + sucursal
- *  - 6 KPI cards de HOY (Aprobadas, Rechazadas, Casos Abiertos, Cursar, Validar, Total)
- *  - Gráfico SEMANAL (últimos 7 días) — barras
- *  - Gráfico MENSUAL (últimos 30 días) — área
- *  - Tabla por vendedor (Solicitudes, Aprobadas, %Aprobación, Cursadas, %Cierre, %Eficiencia)
- *  - Tabla de casos abiertos (top 10)
+ *  - Header con filtros: vendedor, sucursal, rango de fechas (con presets)
+ *  - 6 KPI cards del periodo (Ingresados, Aprobadas, Rechazadas acum,
+ *    Por cursar, Por validar, Casos abiertos)
+ *  - Chart multi-serie por día (ingresados / aprobadas / cursar / validar)
+ *  - Top vendedores duales: solicitudes vs aprobadas
+ *  - Casos abiertos top 10 (más días en cola)
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -22,35 +21,35 @@ import {
   RefreshCw,
   TrendingUp,
   AlertTriangle,
-  ChartBar,
   CalendarRange,
   Users,
   Building2,
   Loader2,
+  Award,
+  Send,
 } from "lucide-react";
 import {
   BarChart,
   Bar,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
   Legend,
+  Cell,
 } from "recharts";
 import {
   fetchGemmaDashboard,
-  fetchGemmaEstadisticas,
-  fetchGemmaIngresadosRango,
+  fetchGemmaMetricasPeriodo,
   checkGemmaHealth,
   GEMMA_VENDEDORES,
   GEMMA_SUCURSALES,
   formatCLP,
   toGemmaDate,
+  fromGemmaDate,
   type DashboardResponse,
-  type EstadisticaVendedor,
+  type MetricasPeriodoResponse,
   type CasoAbierto,
   type HealthResponse,
 } from "@/lib/gemmaService";
@@ -62,10 +61,56 @@ import { useApp } from "@/context/AppContext";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 function shortDate(ddmmyyyy: string): string {
-  // "27/05/2026" → "27 May"
   const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(ddmmyyyy);
   if (!m) return ddmmyyyy;
   return `${m[1]} ${MESES[Number(m[2]) - 1]}`;
+}
+
+/** Convierte DD/MM/YYYY a YYYY-MM-DD para <input type="date">. */
+function toInputDate(ddmmyyyy: string): string {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(ddmmyyyy);
+  if (!m) return "";
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+/** Convierte YYYY-MM-DD (input) a DD/MM/YYYY (Gemma format). */
+function fromInputDate(yyyymmdd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(yyyymmdd);
+  if (!m) return "";
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+interface RangoPreset {
+  label: string;
+  dias: number;
+}
+const PRESETS: RangoPreset[] = [
+  { label: "Hoy", dias: 0 },
+  { label: "Última semana", dias: 6 },
+  { label: "Últimas 2 semanas", dias: 13 },
+  { label: "Último mes", dias: 29 },
+  { label: "Últimos 3 meses", dias: 89 },
+];
+
+function rellenarDias(
+  serie: { fecha: string; ingresados: number; aprobadas: number; cursar: number; validar: number }[],
+  desde: Date,
+  hasta: Date,
+) {
+  const map = new Map(serie.map((s) => [s.fecha, s]));
+  const out: typeof serie = [];
+  const d = new Date(desde);
+  d.setHours(0, 0, 0, 0);
+  const end = new Date(hasta);
+  end.setHours(23, 59, 59, 999);
+  while (d <= end) {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const key = `${dd}/${mm}/${d.getFullYear()}`;
+    out.push(map.get(key) ?? { fecha: key, ingresados: 0, aprobadas: 0, cursar: 0, validar: 0 });
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
 }
 
 // ─── Componente ────────────────────────────────────────────────────
@@ -74,7 +119,6 @@ export default function Global() {
   const { usuarioActual } = useApp();
   const rol = usuarioActual?.rol ?? "vendedor";
 
-  // Guardia: solo master/administracion
   if (rol !== "master" && rol !== "administracion") {
     return (
       <div className="space-y-4">
@@ -97,36 +141,45 @@ export default function Global() {
     );
   }
 
-  // ── Estado ────────────────────────────────────────────────────
+  // ── Filtros ───────────────────────────────────────────────────
   const [vendedorRut, setVendedorRut] = useState("");
   const [sucursalId, setSucursalId] = useState("0");
+  // Default: últimos 7 días incluyendo hoy
+  const hoyInicial = useMemo(() => new Date(), []);
+  const haceSeisInicial = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d;
+  }, []);
+  const [desde, setDesde] = useState<string>(toGemmaDate(haceSeisInicial));
+  const [hasta, setHasta] = useState<string>(toGemmaDate(hoyInicial));
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // ── Estado de carga ───────────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [estadisticas, setEstadisticas] = useState<EstadisticaVendedor[]>([]);
-  const [serieSemanal, setSerieSemanal] = useState<{ fecha: string; ingresados: number }[]>([]);
-  const [serieMensual, setSerieMensual] = useState<{ fecha: string; ingresados: number }[]>([]);
+  const [metricas, setMetricas] = useState<MetricasPeriodoResponse | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
 
-  // ── Cargar todo en paralelo ────────────────────────────────────
+  // ── Aplicar preset ───────────────────────────────────────────
+  const aplicarPreset = (dias: number) => {
+    const h = new Date();
+    const d = new Date();
+    d.setDate(h.getDate() - dias);
+    setDesde(toGemmaDate(d));
+    setHasta(toGemmaDate(h));
+  };
+
+  // ── Cargar data ──────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       setErrorMsg("");
-
-      const hoy = new Date();
-      const haceSiete = new Date();
-      haceSiete.setDate(hoy.getDate() - 6); // 7 días incluyendo hoy
-      const haceTreinta = new Date();
-      haceTreinta.setDate(hoy.getDate() - 29);
-
       try {
-        // Health primero — si no hay cookies, mostramos banner sin gastar requests
         const h = await checkGemmaHealth();
         if (cancelled) return;
         setHealth(h);
@@ -136,36 +189,68 @@ export default function Global() {
           return;
         }
 
-        const [dash, ests, semana, mes] = await Promise.all([
+        const [dash, met] = await Promise.all([
           fetchGemmaDashboard(vendedorRut, sucursalId),
-          fetchGemmaEstadisticas(vendedorRut),
-          fetchGemmaIngresadosRango(toGemmaDate(haceSiete), toGemmaDate(hoy), vendedorRut, sucursalId),
-          fetchGemmaIngresadosRango(toGemmaDate(haceTreinta), toGemmaDate(hoy), vendedorRut, sucursalId),
+          fetchGemmaMetricasPeriodo(desde, hasta, vendedorRut, sucursalId),
         ]);
         if (cancelled) return;
 
-        const anyExpired = !!(dash.sessionExpired || ests.sessionExpired || semana.sessionExpired || mes.sessionExpired);
+        const anyExpired = !!(dash.sessionExpired || met.sessionExpired);
         setSessionExpired(anyExpired);
         if (!dash.ok && !anyExpired) {
-          setErrorMsg(dash.error || "No se pudo cargar el dashboard de Gemma");
+          setErrorMsg(dash.error || "No se pudo cargar Gemma");
         }
         setDashboard(dash);
-        setEstadisticas(ests.estadisticas || []);
-        setSerieSemanal(fillEmptyDays(semana.serie || [], haceSiete, hoy));
-        setSerieMensual(fillEmptyDays(mes.serie || [], haceTreinta, hoy));
+        setMetricas(met);
       } catch (e) {
-        if (!cancelled) {
-          setErrorMsg(e instanceof Error ? e.message : String(e));
-        }
+        if (!cancelled) setErrorMsg(e instanceof Error ? e.message : String(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [vendedorRut, sucursalId, refreshKey]);
+  }, [vendedorRut, sucursalId, desde, hasta, refreshKey]);
 
-  // ── Casos abiertos top 10 por días en cola ──────────────────────
+  // ── Serie por día rellena ─────────────────────────────────────
+  const serieDia = useMemo(() => {
+    const d1 = fromGemmaDate(desde) ?? new Date();
+    const d2 = fromGemmaDate(hasta) ?? new Date();
+    return rellenarDias(metricas?.por_dia ?? [], d1, d2);
+  }, [metricas, desde, hasta]);
+
+  // ── KPI cards ─────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    const t = metricas?.totales;
+    const dashTotales = dashboard?.totales;
+    return [
+      { label: "Ingresados", value: t?.ingresados ?? 0, icon: Send, color: "hsl(217,91%,50%)", sub: "en periodo" },
+      { label: "Aprobadas (periodo)", value: t?.aprobadas ?? 0, icon: CheckCircle2, color: "hsl(142,71%,45%)", sub: "en periodo" },
+      { label: "Aprobadas total", value: t?.aprobadas_total_acumulado ?? 0, icon: Award, color: "hsl(142,71%,38%)", sub: "acumulado Gemma" },
+      { label: "Rechazadas total", value: t?.rechazadas_total_acumulado ?? 0, icon: XCircle, color: "hsl(0,84%,60%)", sub: "acumulado Gemma" },
+      { label: "Por cursar", value: dashTotales?.cursar ?? 0, icon: FileCheck2, color: "hsl(262,80%,58%)", sub: "actual" },
+      { label: "Por validar", value: dashTotales?.validar ?? 0, icon: TrendingUp, color: "hsl(173,80%,40%)", sub: "actual" },
+    ];
+  }, [metricas, dashboard]);
+
+  // ── Top vendedores: solicitudes vs aprobadas ──────────────────
+  const topSolicitudes = useMemo(() => {
+    return (metricas?.por_vendedor ?? [])
+      .filter((v) => v.solicitudes > 0)
+      .slice()
+      .sort((a, b) => b.solicitudes - a.solicitudes)
+      .slice(0, 10);
+  }, [metricas]);
+
+  const topAprobadas = useMemo(() => {
+    return (metricas?.por_vendedor ?? [])
+      .filter((v) => v.aprobadas > 0)
+      .slice()
+      .sort((a, b) => b.aprobadas - a.aprobadas)
+      .slice(0, 10);
+  }, [metricas]);
+
+  // ── Casos abiertos top por días ──────────────────────────────
   const casosTop = useMemo<CasoAbierto[]>(() => {
     return (dashboard?.casos_abiertos || [])
       .slice()
@@ -173,29 +258,14 @@ export default function Global() {
       .slice(0, 10);
   }, [dashboard]);
 
-  // ── KPI cards ──────────────────────────────────────────────────
-  const kpis = useMemo(() => {
-    const t = dashboard?.totales || { aprobadas: 0, rechazadas: 0, casos_abiertos: 0, cursar: 0, validar: 0 };
-    const totalSolicitudes = Number(t.aprobadas || 0) + Number(t.rechazadas || 0);
-    return [
-      { label: "Solicitudes", value: totalSolicitudes, icon: ChartBar, color: "hsl(217,91%,50%)" },
-      { label: "Aprobadas", value: Number(t.aprobadas || 0), icon: CheckCircle2, color: "hsl(142,71%,45%)" },
-      { label: "Rechazadas", value: Number(t.rechazadas || 0), icon: XCircle, color: "hsl(0,84%,60%)" },
-      { label: "Casos abiertos", value: Number(t.casos_abiertos || 0), icon: Briefcase, color: "hsl(38,92%,50%)" },
-      { label: "Por cursar", value: Number(t.cursar || 0), icon: FileCheck2, color: "hsl(262,80%,58%)" },
-      { label: "Por validar", value: Number(t.validar || 0), icon: TrendingUp, color: "hsl(173,80%,40%)" },
-    ];
-  }, [dashboard]);
-
-  // ── Render ─────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Header con filtros */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Global · Gemma.cl</h1>
           <p className="page-subtitle">
-            Distribuidor 647 — COMERCIAL REY-AGUIRRE SPA · Datos en tiempo real
+            Distribuidor 647 — COMERCIAL REY-AGUIRRE SPA · Periodo: {desde} → {hasta}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -238,12 +308,47 @@ export default function Global() {
         </div>
       </div>
 
-      {/* Session expired banner: prioridad sobre error genérico */}
+      {/* Filtro de fechas con presets */}
+      <div
+        className="border rounded-xl p-3 flex items-center gap-3 flex-wrap"
+        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
+      >
+        <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+          <CalendarRange size={13} /> Periodo:
+        </span>
+        <input
+          type="date"
+          value={toInputDate(desde)}
+          onChange={(e) => setDesde(fromInputDate(e.target.value))}
+          className="text-xs border rounded-lg px-2 py-1 bg-background"
+          style={{ borderColor: "hsl(var(--border))" }}
+        />
+        <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>→</span>
+        <input
+          type="date"
+          value={toInputDate(hasta)}
+          onChange={(e) => setHasta(fromInputDate(e.target.value))}
+          className="text-xs border rounded-lg px-2 py-1 bg-background"
+          style={{ borderColor: "hsl(var(--border))" }}
+        />
+        <div className="flex items-center gap-1 ml-2">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => aplicarPreset(p.dias)}
+              className="text-[11px] px-2 py-1 rounded border hover:bg-muted"
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {sessionExpired && !loading && (
         <GemmaSessionExpiredBanner onSaved={() => setRefreshKey((k) => k + 1)} />
       )}
 
-      {/* Status footer cuando la sesión SÍ está activa */}
       {!sessionExpired && health?.cookies_set && health.last_ping_at && (
         <div className="flex items-center gap-2 text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
           <span className="inline-flex items-center gap-1">
@@ -256,12 +361,8 @@ export default function Global() {
         </div>
       )}
 
-      {/* Error banner genérico */}
       {errorMsg && !loading && !sessionExpired && (
-        <div
-          className="flex items-start gap-3 border rounded-xl p-4"
-          style={{ borderColor: "#fecaca", background: "#fef2f2", color: "#991b1b" }}
-        >
+        <div className="flex items-start gap-3 border rounded-xl p-4" style={{ borderColor: "#fecaca", background: "#fef2f2", color: "#991b1b" }}>
           <AlertTriangle size={18} />
           <div className="text-sm">
             <p className="font-semibold mb-0.5">No se pudo cargar Gemma</p>
@@ -281,10 +382,7 @@ export default function Global() {
               style={{ borderColor: "hsl(var(--border))" }}
             >
               <div className="flex items-center justify-between mb-2">
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ background: k.color + "20" }}
-                >
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: k.color + "20" }}>
                   <Icon size={16} style={{ color: k.color }} />
                 </div>
               </div>
@@ -294,129 +392,109 @@ export default function Global() {
               <div className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
                 {k.label}
               </div>
+              <div className="text-[10px] mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                {k.sub}
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Gráfico semanal */}
-      <div
-        className="border rounded-xl p-5"
-        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
-      >
+      {/* Chart multi-serie por día */}
+      <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold flex items-center gap-2">
-            <CalendarRange size={16} style={{ color: "hsl(217,91%,50%)" }} />
-            Ingresados — últimos 7 días
+            <TrendingUp size={16} style={{ color: "hsl(217,91%,50%)" }} />
+            Métricas día a día — {desde} → {hasta}
           </h3>
-          <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-            Total: {serieSemanal.reduce((s, d) => s + d.ingresados, 0)}
-          </span>
+          <div className="flex items-center gap-3 text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+            <span>{serieDia.length} días</span>
+            <span>·</span>
+            <span>{metricas?.totales?.ingresados ?? 0} ingresados total</span>
+          </div>
         </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={serieSemanal} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={serieDia} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="fecha" tick={{ fontSize: 11 }} tickFormatter={shortDate} />
+            <XAxis dataKey="fecha" tick={{ fontSize: 11 }} tickFormatter={shortDate} interval={Math.max(0, Math.floor(serieDia.length / 14))} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-            <Bar dataKey="ingresados" name="Ingresados" fill="hsl(217,91%,50%)" radius={[4, 4, 0, 0]} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="ingresados" name="Ingresados" fill="hsl(217,91%,50%)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="aprobadas" name="Aprobadas" fill="hsl(142,71%,45%)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="cursar" name="Por cursar" fill="hsl(262,80%,58%)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="validar" name="Por validar" fill="hsl(173,80%,40%)" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Gráfico mensual */}
-      <div
-        className="border rounded-xl p-5"
-        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold flex items-center gap-2">
-            <TrendingUp size={16} style={{ color: "hsl(262,80%,58%)" }} />
-            Ingresados — últimos 30 días
+      {/* Top vendedores: solicitudes vs aprobadas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Solicitudes */}
+        <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+          <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+            <Send size={16} style={{ color: "hsl(217,91%,50%)" }} />
+            Quién envía más solicitudes ({desde} → {hasta})
           </h3>
-          <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-            Total: {serieMensual.reduce((s, d) => s + d.ingresados, 0)} · Promedio:{" "}
-            {serieMensual.length > 0
-              ? (serieMensual.reduce((s, d) => s + d.ingresados, 0) / serieMensual.length).toFixed(1)
-              : 0}/día
-          </span>
+          {topSolicitudes.length === 0 ? (
+            <p className="text-xs text-center py-8" style={{ color: "hsl(var(--muted-foreground))" }}>
+              {loading ? "Cargando…" : "Sin datos"}
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(220, topSolicitudes.length * 32)}>
+              <BarChart data={topSolicitudes} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="vendedor" tick={{ fontSize: 10 }} width={130} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: number, _n, p: { payload?: { monto_total?: number; pct_aprobacion?: number } }) => [
+                    `${v} · ${formatCLP(p.payload?.monto_total ?? 0)} · ${p.payload?.pct_aprobacion ?? 0}% aprob`,
+                    "Solicitudes",
+                  ]}
+                />
+                <Bar dataKey="solicitudes" name="Solicitudes" fill="hsl(217,91%,50%)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={serieMensual} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="gemmaGradMens" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(262,80%,58%)" stopOpacity={0.45} />
-                <stop offset="100%" stopColor="hsl(262,80%,58%)" stopOpacity={0.05} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="fecha" tick={{ fontSize: 10 }} tickFormatter={shortDate} interval={Math.floor(serieMensual.length / 8)} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-            <Area
-              type="monotone"
-              dataKey="ingresados"
-              name="Ingresados"
-              stroke="hsl(262,80%,58%)"
-              strokeWidth={2.5}
-              fill="url(#gemmaGradMens)"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
 
-      {/* Tabla por vendedor */}
-      <div
-        className="border rounded-xl p-5"
-        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
-      >
-        <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
-          <Users size={16} style={{ color: "hsl(38,92%,50%)" }} />
-          Estadísticas por vendedor
-        </h3>
-        {estadisticas.length === 0 ? (
-          <p className="text-xs text-center py-8" style={{ color: "hsl(var(--muted-foreground))" }}>
-            {loading ? "Cargando…" : "Sin datos en el rango seleccionado"}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "hsl(var(--muted))" }}>
-                  <th className="px-3 py-2 text-left text-xs font-semibold">Vendedor</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Abiertos</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Por cursar</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Por validar</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Monto total</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Monto promedio</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Días promedio</th>
-                </tr>
-              </thead>
-              <tbody>
-                {estadisticas.map((e, i) => (
-                  <tr key={`${e.vendedor}-${i}`} className="border-t" style={{ borderColor: "hsl(var(--border))" }}>
-                    <td className="px-3 py-2 text-xs font-medium">{e.vendedor}</td>
-                    <td className="px-3 py-2 text-xs text-right">{e.abiertos}</td>
-                    <td className="px-3 py-2 text-xs text-right">{e.cursar}</td>
-                    <td className="px-3 py-2 text-xs text-right">{e.validar}</td>
-                    <td className="px-3 py-2 text-xs text-right">{formatCLP(e.monto_total)}</td>
-                    <td className="px-3 py-2 text-xs text-right">{formatCLP(e.monto_promedio)}</td>
-                    <td className="px-3 py-2 text-xs text-right font-semibold" style={{ color: e.dias_promedio <= 5 ? "hsl(142,71%,45%)" : e.dias_promedio <= 15 ? "hsl(38,92%,50%)" : "hsl(0,84%,60%)" }}>
-                      {e.dias_promedio}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {/* Aprobadas */}
+        <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+          <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+            <Award size={16} style={{ color: "hsl(142,71%,45%)" }} />
+            Quién tiene más aprobadas ({desde} → {hasta})
+          </h3>
+          {topAprobadas.length === 0 ? (
+            <p className="text-xs text-center py-8" style={{ color: "hsl(var(--muted-foreground))" }}>
+              {loading ? "Cargando…" : "Sin datos"}
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(220, topAprobadas.length * 32)}>
+              <BarChart data={topAprobadas} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="vendedor" tick={{ fontSize: 10 }} width={130} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: number, _n, p: { payload?: { monto_total?: number; solicitudes?: number } }) => [
+                    `${v} aprobadas de ${p.payload?.solicitudes ?? 0} solicit. · ${formatCLP(p.payload?.monto_total ?? 0)}`,
+                    "Aprobadas",
+                  ]}
+                />
+                <Bar dataKey="aprobadas" radius={[0, 4, 4, 0]}>
+                  {topAprobadas.map((_, i) => (
+                    <Cell key={i} fill="hsl(142,71%,45%)" />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
 
       {/* Casos abiertos con más días */}
-      <div
-        className="border rounded-xl p-5"
-        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
-      >
+      <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
         <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
           <Briefcase size={16} style={{ color: "hsl(0,84%,60%)" }} />
           Casos abiertos con más días en cola
@@ -458,23 +536,4 @@ export default function Global() {
       </div>
     </div>
   );
-}
-
-/** Rellena con 0 los días sin datos en una serie diaria. */
-function fillEmptyDays(
-  serie: { fecha: string; ingresados: number }[],
-  desde: Date,
-  hasta: Date,
-): { fecha: string; ingresados: number }[] {
-  const map = new Map(serie.map((s) => [s.fecha, s.ingresados]));
-  const out: { fecha: string; ingresados: number }[] = [];
-  const d = new Date(desde);
-  while (d <= hasta) {
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const key = `${dd}/${mm}/${d.getFullYear()}`;
-    out.push({ fecha: key, ingresados: map.get(key) || 0 });
-    d.setDate(d.getDate() + 1);
-  }
-  return out;
 }

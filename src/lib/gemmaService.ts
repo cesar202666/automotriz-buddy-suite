@@ -96,6 +96,42 @@ export interface IngresadosRangoResponse {
   sessionExpired?: boolean;
 }
 
+export interface MetricaDia {
+  fecha: string;       // DD/MM/YYYY
+  ingresados: number;
+  aprobadas: number;
+  cursar: number;
+  validar: number;
+}
+
+export interface MetricaVendedor {
+  vendedor: string;
+  solicitudes: number;
+  aprobadas: number;
+  cursar: number;
+  validar: number;
+  monto_total: number;
+  pct_aprobacion: number;
+}
+
+export interface MetricasPeriodoResponse {
+  ok: boolean;
+  desde?: string;
+  hasta?: string;
+  por_dia?: MetricaDia[];
+  por_vendedor?: MetricaVendedor[];
+  totales?: {
+    ingresados: number;
+    aprobadas: number;
+    cursar: number;
+    validar: number;
+    aprobadas_total_acumulado: number;
+    rechazadas_total_acumulado: number;
+  };
+  error?: string;
+  sessionExpired?: boolean;
+}
+
 export interface HealthResponse {
   ok: boolean;
   sessionExpired?: boolean;
@@ -188,6 +224,21 @@ export function fetchGemmaIngresadosRango(
   sucursalId = "0",
 ): Promise<IngresadosRangoResponse> {
   return call<IngresadosRangoResponse>("ingresados_rango", {
+    desde,
+    hasta,
+    vendedor_rut: vendedorRut,
+    sucursal_id: sucursalId,
+  });
+}
+
+/** Métricas completas por día + por vendedor en un rango. Default = 7 días. */
+export function fetchGemmaMetricasPeriodo(
+  desde: string,
+  hasta: string,
+  vendedorRut = "",
+  sucursalId = "0",
+): Promise<MetricasPeriodoResponse> {
+  return call<MetricasPeriodoResponse>("metricas_periodo", {
     desde,
     hasta,
     vendedor_rut: vendedorRut,
