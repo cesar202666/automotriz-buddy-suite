@@ -71,12 +71,12 @@ export interface DashboardResponse {
 
 export interface EstadisticaVendedor {
   vendedor: string;
-  solicitudes: number;
-  aprobadas: number;
-  pct_aprobacion: number;
-  cursadas: number;
-  pct_cierre: number;
-  pct_eficiencia: number;
+  abiertos: number;
+  cursar: number;
+  validar: number;
+  monto_total: number;
+  monto_promedio: number;
+  dias_promedio: number;
 }
 
 export interface EstadisticasResponse {

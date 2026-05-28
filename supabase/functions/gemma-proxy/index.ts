@@ -269,35 +269,110 @@ async function gemmaPost(
 
 // ── Parsers GeneXus → JSON limpio ─────────────────────────────
 
-function extractGenexusJson(raw: string): Record<string, unknown> | null {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) {
-    try { return JSON.parse(trimmed); } catch { /* */ }
-  }
-  const start = raw.indexOf("{");
-  if (start < 0) return null;
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let i = start; i < raw.length; i++) {
-    const c = raw[i];
-    if (inStr) {
-      if (esc) { esc = false; continue; }
-      if (c === "\\") { esc = true; continue; }
-      if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === '"') { inStr = true; continue; }
-    if (c === "{") depth++;
-    else if (c === "}") {
-      depth--;
-      if (depth === 0) {
-        const candidate = raw.slice(start, i + 1);
-        try { return JSON.parse(candidate); } catch { /* keep scanning */ }
+/**
+ * Gemma devuelve la respuesta como HTML con los datos de los grids embebidos
+ * como hidden inputs. Esta funcion extrae el contenido de:
+ *   <input type="hidden" name="NombreGrid" value='[[...],[...]]'/>
+ *
+ * Usa indexOf (O(n)) en vez de regex para evitar backtracking en HTMLs grandes
+ * (la response de home.aspx puede pasar 600KB).
+ */
+function extractHiddenInput(html: string, name: string): string {
+  // Buscamos: name="NombreGrid" o name='NombreGrid'
+  const needles = [`name="${name}"`, `name='${name}'`];
+  for (const needle of needles) {
+    let idx = 0;
+    while ((idx = html.indexOf(needle, idx)) >= 0) {
+      // Buscar 'value=' hacia adelante en el mismo tag
+      // Limite: hasta el siguiente '>' o 4000 chars
+      const tagEnd = html.indexOf(">", idx);
+      const scanEnd = tagEnd > 0 ? tagEnd : idx + 4000;
+      const valueIdx = html.indexOf("value=", idx);
+      if (valueIdx < 0 || valueIdx > scanEnd) {
+        // value puede estar ANTES de name — probar mirando hacia atras
+        const tagStart = html.lastIndexOf("<input", idx);
+        if (tagStart >= 0) {
+          const valIdx = html.indexOf("value=", tagStart);
+          if (valIdx >= 0 && valIdx < idx) {
+            const val = readQuotedValue(html, valIdx + 6);
+            if (val !== null) return decodeHtmlEntities(val);
+          }
+        }
+        idx = scanEnd + 1;
+        continue;
       }
+      const val = readQuotedValue(html, valueIdx + 6);
+      if (val !== null) return decodeHtmlEntities(val);
+      idx = scanEnd + 1;
     }
   }
-  return null;
+  return "";
+}
+
+/** Lee el contenido entre comillas (' o ") empezando en posicion start. */
+function readQuotedValue(html: string, start: number): string | null {
+  if (start >= html.length) return null;
+  const q = html[start];
+  if (q !== '"' && q !== "'") return null;
+  const end = html.indexOf(q, start + 1);
+  if (end < 0) return null;
+  return html.slice(start + 1, end);
+}
+
+/** Decodifica las entidades HTML mas comunes que GeneXus emite en atributos. */
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Convierte un numero en formato chileno ("6590000,00" o "6.590.000") a number.
+ * Gemma devuelve los precios asi.
+ */
+function parseClNumber(raw: unknown): number {
+  if (typeof raw === "number") return raw;
+  if (raw == null) return 0;
+  const s = String(raw).trim();
+  if (!s) return 0;
+  // Quitar puntos miles, cambiar coma decimal por punto
+  const normalized = s.replace(/\./g, "").replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Intenta extraer el dataset JSON del response. Primero busca hidden inputs
+ * con nombres de grids (formato HTML). Si no encuentra, cae al modo "extract
+ * el primer objeto JSON balanceado" para responses ajax puros.
+ */
+function extractGemmaDataset(raw: string): Record<string, unknown> {
+  const trimmed = raw.trim();
+
+  // Si es JSON puro, parsear directo
+  if (trimmed.startsWith("{")) {
+    try { return JSON.parse(trimmed) as Record<string, unknown>; } catch { /* fall through */ }
+  }
+
+  // Sino, scraper de hidden inputs por nombre conocido
+  const out: Record<string, unknown> = {};
+  const gridNames = [
+    "GridContainerDataV",            // casos abiertos
+    "GridcursarContainerDataV",      // por cursar
+    "GridvalContainerDataV",         // por validar
+    "MPW0046vSDTESTADOS",            // estados sidebar (variante vieja)
+    "MPW0046EstadoContainerDataV",   // estados sidebar (variante actual)
+  ];
+  for (const name of gridNames) {
+    const val = extractHiddenInput(raw, name);
+    if (val) {
+      try { out[name] = JSON.parse(val); } catch { /* ignore — campo malformado */ }
+    }
+  }
+  return out;
 }
 
 function mapCasoAbierto(row: unknown[]): Record<string, unknown> {
@@ -310,9 +385,9 @@ function mapCasoAbierto(row: unknown[]): Record<string, unknown> {
     cliente_nombre: row[6] ?? "",
     cliente_apellido: row[7] ?? "",
     cliente_full: row[8] ?? "",
-    precio: Number(row[9] ?? 0),
-    pct_pie: Number(row[10] ?? 0),
-    saldo_precio: Number(row[11] ?? 0),
+    precio: parseClNumber(row[9]),
+    pct_pie: parseClNumber(row[10]),
+    saldo_precio: parseClNumber(row[11]),
     marca: row[12] ?? "",
     modelo: row[13] ?? "",
     anio: row[14] ?? "",
@@ -339,7 +414,7 @@ function mapGestion(row: unknown[]): Record<string, unknown> {
     cliente_apellido: row[10] ?? "",
     cliente_materno: row[11] ?? "",
     cliente_display: row[12] ?? "",
-    saldo_precio: Number(row[13] ?? 0),
+    saldo_precio: parseClNumber(row[13]),
   };
 }
 
@@ -348,10 +423,10 @@ function mapEstadistica(row: unknown[]): Record<string, unknown> {
     vendedor: row[0] ?? "",
     solicitudes: Number(row[1] ?? 0),
     aprobadas: Number(row[2] ?? 0),
-    pct_aprobacion: Number(row[3] ?? 0),
+    pct_aprobacion: parseClNumber(row[3]),
     cursadas: Number(row[4] ?? 0),
-    pct_cierre: Number(row[5] ?? 0),
-    pct_eficiencia: Number(row[6] ?? 0),
+    pct_cierre: parseClNumber(row[5]),
+    pct_eficiencia: parseClNumber(row[6]),
   };
 }
 
@@ -368,51 +443,119 @@ async function actionDashboard(params: Record<string, string>) {
   const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
   if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
-  const json = extractGenexusJson(body) ?? {};
-  const estados = (json.MPW0046vSDTESTADOS as Array<Record<string, unknown>> | undefined) ?? [];
+  const json = extractGemmaDataset(body) ?? {};
+
+  // Parse del nuevo grid de estados (formato: ["","","icon","","N","","_","","Label"])
+  const estadosRaw = (json.MPW0046EstadoContainerDataV as unknown[][] | undefined) ?? [];
+  type EstadoOut = { estado: string; cantidad: number };
+  const estados: EstadoOut[] = estadosRaw.map((row) => ({
+    estado: String(row[8] ?? "").trim(),
+    cantidad: Number(row[4] ?? 0),
+  })).filter((e) => e.estado);
+
+  // Variante vieja (por si Gemma emite ambos formatos)
+  const estadosOld = (json.MPW0046vSDTESTADOS as Array<Record<string, unknown>> | undefined) ?? [];
+  for (const e of estadosOld) {
+    const lbl = String(e.Estado ?? "").trim();
+    if (lbl && !estados.find((x) => x.estado.toLowerCase() === lbl.toLowerCase())) {
+      estados.push({ estado: lbl, cantidad: Number(e.Cantidad ?? 0) });
+    }
+  }
+
   const casosRaw = (json.GridContainerDataV as unknown[][] | undefined) ?? [];
   const cursarRaw = (json.GridcursarContainerDataV as unknown[][] | undefined) ?? [];
   const validRaw = (json.GridvalContainerDataV as unknown[][] | undefined) ?? [];
 
+  const casos = casosRaw.map(mapCasoAbierto);
+  const findEstado = (re: RegExp) =>
+    estados.find((e) => re.test(e.estado))?.cantidad ?? 0;
+
   return {
     ok: true,
-    estados: estados.map((e) => ({
-      estado: e.Estado ?? "",
-      cantidad: Number(e.Cantidad ?? 0),
-      simulacion_estado: Number(e.SimulacionEstado ?? 0),
-    })),
-    casos_abiertos: casosRaw.map(mapCasoAbierto),
+    estados,
+    casos_abiertos: casos,
     cursar: cursarRaw.map(mapGestion),
     validar: validRaw.map(mapGestion),
     totales: {
-      aprobadas:
-        estados.find((e) => /aprobad/i.test(String(e.Estado)))?.Cantidad ?? 0,
-      rechazadas:
-        estados.find((e) => /rechazad/i.test(String(e.Estado)))?.Cantidad ?? 0,
-      casos_abiertos: casosRaw.length,
+      aprobadas: findEstado(/aprobad/i),
+      rechazadas: findEstado(/rechazad/i),
+      casos_abiertos: casos.length,
       cursar: cursarRaw.length,
       validar: validRaw.length,
     },
   };
 }
 
+/**
+ * Por ahora derivamos las estadisticas POR VENDEDOR a partir de los casos
+ * abiertos + cursar + validar de home.aspx (el endpoint consultaretenidos.aspx
+ * con _EventName=EREFRESCAR no expone la tabla de eficiencia per-RUT).
+ * Para cada vendedor calculamos: abiertos, monto_total, monto_promedio,
+ * dias_promedio.
+ */
 async function actionEstadisticas(params: Record<string, string>) {
   const formData: Record<string, string> = {
     vFILTERSECUSERRUT: params.vendedor_rut ?? "",
-    _EventName: "EREFRESCAR",
+    vFILTERSUCURSALID: params.sucursal_id ?? "0",
+    vFILTERSECUSERSECUSEREJECUTIVORUT: "",
   };
-  const { ok, body, status, sessionExpired } = await gemmaPost("/consultaretenidos.aspx", formData);
+  const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
   if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
-  const json = extractGenexusJson(body) ?? {};
-  let rows: unknown[][] = [];
-  for (const k of Object.keys(json)) {
-    if (/Grid.*ContainerDataV$/i.test(k) && Array.isArray((json as Record<string, unknown>)[k])) {
-      rows = (json as Record<string, unknown>)[k] as unknown[][];
-      break;
-    }
+  const json = extractGemmaDataset(body) ?? {};
+  const casosRaw = (json.GridContainerDataV as unknown[][] | undefined) ?? [];
+  const cursarRaw = (json.GridcursarContainerDataV as unknown[][] | undefined) ?? [];
+  const validRaw = (json.GridvalContainerDataV as unknown[][] | undefined) ?? [];
+
+  const casos = casosRaw.map(mapCasoAbierto);
+  const cursar = cursarRaw.map(mapGestion);
+  const validar = validRaw.map(mapGestion);
+
+  interface Acc {
+    vendedor: string;
+    abiertos: number;
+    cursar: number;
+    validar: number;
+    monto_total: number;
+    dias_acum: number;
+    dias_count: number;
   }
-  return { ok: true, estadisticas: rows.map(mapEstadistica) };
+  const map = new Map<string, Acc>();
+  const ensure = (v: string) => {
+    let acc = map.get(v);
+    if (!acc) {
+      acc = { vendedor: v, abiertos: 0, cursar: 0, validar: 0, monto_total: 0, dias_acum: 0, dias_count: 0 };
+      map.set(v, acc);
+    }
+    return acc;
+  };
+  for (const c of casos) {
+    const a = ensure(String(c.vendedor || "Sin asignar"));
+    a.abiertos += 1;
+    a.monto_total += Number(c.precio || 0);
+    a.dias_acum += Number(c.dias || 0);
+    a.dias_count += 1;
+  }
+  for (const c of cursar) {
+    ensure(String(c.vendedor || "Sin asignar")).cursar += 1;
+  }
+  for (const c of validar) {
+    ensure(String(c.vendedor || "Sin asignar")).validar += 1;
+  }
+
+  const estadisticas = Array.from(map.values())
+    .map((a) => ({
+      vendedor: a.vendedor,
+      abiertos: a.abiertos,
+      cursar: a.cursar,
+      validar: a.validar,
+      monto_total: a.monto_total,
+      monto_promedio: a.abiertos > 0 ? Math.round(a.monto_total / a.abiertos) : 0,
+      dias_promedio: a.dias_count > 0 ? Number((a.dias_acum / a.dias_count).toFixed(1)) : 0,
+    }))
+    .sort((a, b) => b.abiertos - a.abiertos);
+
+  return { ok: true, estadisticas };
 }
 
 async function actionIngresadosRango(params: Record<string, string>) {
@@ -430,7 +573,7 @@ async function actionIngresadosRango(params: Record<string, string>) {
   const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
   if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
-  const json = extractGenexusJson(body) ?? {};
+  const json = extractGemmaDataset(body) ?? {};
   const casosRaw = (json.GridContainerDataV as unknown[][] | undefined) ?? [];
   const casos = casosRaw.map(mapCasoAbierto);
 

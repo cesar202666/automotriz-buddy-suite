@@ -48,7 +48,6 @@ import {
   GEMMA_VENDEDORES,
   GEMMA_SUCURSALES,
   formatCLP,
-  formatPct,
   toGemmaDate,
   type DashboardResponse,
   type EstadisticaVendedor,
@@ -385,25 +384,25 @@ export default function Global() {
               <thead>
                 <tr style={{ background: "hsl(var(--muted))" }}>
                   <th className="px-3 py-2 text-left text-xs font-semibold">Vendedor</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Solicitudes</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Aprobadas</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">%Aprob.</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">Cursadas</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">%Cierre</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold">%Eficiencia</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Abiertos</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Por cursar</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Por validar</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Monto total</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Monto promedio</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Días promedio</th>
                 </tr>
               </thead>
               <tbody>
                 {estadisticas.map((e, i) => (
                   <tr key={`${e.vendedor}-${i}`} className="border-t" style={{ borderColor: "hsl(var(--border))" }}>
                     <td className="px-3 py-2 text-xs font-medium">{e.vendedor}</td>
-                    <td className="px-3 py-2 text-xs text-right">{e.solicitudes}</td>
-                    <td className="px-3 py-2 text-xs text-right">{e.aprobadas}</td>
-                    <td className="px-3 py-2 text-xs text-right">{formatPct(e.pct_aprobacion)}</td>
-                    <td className="px-3 py-2 text-xs text-right">{e.cursadas}</td>
-                    <td className="px-3 py-2 text-xs text-right">{formatPct(e.pct_cierre)}</td>
-                    <td className="px-3 py-2 text-xs text-right font-semibold" style={{ color: e.pct_eficiencia >= 50 ? "hsl(142,71%,45%)" : "hsl(0,84%,60%)" }}>
-                      {formatPct(e.pct_eficiencia)}
+                    <td className="px-3 py-2 text-xs text-right">{e.abiertos}</td>
+                    <td className="px-3 py-2 text-xs text-right">{e.cursar}</td>
+                    <td className="px-3 py-2 text-xs text-right">{e.validar}</td>
+                    <td className="px-3 py-2 text-xs text-right">{formatCLP(e.monto_total)}</td>
+                    <td className="px-3 py-2 text-xs text-right">{formatCLP(e.monto_promedio)}</td>
+                    <td className="px-3 py-2 text-xs text-right font-semibold" style={{ color: e.dias_promedio <= 5 ? "hsl(142,71%,45%)" : e.dias_promedio <= 15 ? "hsl(38,92%,50%)" : "hsl(0,84%,60%)" }}>
+                      {e.dias_promedio}
                     </td>
                   </tr>
                 ))}
