@@ -102,6 +102,18 @@ export interface HealthResponse {
   status?: number;
   cookies_set?: boolean;
   reason?: string;
+  updated_at?: string;
+  updated_by?: string;
+  last_ping_at?: string;
+  last_ping_ok?: boolean;
+  last_ping_status?: number;
+  notes?: string;
+}
+
+export interface SetCookiesResponse {
+  ok: boolean;
+  error?: string;
+  validation?: { ok: boolean; status?: number; sessionExpired?: boolean };
 }
 
 // ── Vendedores conocidos en Gemma (con RUT) ──────────────────────
@@ -136,6 +148,18 @@ async function call<T>(
 
 export function checkGemmaHealth(): Promise<HealthResponse> {
   return call<HealthResponse>("health");
+}
+
+/** Guarda cookies frescas (action set_cookies). El edge function valida con un keepalive inmediato. */
+export async function saveGemmaCookies(
+  cookies: string,
+  updatedBy = "",
+): Promise<SetCookiesResponse> {
+  const { data, error } = await supabase.functions.invoke("gemma-proxy", {
+    body: { action: "set_cookies", cookies, updated_by: updatedBy },
+  });
+  if (error) return { ok: false, error: error.message || String(error) };
+  return data as SetCookiesResponse;
 }
 
 export function fetchGemmaDashboard(

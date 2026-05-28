@@ -1,31 +1,35 @@
 /**
  * gemma-proxy — Proxy hacia Gemma.cl (CRM automotriz GeneXus + ASP.NET WebForms)
  *
- * Auth: Gemma es una SPA GeneXus que construye GXState con JS del cliente —
- * el login programático no funciona sin un browser headless. Por eso usamos
- * **inyección manual de cookies**:
+ * Estrategia "nunca expira", misma logica que aplicamos en autored-proxy:
  *
- *   1. El usuario loguea en gemma.cl desde Chrome.
- *   2. Abre DevTools → Application → Cookies → www.gemma.cl
- *   3. Copia los valores de GX_SESSION_ID, ASP.NET_SessionId, GX_CLIENT_ID
- *   4. Los guarda en el secret GEMMA_COOKIES con formato:
- *        "GX_SESSION_ID=xxx; ASP.NET_SessionId=yyy; GX_CLIENT_ID=zzz"
- *
- * Cuando la sesión expira, la página Global avisa "sesión expirada" con el
- * link a /configuracion para actualizar el secret.
- *
- * Secrets necesarios:
- *   - GEMMA_COOKIES: cookie string (ver arriba)
- *   - GEMMA_DISTRIBUIDOR_FILTER: id distribuidor de filtro (default 647)
+ *   1. Las cookies viven en la tabla public.gemma_session (singleton id=1).
+ *   2. Cada request del usuario:
+ *      - Lee cookies de la BD
+ *      - Envia a Gemma
+ *      - Si Gemma responde con Set-Cookie, MERGEAMOS y guardamos de vuelta
+ *        (Gemma renueva la session a cada hit valido)
+ *   3. Un cron de Supabase (pg_cron) llama action=keepalive cada 5 min
+ *      para hacer un GET ligero a home.aspx. Esto extiende el timeout
+ *      por inactividad → la session NUNCA expira mientras el usuario y/o
+ *      el server hagan ping antes de 30 min.
+ *   4. Cuando finalmente expira (server-side: solo si el cron muere o
+ *      Gemma invalida la sesion manualmente), marcamos expired=TRUE y
+ *      la UI muestra el form para pegar cookies frescas — esto deberia
+ *      pasar muy rara vez (medido en semanas o meses).
  *
  * Acciones (POST con { action, params }):
  *   - "dashboard"        → estados + casos abiertos + cursar + validar
  *   - "estadisticas"     → eficiencia por vendedor
- *   - "ingresados_rango" → conteo por día para charts semanal/mensual
- *   - "health"           → verifica si las cookies actuales son válidas
+ *   - "ingresados_rango" → conteo por dia para charts
+ *   - "keepalive"        → ping ligero a home.aspx (lo llama el cron)
+ *   - "health"           → estado actual (NO toca Gemma, solo lee BD)
+ *   - "set_cookies"      → guarda cookies frescas (UI form)
+ *   - "raw"              → debug: POST arbitrario a un path
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GEMMA_BASE = "https://www.gemma.cl/gemma";
 
@@ -36,30 +40,46 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-interface GemmaRequest {
-  action: "dashboard" | "estadisticas" | "ingresados_rango" | "health" | "raw";
-  params?: Record<string, string>;
-  /** Para action=raw: path relativo al endpoint Gemma (ej "/home.aspx") */
-  path?: string;
-}
-
-/** Devuelve las cookies guardadas en el secret GEMMA_COOKIES, o "" si no está configurado. */
-function getStoredCookies(): string {
-  const raw = (Deno.env.get("GEMMA_COOKIES") ?? "").trim();
-  if (!raw) return "";
-  // Si el usuario pega varios formatos diferentes, normalizamos a "name=value; name=value"
-  return raw
-    .split(/[;\n]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.includes("="))
-    .join("; ");
-}
-
 const SESSION_EXPIRED_MARKERS = /seclogin\.aspx|vUSUARIO|vCLAVE|notauthorized/i;
 
-// ── Helpers ────────────────────────────────────────────────────────
+interface GemmaRequest {
+  action:
+    | "dashboard"
+    | "estadisticas"
+    | "ingresados_rango"
+    | "keepalive"
+    | "health"
+    | "set_cookies"
+    | "raw";
+  params?: Record<string, string>;
+  path?: string;
+  cookies?: string;
+  updated_by?: string;
+}
 
-/** Acumula Set-Cookie headers en un cookie string usable. */
+interface SessionRow {
+  id: number;
+  cookies: string;
+  updated_at: string;
+  updated_by: string | null;
+  last_ping_at: string | null;
+  last_ping_ok: boolean | null;
+  last_ping_status: number | null;
+  expired: boolean;
+  notes: string | null;
+}
+
+// ── Supabase client (service role para bypass RLS) ─────────────
+function getSupabase() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+}
+
+// ── Cookie helpers ────────────────────────────────────────────
+
+/** Acumula Set-Cookie headers en string normalizado. */
 function collectSetCookies(resp: Response): string[] {
   const out: string[] = [];
   for (const [k, v] of resp.headers.entries()) {
@@ -75,7 +95,7 @@ function collectSetCookies(resp: Response): string[] {
   return out;
 }
 
-/** Une un cookie string anterior con cookies nuevas (las nuevas pisan). */
+/** Une un cookie string anterior con Set-Cookie nuevos. */
 function mergeCookies(prev: string, fresh: string[]): string {
   const map = new Map<string, string>();
   for (const part of prev.split(";")) {
@@ -89,6 +109,7 @@ function mergeCookies(prev: string, fresh: string[]): string {
     if (i > 0) {
       const name = first.slice(0, i).trim();
       const value = first.slice(i + 1).trim();
+      // Solo conservamos las cookies de sesión Gemma
       if (/^(GX_SESSION_ID|ASP\.NET_SessionId|GX_CLIENT_ID|GX_AUTH_TOKEN)$/i.test(name)) {
         map.set(name, value);
       }
@@ -97,21 +118,77 @@ function mergeCookies(prev: string, fresh: string[]): string {
   return Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
-/**
- * POST a un endpoint de Gemma usando las cookies stored.
- * Si detecta sesión expirada, devuelve un error específico para que el
- * frontend pueda mostrar el mensaje "actualiza las cookies".
- */
+/** Normaliza un string de cookies pegado por el usuario. */
+function normalizePastedCookies(raw: string): string {
+  return raw
+    .split(/[;\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.includes("="))
+    .join("; ");
+}
+
+// ── BD: leer y escribir gemma_session ─────────────────────────
+
+async function loadSession(): Promise<SessionRow | null> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("gemma_session")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) {
+    console.error("[gemma-proxy] error leyendo gemma_session:", error.message);
+    return null;
+  }
+  return data as SessionRow | null;
+}
+
+async function persistCookies(
+  cookies: string,
+  meta: Partial<SessionRow> = {},
+): Promise<void> {
+  const sb = getSupabase();
+  const patch: Record<string, unknown> = {
+    cookies,
+    updated_at: new Date().toISOString(),
+    ...meta,
+  };
+  const { error } = await sb
+    .from("gemma_session")
+    .update(patch)
+    .eq("id", 1);
+  if (error) {
+    console.error("[gemma-proxy] error guardando cookies:", error.message);
+  }
+}
+
+async function markExpired(reason: string): Promise<void> {
+  const sb = getSupabase();
+  await sb
+    .from("gemma_session")
+    .update({
+      expired: true,
+      last_ping_at: new Date().toISOString(),
+      last_ping_ok: false,
+      notes: reason.slice(0, 500),
+    })
+    .eq("id", 1);
+}
+
+// ── Core: POST a Gemma con cookies + auto-persist ─────────────
+
 async function gemmaPost(
   path: string,
   formData: Record<string, string>,
 ): Promise<{ ok: boolean; body: string; status: number; sessionExpired?: boolean }> {
-  const cookies = getStoredCookies();
-  if (!cookies) {
+  const sess = await loadSession();
+  if (!sess || !sess.cookies || sess.expired) {
     return {
       ok: false,
-      body: "GEMMA_COOKIES no configurado. Debes pegar las cookies de gemma.cl en Configuración.",
       status: 401,
+      body: sess?.expired
+        ? "Sesión Gemma expirada. Pega cookies frescas en /global."
+        : "Sin cookies Gemma configuradas. Pega cookies en /global.",
       sessionExpired: true,
     };
   }
@@ -121,7 +198,6 @@ async function gemmaPost(
     vFILTERDISTRIBUIDORID: distribuidorFilter,
     ...formData,
   };
-
   const body = new URLSearchParams(merged).toString();
 
   const r = await fetch(`${GEMMA_BASE}${path}`, {
@@ -129,7 +205,7 @@ async function gemmaPost(
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json, text/javascript, */*; q=0.01",
-      Cookie: cookies,
+      Cookie: sess.cookies,
       Gsajaxrequest: "1",
       Origin: "https://www.gemma.cl",
       Referer: `${GEMMA_BASE}/`,
@@ -139,22 +215,47 @@ async function gemmaPost(
     redirect: "manual",
   });
 
-  let textBody = "";
-  try {
-    textBody = await r.text();
-  } catch { /* body vacío o error de stream — ok */ }
+  // (1) Capturar Set-Cookie y mergear → persistir si cambio algo
+  const fresh = collectSetCookies(r);
+  if (fresh.length > 0) {
+    const merged2 = mergeCookies(sess.cookies, fresh);
+    if (merged2 && merged2 !== sess.cookies) {
+      await persistCookies(merged2, {
+        last_ping_at: new Date().toISOString(),
+        last_ping_ok: true,
+        last_ping_status: r.status,
+      });
+      console.log(`[gemma-proxy] cookies renovadas via ${path}`);
+    } else {
+      // Aunque no cambio, marcar el ping como exitoso
+      await persistCookies(sess.cookies, {
+        last_ping_at: new Date().toISOString(),
+        last_ping_ok: true,
+        last_ping_status: r.status,
+      });
+    }
+  }
 
+  // (2) Leer body
+  let textBody = "";
+  try { textBody = await r.text(); } catch { /* */ }
+
+  // (3) Detectar expiración
   const location = r.headers.get("location") || "";
   const expiredByRedirect =
     (r.status === 302 || r.status === 301) &&
     SESSION_EXPIRED_MARKERS.test(location);
-  const expiredByBody = r.status === 200 && SESSION_EXPIRED_MARKERS.test(textBody.slice(0, 4000));
+  const expiredByBody = r.status === 200 &&
+    SESSION_EXPIRED_MARKERS.test(textBody.slice(0, 4000));
 
   if (expiredByRedirect || expiredByBody) {
+    await markExpired(
+      expiredByRedirect ? `redirect a ${location.slice(0, 100)}` : "body contiene login",
+    );
     return {
       ok: false,
-      body: "Sesión Gemma expirada. Actualiza las cookies en Configuración → Gemma.",
       status: 401,
+      body: "Sesión Gemma expirada. Pega cookies frescas en /global.",
       sessionExpired: true,
     };
   }
@@ -166,51 +267,13 @@ async function gemmaPost(
   };
 }
 
-/** Verifica si las cookies actuales son válidas haciendo una request liviana. */
-async function actionHealth() {
-  const cookies = getStoredCookies();
-  if (!cookies) {
-    return { ok: false, sessionExpired: true, reason: "GEMMA_COOKIES vacío" };
-  }
-  const r = await fetch(`${GEMMA_BASE}/home.aspx`, {
-    method: "GET",
-    headers: {
-      Accept: "text/html,*/*",
-      Cookie: cookies,
-      "User-Agent": "Mozilla/5.0 (Egana-Automotriz-ERP/1.0)",
-    },
-    redirect: "manual",
-  });
-  const location = r.headers.get("location") || "";
-  const text = (await r.text().catch(() => "")).slice(0, 2000);
-  const expired = SESSION_EXPIRED_MARKERS.test(location) ||
-                  SESSION_EXPIRED_MARKERS.test(text) ||
-                  r.status >= 400;
-  return {
-    ok: !expired,
-    sessionExpired: expired,
-    status: r.status,
-    location,
-    cookies_set: cookies.length > 0,
-  };
-}
+// ── Parsers GeneXus → JSON limpio ─────────────────────────────
 
-// ── Parsers GeneXus → JSON limpio ─────────────────────────────────
-
-/**
- * Intenta extraer un objeto JSON desde el body GeneXus que suele venir como:
- *   gx.fx.b.exec(...)  o  gx.ajax.processResponse({...})
- * y a veces concatenado con otro contenido. Buscamos el primer { ... } válido.
- */
 function extractGenexusJson(raw: string): Record<string, unknown> | null {
-  // Intento 1: el body ya es JSON puro
   const trimmed = raw.trim();
   if (trimmed.startsWith("{")) {
-    try {
-      return JSON.parse(trimmed);
-    } catch { /* try next */ }
+    try { return JSON.parse(trimmed); } catch { /* */ }
   }
-  // Intento 2: buscar el primer "{" balanceado
   const start = raw.indexOf("{");
   if (start < 0) return null;
   let depth = 0;
@@ -230,16 +293,13 @@ function extractGenexusJson(raw: string): Record<string, unknown> | null {
       depth--;
       if (depth === 0) {
         const candidate = raw.slice(start, i + 1);
-        try {
-          return JSON.parse(candidate);
-        } catch { /* keep scanning */ }
+        try { return JSON.parse(candidate); } catch { /* keep scanning */ }
       }
     }
   }
   return null;
 }
 
-/** Mapea un row de GridContainerDataV (casos abiertos) a objeto. */
 function mapCasoAbierto(row: unknown[]): Record<string, unknown> {
   return {
     codigo: row[1] ?? "",
@@ -264,7 +324,6 @@ function mapCasoAbierto(row: unknown[]): Record<string, unknown> {
   };
 }
 
-/** Mapea un row de Cursadas/Validados a objeto. */
 function mapGestion(row: unknown[]): Record<string, unknown> {
   return {
     simulacion_id: row[0] ?? "",
@@ -284,7 +343,6 @@ function mapGestion(row: unknown[]): Record<string, unknown> {
   };
 }
 
-/** Mapea un row de estadísticas por vendedor (consultaretenidos). */
 function mapEstadistica(row: unknown[]): Record<string, unknown> {
   return {
     vendedor: row[0] ?? "",
@@ -297,7 +355,7 @@ function mapEstadistica(row: unknown[]): Record<string, unknown> {
   };
 }
 
-// ── Acciones principales ──────────────────────────────────────────
+// ── Acciones ───────────────────────────────────────────────────
 
 async function actionDashboard(params: Record<string, string>) {
   const formData: Record<string, string> = {
@@ -311,11 +369,7 @@ async function actionDashboard(params: Record<string, string>) {
   if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
   const json = extractGenexusJson(body) ?? {};
-
-  // Estadísticas laterales
   const estados = (json.MPW0046vSDTESTADOS as Array<Record<string, unknown>> | undefined) ?? [];
-
-  // Grids
   const casosRaw = (json.GridContainerDataV as unknown[][] | undefined) ?? [];
   const cursarRaw = (json.GridcursarContainerDataV as unknown[][] | undefined) ?? [];
   const validRaw = (json.GridvalContainerDataV as unknown[][] | undefined) ?? [];
@@ -351,8 +405,6 @@ async function actionEstadisticas(params: Record<string, string>) {
   if (!ok) return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
 
   const json = extractGenexusJson(body) ?? {};
-  // Buscar la grid principal — el nombre puede variar; aceptamos cualquier
-  // propiedad cuyo nombre matchee Grid.*ContainerDataV
   let rows: unknown[][] = [];
   for (const k of Object.keys(json)) {
     if (/Grid.*ContainerDataV$/i.test(k) && Array.isArray((json as Record<string, unknown>)[k])) {
@@ -360,19 +412,12 @@ async function actionEstadisticas(params: Record<string, string>) {
       break;
     }
   }
-  return {
-    ok: true,
-    estadisticas: rows.map(mapEstadistica),
-  };
+  return { ok: true, estadisticas: rows.map(mapEstadistica) };
 }
 
-/**
- * Ingresados entre dos fechas. Llama a home.aspx con vFILTERFECHADESDE/HASTA
- * y devuelve el conteo de casos por día para construir charts semanal/mensual.
- */
 async function actionIngresadosRango(params: Record<string, string>) {
-  const desde = params.desde; // ej "21/05/2026"
-  const hasta = params.hasta; // ej "28/05/2026"
+  const desde = params.desde;
+  const hasta = params.hasta;
   if (!desde || !hasta) {
     return { ok: false, status: 400, error: "Faltan params desde/hasta (DD/MM/YYYY)" };
   }
@@ -389,10 +434,9 @@ async function actionIngresadosRango(params: Record<string, string>) {
   const casosRaw = (json.GridContainerDataV as unknown[][] | undefined) ?? [];
   const casos = casosRaw.map(mapCasoAbierto);
 
-  // Agrupar por fecha (DD/MM/YYYY)
   const byDay = new Map<string, number>();
   for (const c of casos) {
-    const f = String(c.fecha || "").split(" ")[0]; // "27/05/2026 20:01" → "27/05/2026"
+    const f = String(c.fecha || "").split(" ")[0];
     if (!f) continue;
     byDay.set(f, (byDay.get(f) || 0) + 1);
   }
@@ -404,16 +448,109 @@ async function actionIngresadosRango(params: Record<string, string>) {
       return new Date(yA, mA - 1, dA).getTime() - new Date(yB, mB - 1, dB).getTime();
     });
 
+  return { ok: true, desde, hasta, total: casos.length, serie };
+}
+
+/**
+ * keepalive — Hace un GET ligero a home.aspx para extender la session.
+ * Captura el Set-Cookie y persiste la actualizacion en BD.
+ * Llamado por cron pg_cron cada 5 minutos.
+ */
+async function actionKeepalive() {
+  const sess = await loadSession();
+  if (!sess || !sess.cookies) {
+    return { ok: false, reason: "no_cookies", sessionExpired: true };
+  }
+  if (sess.expired) {
+    return { ok: false, reason: "marked_expired", sessionExpired: true };
+  }
+
+  const r = await fetch(`${GEMMA_BASE}/home.aspx`, {
+    method: "GET",
+    headers: {
+      Accept: "text/html,*/*",
+      Cookie: sess.cookies,
+      Referer: `${GEMMA_BASE}/`,
+      "User-Agent": "Mozilla/5.0 (Egana-Automotriz-ERP/1.0)",
+    },
+    redirect: "manual",
+  });
+
+  const fresh = collectSetCookies(r);
+  const location = r.headers.get("location") || "";
+  const text = (await r.text().catch(() => "")).slice(0, 2000);
+
+  const expired =
+    SESSION_EXPIRED_MARKERS.test(location) ||
+    SESSION_EXPIRED_MARKERS.test(text) ||
+    r.status >= 400;
+
+  if (expired) {
+    await markExpired(
+      `keepalive falló: status=${r.status} loc=${location.slice(0, 80)}`,
+    );
+    return { ok: false, status: r.status, sessionExpired: true, location };
+  }
+
+  // OK: persist cookies + last_ping_at
+  const merged = fresh.length > 0 ? mergeCookies(sess.cookies, fresh) : sess.cookies;
+  await persistCookies(merged, {
+    last_ping_at: new Date().toISOString(),
+    last_ping_ok: true,
+    last_ping_status: r.status,
+    expired: false,
+  });
   return {
     ok: true,
-    desde,
-    hasta,
-    total: casos.length,
-    serie,
+    status: r.status,
+    cookies_renewed: fresh.length > 0,
   };
 }
 
-// ── Handler principal ─────────────────────────────────────────────
+/** health — Estado actual SIN tocar Gemma (rápido, no consume sesión). */
+async function actionHealth() {
+  const sess = await loadSession();
+  if (!sess || !sess.cookies) {
+    return { ok: false, sessionExpired: true, reason: "no_cookies", cookies_set: false };
+  }
+  return {
+    ok: !sess.expired,
+    sessionExpired: sess.expired,
+    cookies_set: true,
+    updated_at: sess.updated_at,
+    updated_by: sess.updated_by,
+    last_ping_at: sess.last_ping_at,
+    last_ping_ok: sess.last_ping_ok,
+    last_ping_status: sess.last_ping_status,
+    notes: sess.notes,
+  };
+}
+
+/** set_cookies — UI form: guarda cookies nuevas y resetea expired. */
+async function actionSetCookies(req: GemmaRequest) {
+  const raw = (req.cookies ?? "").trim();
+  if (!raw) return { ok: false, error: "Cookies vacías" };
+  const normalized = normalizePastedCookies(raw);
+  if (!normalized.includes("GX_SESSION_ID") && !normalized.includes("ASP.NET_SessionId")) {
+    return {
+      ok: false,
+      error: "Faltan GX_SESSION_ID y/o ASP.NET_SessionId. Revisa que copiaste las cookies correctas.",
+    };
+  }
+  await persistCookies(normalized, {
+    updated_by: req.updated_by ?? "manual",
+    expired: false,
+    last_ping_at: null,
+    last_ping_ok: null,
+    last_ping_status: null,
+    notes: null,
+  });
+  // Validar inmediato con un keepalive
+  const validation = await actionKeepalive();
+  return { ok: validation.ok, validation };
+}
+
+// ── Handler principal ─────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -427,7 +564,7 @@ serve(async (req) => {
     } else {
       const url = new URL(req.url);
       reqBody = {
-        action: (url.searchParams.get("action") as GemmaRequest["action"]) ?? "dashboard",
+        action: (url.searchParams.get("action") as GemmaRequest["action"]) ?? "health",
         params: Object.fromEntries(url.searchParams.entries()),
       };
     }
@@ -435,18 +572,12 @@ serve(async (req) => {
     const { action, params = {} } = reqBody;
     let result: unknown;
     switch (action) {
-      case "health":
-        result = await actionHealth();
-        break;
-      case "dashboard":
-        result = await actionDashboard(params);
-        break;
-      case "estadisticas":
-        result = await actionEstadisticas(params);
-        break;
-      case "ingresados_rango":
-        result = await actionIngresadosRango(params);
-        break;
+      case "health":         result = await actionHealth(); break;
+      case "keepalive":      result = await actionKeepalive(); break;
+      case "set_cookies":    result = await actionSetCookies(reqBody); break;
+      case "dashboard":      result = await actionDashboard(params); break;
+      case "estadisticas":   result = await actionEstadisticas(params); break;
+      case "ingresados_rango": result = await actionIngresadosRango(params); break;
       case "raw": {
         const { ok, body, status } = await gemmaPost(reqBody.path ?? "/home.aspx", params);
         result = { ok, status, body };

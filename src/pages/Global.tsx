@@ -44,6 +44,7 @@ import {
   fetchGemmaDashboard,
   fetchGemmaEstadisticas,
   fetchGemmaIngresadosRango,
+  checkGemmaHealth,
   GEMMA_VENDEDORES,
   GEMMA_SUCURSALES,
   formatCLP,
@@ -52,6 +53,7 @@ import {
   type DashboardResponse,
   type EstadisticaVendedor,
   type CasoAbierto,
+  type HealthResponse,
 } from "@/lib/gemmaService";
 import { GemmaSessionExpiredBanner } from "@/components/GemmaSessionExpiredBanner";
 import { useApp } from "@/context/AppContext";
@@ -109,6 +111,7 @@ export default function Global() {
   const [serieSemanal, setSerieSemanal] = useState<{ fecha: string; ingresados: number }[]>([]);
   const [serieMensual, setSerieMensual] = useState<{ fecha: string; ingresados: number }[]>([]);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
 
   // ── Cargar todo en paralelo ────────────────────────────────────
   useEffect(() => {
@@ -124,6 +127,16 @@ export default function Global() {
       haceTreinta.setDate(hoy.getDate() - 29);
 
       try {
+        // Health primero — si no hay cookies, mostramos banner sin gastar requests
+        const h = await checkGemmaHealth();
+        if (cancelled) return;
+        setHealth(h);
+        if (h.sessionExpired) {
+          setSessionExpired(true);
+          setLoading(false);
+          return;
+        }
+
         const [dash, ests, semana, mes] = await Promise.all([
           fetchGemmaDashboard(vendedorRut, sucursalId),
           fetchGemmaEstadisticas(vendedorRut),
@@ -227,7 +240,22 @@ export default function Global() {
       </div>
 
       {/* Session expired banner: prioridad sobre error genérico */}
-      {sessionExpired && !loading && <GemmaSessionExpiredBanner />}
+      {sessionExpired && !loading && (
+        <GemmaSessionExpiredBanner onSaved={() => setRefreshKey((k) => k + 1)} />
+      )}
+
+      {/* Status footer cuando la sesión SÍ está activa */}
+      {!sessionExpired && health?.cookies_set && health.last_ping_at && (
+        <div className="flex items-center gap-2 text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: health.last_ping_ok ? "hsl(142,71%,45%)" : "hsl(0,84%,60%)" }} />
+            Sesión Gemma activa
+          </span>
+          <span>·</span>
+          <span>último ping: {new Date(health.last_ping_at).toLocaleString("es-CL")}</span>
+          {health.updated_by && <><span>·</span><span>configurado por: {health.updated_by}</span></>}
+        </div>
+      )}
 
       {/* Error banner genérico */}
       {errorMsg && !loading && !sessionExpired && (
