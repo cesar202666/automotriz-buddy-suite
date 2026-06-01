@@ -42,6 +42,7 @@ import {
 import {
   fetchGemmaDashboard,
   fetchGemmaMetricasPeriodo,
+  fetchGemmaResumenEmpresas,
   checkGemmaHealth,
   GEMMA_VENDEDORES,
   GEMMA_SUCURSALES,
@@ -52,6 +53,7 @@ import {
   type MetricasPeriodoResponse,
   type CasoAbierto,
   type HealthResponse,
+  type EmpresaResumen,
 } from "@/lib/gemmaService";
 import { GemmaSessionExpiredBanner } from "@/components/GemmaSessionExpiredBanner";
 import { useApp } from "@/context/AppContext";
@@ -143,7 +145,8 @@ export default function Global() {
 
   // ── Filtros ───────────────────────────────────────────────────
   const [vendedorRut, setVendedorRut] = useState("");
-  const [sucursalId, setSucursalId] = useState("0");
+  // Default: Egaña 931 (sucursal 4). El detalle de la pagina se enfoca en Egaña.
+  const [sucursalId, setSucursalId] = useState("4");
   // Default: últimos 7 días incluyendo hoy
   const hoyInicial = useMemo(() => new Date(), []);
   const haceSeisInicial = useMemo(() => {
@@ -163,6 +166,7 @@ export default function Global() {
   const [metricas, setMetricas] = useState<MetricasPeriodoResponse | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [empresasExternas, setEmpresasExternas] = useState<EmpresaResumen[]>([]);
 
   // ── Aplicar preset ───────────────────────────────────────────
   const aplicarPreset = (dias: number) => {
@@ -189,19 +193,21 @@ export default function Global() {
           return;
         }
 
-        const [dash, met] = await Promise.all([
+        const [dash, met, resEmp] = await Promise.all([
           fetchGemmaDashboard(vendedorRut, sucursalId),
           fetchGemmaMetricasPeriodo(desde, hasta, vendedorRut, sucursalId),
+          fetchGemmaResumenEmpresas(),
         ]);
         if (cancelled) return;
 
-        const anyExpired = !!(dash.sessionExpired || met.sessionExpired);
+        const anyExpired = !!(dash.sessionExpired || met.sessionExpired || resEmp.sessionExpired);
         setSessionExpired(anyExpired);
         if (!dash.ok && !anyExpired) {
           setErrorMsg(dash.error || "No se pudo cargar Gemma");
         }
         setDashboard(dash);
         setMetricas(met);
+        setEmpresasExternas(resEmp.empresas || []);
       } catch (e) {
         if (!cancelled) setErrorMsg(e instanceof Error ? e.message : String(e));
       } finally {
@@ -263,9 +269,9 @@ export default function Global() {
     <div className="space-y-6">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Global · Gemma.cl</h1>
+          <h1 className="page-title">Global · Egaña Automotriz</h1>
           <p className="page-subtitle">
-            Distribuidor 647 — COMERCIAL REY-AGUIRRE SPA · Periodo: {desde} → {hasta}
+            COMERCIAL REY-AGUIRRE SPA · Sucursal EGAÑA 931 · Periodo: {desde} → {hasta}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -534,6 +540,54 @@ export default function Global() {
           </div>
         )}
       </div>
+
+      {/* Resumen de otras empresas externas — solo cuenta total cursar/validar */}
+      {empresasExternas.length > 0 && (
+        <div className="border rounded-xl p-5" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <Building2 size={16} style={{ color: "hsl(38,92%,50%)" }} />
+              Otras empresas — resumen
+            </h3>
+            <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+              {empresasExternas.length} empresas externas visibles para tu cuenta
+            </span>
+          </div>
+          <p className="text-[11px] mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>
+            Volumen actual de créditos por cursar/validar en otras empresas del distribuidor.
+            Detalle completo solo de Egaña arriba.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: "hsl(var(--muted))" }}>
+                  <th className="px-3 py-2 text-left text-xs font-semibold">ID</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold">Empresa</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Por cursar</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Por validar</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Total activos</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Monto total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {empresasExternas.map((e) => (
+                  <tr key={e.distribuidor_id} className="border-t" style={{ borderColor: "hsl(var(--border))" }}>
+                    <td className="px-3 py-2 text-[11px] font-mono" style={{ color: "hsl(var(--muted-foreground))" }}>{e.distribuidor_id}</td>
+                    <td className="px-3 py-2 text-xs font-medium">{e.distribuidor_nombre}</td>
+                    <td className="px-3 py-2 text-xs text-right">{e.cursar}</td>
+                    <td className="px-3 py-2 text-xs text-right">{e.validar}</td>
+                    <td className="px-3 py-2 text-xs text-right font-semibold">{e.total}</td>
+                    <td className="px-3 py-2 text-xs text-right">{formatCLP(e.monto_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] mt-3" style={{ color: "hsl(var(--muted-foreground))" }}>
+            ⓘ Gemma no expone aprobados/rechazados desglosados por empresa — el sidebar de su sistema mezcla todas. Solo podemos contar lo activo (cursar/validar) por distribuidor.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

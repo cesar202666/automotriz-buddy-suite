@@ -54,11 +54,22 @@ export interface PriceMetric {
   new_range?: number;
 }
 
+export interface ListPriceEntry {
+  vehicle_year: number;
+  price: number;
+  discounted_price?: number;
+  source?: string;
+  source_link?: string;
+  version_id: number;
+  version_name: string;
+  vehicle_version?: string;
+}
+
 export interface PriceSearchResponse {
   vpd: unknown[];
   wvs: unknown[];
   sp: unknown[];
-  list_prices: unknown[];
+  list_prices: ListPriceEntry[];
   list_taxations: TaxationEntry[];
   pm_retake: PriceMetric;
   pm_publication: PriceMetric;

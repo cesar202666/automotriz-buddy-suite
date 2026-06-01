@@ -90,13 +90,31 @@ export default function AutoRed() {
   }, [selectedBrandId, brands]);
 
   // ── Versiones detectadas desde la última respuesta ──────────────
+  // Priorizamos list_prices (tiene version_id real numerico que AutoRed acepta)
+  // Si no hay list_prices, caemos a list_taxations (id sintetico)
   const availableVersions = useMemo(() => {
-    if (!result?.list_taxations) return [];
-    return result.list_taxations.map((t) => ({
-      id: `${t.year}-${t.version_name}`,
-      label: `${t.version_name} (${t.year})`,
-      year: t.year,
-    }));
+    const out: { id: string; label: string }[] = [];
+    const seen = new Set<string>();
+    // 1) list_prices: tiene version_id REAL — preferido
+    if (result?.list_prices) {
+      for (const lp of result.list_prices) {
+        const id = String(lp.version_id ?? "");
+        const label = lp.version_name || lp.vehicle_version || "";
+        if (!id || !label || seen.has(id)) continue;
+        seen.add(id);
+        out.push({ id, label });
+      }
+    }
+    // 2) list_taxations: solo version_name → id sintetico
+    if (out.length === 0 && result?.list_taxations) {
+      for (const t of result.list_taxations) {
+        const id = `tax:${t.year}-${t.version_name}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push({ id, label: `${t.version_name} (SII ${t.year})` });
+      }
+    }
+    return out;
   }, [result]);
 
   // ── Búsqueda por patente en inventario local ────────────────────
@@ -202,11 +220,13 @@ export default function AutoRed() {
     setSearchError("");
     setResult(null);
 
+    // Solo enviar version_id si es un ID real numerico (no los sinteticos tax:*)
+    const validVersionId = versionId && !versionId.startsWith("tax:") ? Number(versionId) : "";
     const params: SearchParams = {
       license_plate: normalizePlate(licensePlate),
       brand_id: Number(selectedBrandId),
       model_id: Number(selectedModelId),
-      version_id: versionId || "",
+      version_id: validVersionId,
       region_id: regionId,
       year,
       km: Math.max(0, km),
@@ -532,22 +552,35 @@ export default function AutoRed() {
             </select>
           </div>
 
-          {availableVersions.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium mb-1">Versión (opcional)</label>
-              <select
-                value={versionId}
-                onChange={(e) => setVersionId(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                style={{ borderColor: "hsl(var(--border))" }}
-              >
-                <option value="">Todas las versiones</option>
-                {availableVersions.map((v) => (
-                  <option key={v.id} value={v.id}>{v.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              Versión {availableVersions.length > 0 && (
+                <span className="font-normal" style={{ color: "hsl(var(--muted-foreground))" }}>({availableVersions.length})</span>
+              )}
+            </label>
+            <select
+              value={versionId}
+              onChange={(e) => setVersionId(e.target.value)}
+              disabled={availableVersions.length === 0}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background disabled:opacity-60"
+              style={{ borderColor: "hsl(var(--border))" }}
+              title={availableVersions.length === 0 ? "Primero consulta sin versión para ver las disponibles" : ""}
+            >
+              <option value="">
+                {availableVersions.length === 0
+                  ? "Consulta primero para ver versiones"
+                  : "Todas las versiones"}
+              </option>
+              {availableVersions.map((v) => (
+                <option key={v.id} value={v.id}>{v.label}</option>
+              ))}
+            </select>
+            {availableVersions.length > 0 && versionId && (
+              <p className="text-[10px] mt-1" style={{ color: "hsl(142,71%,45%)" }}>
+                ✓ Click "Consultar precios" para refinar con esta versión
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">

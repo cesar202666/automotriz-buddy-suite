@@ -48,6 +48,7 @@ interface GemmaRequest {
     | "estadisticas"
     | "ingresados_rango"
     | "metricas_periodo"
+    | "resumen_empresas"
     | "keepalive"
     | "health"
     | "set_cookies"
@@ -57,6 +58,22 @@ interface GemmaRequest {
   cookies?: string;
   updated_by?: string;
 }
+
+// Distribuidor de Egaña (sucursal 931). El resto = empresas externas
+// que ven en cursar/validar pero no son su empresa.
+const EGANA_DISTRIBUIDOR_ID = "647";
+const EGANA_SUCURSAL_ID = "4";
+
+// Mapping conocido de las 5 empresas externas que Nicol ve en cursar/validar.
+// Se actualiza cuando aparecen nuevos distribuidores en el resumen.
+const EMPRESAS_CONOCIDAS: Record<string, string> = {
+  "647": "COMERCIAL REY-AGUIRRE SPA",
+  "186": "AUTOMOTRIZ CARMONA Y CIA LTDA",
+  "465": "CAIQUEN FINANCE SPA",
+  "626": "AUTOMOTRIZ UBEDA SPA",
+  "688": "WILSON BURGOS GUTIERREZ COMPRAVENTA VEHICULOS SPA",
+  "891": "AUTOMOTORA PRO CARS SPA",
+};
 
 interface SessionRow {
   id: number;
@@ -436,7 +453,8 @@ function mapEstadistica(row: unknown[]): Record<string, unknown> {
 async function actionDashboard(params: Record<string, string>) {
   const formData: Record<string, string> = {
     vFILTERSECUSERRUT: params.vendedor_rut ?? "",
-    vFILTERSUCURSALID: params.sucursal_id ?? "0",
+    // Por defecto sucursal Egaña (4) — el filtro de sucursal SI funciona en Gemma
+    vFILTERSUCURSALID: params.sucursal_id ?? EGANA_SUCURSAL_ID,
     vFILTERSECUSERSECUSEREJECUTIVORUT: "",
     SIMULACIONESTADO_0001: "4",
     SIMULACIONESTADOCONSOLIDADO_0001: "2",
@@ -497,7 +515,7 @@ async function actionDashboard(params: Record<string, string>) {
 async function actionEstadisticas(params: Record<string, string>) {
   const formData: Record<string, string> = {
     vFILTERSECUSERRUT: params.vendedor_rut ?? "",
-    vFILTERSUCURSALID: params.sucursal_id ?? "0",
+    vFILTERSUCURSALID: params.sucursal_id ?? EGANA_SUCURSAL_ID,
     vFILTERSECUSERSECUSEREJECUTIVORUT: "",
   };
   const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
@@ -567,7 +585,7 @@ async function actionIngresadosRango(params: Record<string, string>) {
   }
   const formData: Record<string, string> = {
     vFILTERSECUSERRUT: params.vendedor_rut ?? "",
-    vFILTERSUCURSALID: params.sucursal_id ?? "0",
+    vFILTERSUCURSALID: params.sucursal_id ?? EGANA_SUCURSAL_ID,
     vFILTERFECHADESDE: desde,
     vFILTERFECHAHASTA: hasta,
   };
@@ -624,7 +642,7 @@ async function actionMetricasPeriodo(params: Record<string, string>) {
 
   const formData: Record<string, string> = {
     vFILTERSECUSERRUT: params.vendedor_rut ?? "",
-    vFILTERSUCURSALID: params.sucursal_id ?? "0",
+    vFILTERSUCURSALID: params.sucursal_id ?? EGANA_SUCURSAL_ID,
     vFILTERSECUSERSECUSEREJECUTIVORUT: "",
     vFILTERFECHADESDE: desde,
     vFILTERFECHAHASTA: hasta,
@@ -806,6 +824,106 @@ async function actionMetricasPeriodo(params: Record<string, string>) {
 }
 
 /**
+ * resumen_empresas — Para el panel "Otras empresas" en /global.
+ *
+ * Gemma muestra en cursar/validar casos de TODAS las empresas a las que el
+ * usuario tiene acceso (no solo la suya). Agrupamos por distribuidor_id y
+ * devolvemos contadores por empresa. Excluye 647 (Egaña) que ya tiene su
+ * propio detalle en la pagina.
+ *
+ * Devuelve: [{ distribuidor_id, distribuidor_nombre, cursar, validar, total }]
+ */
+async function actionResumenEmpresas() {
+  // Pull home.aspx SIN filtro de sucursal para capturar TODAS las empresas
+  const formData: Record<string, string> = {
+    vFILTERSECUSERRUT: "",
+    vFILTERSUCURSALID: "0",
+    vFILTERSECUSERSECUSEREJECUTIVORUT: "",
+  };
+  const { ok, body, status, sessionExpired } = await gemmaPost("/home.aspx", formData);
+  if (!ok) {
+    return { ok: false, status, sessionExpired: !!sessionExpired, error: body.slice(0, 300) };
+  }
+
+  const json = extractGemmaDataset(body);
+  const cursarRaw = (json.GridcursarContainerDataV as unknown[][] | undefined) ?? [];
+  const validarRaw = (json.GridvalContainerDataV as unknown[][] | undefined) ?? [];
+
+  // Map distribuidor_id → { nombre, cursar, validar, vendedores }
+  interface EmpresaAcc {
+    distribuidor_id: string;
+    distribuidor_nombre: string;
+    cursar: number;
+    validar: number;
+    vendedores: Set<string>;
+    monto_total: number;
+  }
+  const empresas = new Map<string, EmpresaAcc>();
+
+  const aggregate = (rows: unknown[][], tipo: "cursar" | "validar") => {
+    for (const row of rows) {
+      if (!row || row.length < 9) continue;
+      const did = String(row[5] ?? "");
+      const dname = String(row[6] ?? "") || EMPRESAS_CONOCIDAS[did] || `Empresa ${did}`;
+      const vendedor = String(row[8] ?? "").trim();
+      const saldo = parseClNumber(row[13]);
+      if (!did) continue;
+      let acc = empresas.get(did);
+      if (!acc) {
+        acc = {
+          distribuidor_id: did,
+          distribuidor_nombre: dname,
+          cursar: 0,
+          validar: 0,
+          vendedores: new Set(),
+          monto_total: 0,
+        };
+        empresas.set(did, acc);
+      }
+      if (tipo === "cursar") acc.cursar += 1;
+      else acc.validar += 1;
+      if (vendedor) acc.vendedores.add(vendedor);
+      acc.monto_total += saldo;
+    }
+  };
+  aggregate(cursarRaw, "cursar");
+  aggregate(validarRaw, "validar");
+
+  // Convertir a array, excluir Egaña (647) ya que tiene su detalle propio
+  const resumen = Array.from(empresas.values())
+    .filter((e) => e.distribuidor_id !== EGANA_DISTRIBUIDOR_ID)
+    .map((e) => ({
+      distribuidor_id: e.distribuidor_id,
+      distribuidor_nombre: e.distribuidor_nombre,
+      cursar: e.cursar,
+      validar: e.validar,
+      total: e.cursar + e.validar,
+      vendedores: Array.from(e.vendedores),
+      monto_total: e.monto_total,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  // Tambien devolvemos las conocidas que no aparecieron hoy (empresa sin actividad)
+  const conocidasAusentes = Object.entries(EMPRESAS_CONOCIDAS)
+    .filter(([id]) => id !== EGANA_DISTRIBUIDOR_ID && !empresas.has(id))
+    .map(([id, name]) => ({
+      distribuidor_id: id,
+      distribuidor_nombre: name,
+      cursar: 0,
+      validar: 0,
+      total: 0,
+      vendedores: [],
+      monto_total: 0,
+    }));
+
+  return {
+    ok: true,
+    egana_distribuidor_id: EGANA_DISTRIBUIDOR_ID,
+    empresas: [...resumen, ...conocidasAusentes],
+  };
+}
+
+/**
  * keepalive — Hace un GET ligero a home.aspx para extender la session.
  * Captura el Set-Cookie y persiste la actualizacion en BD.
  * Llamado por cron pg_cron cada 5 minutos.
@@ -933,6 +1051,7 @@ serve(async (req) => {
       case "estadisticas":   result = await actionEstadisticas(params); break;
       case "ingresados_rango": result = await actionIngresadosRango(params); break;
       case "metricas_periodo": result = await actionMetricasPeriodo(params); break;
+      case "resumen_empresas": result = await actionResumenEmpresas(); break;
       case "raw": {
         const { ok, body, status } = await gemmaPost(reqBody.path ?? "/home.aspx", params);
         result = { ok, status, body };

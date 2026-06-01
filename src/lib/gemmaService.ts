@@ -132,6 +132,24 @@ export interface MetricasPeriodoResponse {
   sessionExpired?: boolean;
 }
 
+export interface EmpresaResumen {
+  distribuidor_id: string;
+  distribuidor_nombre: string;
+  cursar: number;
+  validar: number;
+  total: number;
+  vendedores: string[];
+  monto_total: number;
+}
+
+export interface ResumenEmpresasResponse {
+  ok: boolean;
+  egana_distribuidor_id?: string;
+  empresas?: EmpresaResumen[];
+  error?: string;
+  sessionExpired?: boolean;
+}
+
 export interface HealthResponse {
   ok: boolean;
   sessionExpired?: boolean;
@@ -170,7 +188,7 @@ export const GEMMA_SUCURSALES = [
 // ── Llamadas ─────────────────────────────────────────────────────
 
 async function call<T>(
-  action: "dashboard" | "estadisticas" | "ingresados_rango" | "health",
+  action: "dashboard" | "estadisticas" | "ingresados_rango" | "health" | "metricas_periodo" | "resumen_empresas",
   params: Record<string, string> = {},
 ): Promise<T> {
   const { data, error } = await supabase.functions.invoke("gemma-proxy", {
@@ -184,6 +202,11 @@ async function call<T>(
 
 export function checkGemmaHealth(): Promise<HealthResponse> {
   return call<HealthResponse>("health");
+}
+
+/** Trae el resumen de empresas externas (todo lo que NO es Egaña 647). */
+export function fetchGemmaResumenEmpresas(): Promise<ResumenEmpresasResponse> {
+  return call<ResumenEmpresasResponse>("resumen_empresas");
 }
 
 /** Guarda cookies frescas (action set_cookies). El edge function valida con un keepalive inmediato. */
