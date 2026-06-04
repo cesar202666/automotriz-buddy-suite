@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Archive, Loader2 } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
+import JSZip from "jszip";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
@@ -101,9 +102,12 @@ export default function Vehiculos() {
   const [fotoSlots, setFotoSlots] = useState<FotoSlot[]>(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
   const [nuevoEquipamiento, setNuevoEquipamiento] = useState("");
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const multiUploadRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [batchUploading, setBatchUploading] = useState(false);
+  const [zipDownloading, setZipDownloading] = useState(false);
 
   // AI bg state
   const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
@@ -252,6 +256,71 @@ export default function Vehiculos() {
     const a = document.createElement("a"); a.href = dataUrl; a.download = label + ".jpg"; a.click();
   };
 
+  /**
+   * Subida masiva: el usuario selecciona N fotos a la vez. Las distribuimos
+   * en los slots VACÍOS empezando desde el primer slot libre. Si hay mas
+   * archivos que slots libres, los sobrantes se ignoran (con aviso).
+   */
+  const handleMultiFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setBatchUploading(true);
+    try {
+      // Slots vacios disponibles (en orden)
+      const emptyIndices = fotoSlots
+        .map((s, i) => (s.preview ? -1 : i))
+        .filter((i) => i >= 0);
+      if (emptyIndices.length === 0) {
+        alert("Todos los slots de fotos estan ocupados. Borra alguna para liberar espacio.");
+        return;
+      }
+      const usableFiles = files.slice(0, emptyIndices.length);
+      const ignored = files.length - usableFiles.length;
+
+      // Convertir cada file a dataURL en paralelo
+      const readers = usableFiles.map(
+        (file) =>
+          new Promise<{ file: File; dataUrl: string }>((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = (ev) => resolve({ file, dataUrl: (ev.target?.result as string) || "" });
+            r.onerror = () => reject(new Error("Error leyendo " + file.name));
+            r.readAsDataURL(file);
+          }),
+      );
+      const results = await Promise.all(readers);
+
+      // Capturar si el slot 0 estaba vacio antes — si si, auto-IA a la primera
+      const slot0EraVacio = !fotoSlots[0]?.preview;
+
+      // Distribuir resultados en los slots vacios
+      setFotoSlots((prev) =>
+        prev.map((s, i) => {
+          const matchPos = emptyIndices.indexOf(i);
+          if (matchPos < 0 || matchPos >= results.length) return s;
+          return { ...s, file: results[matchPos].file, preview: results[matchPos].dataUrl };
+        }),
+      );
+
+      // Auto-IA a la primera foto si el slot 0 estaba vacio
+      if (slot0EraVacio && emptyIndices[0] === 0 && results[0]) {
+        runAI(results[0].dataUrl, 0, bgPrompt);
+      }
+
+      if (ignored > 0) {
+        setTimeout(
+          () => alert(`Se cargaron ${usableFiles.length} fotos. ${ignored} fotos se ignoraron porque no hay mas slots disponibles.`),
+          200,
+        );
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBatchUploading(false);
+      // Reset input para que el mismo archivo se pueda volver a subir si user borra y reintenta
+      if (multiUploadRef.current) multiUploadRef.current.value = "";
+    }
+  };
+
   const fotosCount = fotoSlots.filter(s => s.preview).length;
   const toggleEquipExtra = (item: string) => {
     const list = form.equipamientoExtra || [];
@@ -267,10 +336,56 @@ export default function Vehiculos() {
   const TABS = ["general", "equipamiento", "datos_adicionales", "galeria"];
   const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería" };
 
-  const downloadAllFotos = () => {
-    const available = fotoSlots.filter(s => s.preview);
-    if (available.length === 0) return alert("No hay fotos cargadas.");
-    available.forEach(s => { downloadFoto(s.preview!, s.label); });
+  /**
+   * Descarga todas las fotos cargadas en UN solo archivo ZIP.
+   * Mucho mejor que disparar N descargas (el navegador bloquea las
+   * adicionales y los nombres se pierden).
+   */
+  const downloadAllFotos = async () => {
+    const available = fotoSlots.filter((s) => s.preview);
+    if (available.length === 0) {
+      alert("No hay fotos cargadas.");
+      return;
+    }
+    setZipDownloading(true);
+    try {
+      const zip = new JSZip();
+      // Sanitizar label para nombre de archivo (no slashes ni caracteres raros)
+      const safe = (s: string) => s.replace(/[^a-zA-Z0-9_\- ]/g, "_").trim() || "foto";
+      // Patente + marca + modelo como prefijo de carpeta interna del zip
+      const folio = (form.folio || "vehiculo").toString().replace(/[^a-zA-Z0-9]/g, "_");
+      const patente = (form.patente || "").toString().replace(/[^a-zA-Z0-9]/g, "");
+      const marca = (form.marca || "").toString();
+      const modelo = (form.modelo || "").toString();
+      const folder = [folio, patente, marca, modelo].filter(Boolean).join("_") || "vehiculo";
+
+      let idx = 1;
+      for (const slot of available) {
+        const dataUrl = slot.preview!;
+        // dataUrl shape: data:image/jpeg;base64,XXXX → extraer mime y base64
+        const m = /^data:(image\/[a-zA-Z0-9+.-]+);base64,(.*)$/.exec(dataUrl);
+        if (!m) continue;
+        const mime = m[1];
+        const ext = mime.split("/")[1].replace("jpeg", "jpg");
+        const data = m[2];
+        const filename = `${String(idx).padStart(2, "0")}_${safe(slot.label)}.${ext}`;
+        zip.file(`${folder}/${filename}`, data, { base64: true });
+        idx++;
+      }
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${folder}.zip`;
+      a.click();
+      // Limpieza
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      alert("Error generando ZIP: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setZipDownloading(false);
+    }
   };
 
   return (
@@ -479,21 +594,49 @@ export default function Vehiculos() {
 
               {tab === "galeria" && (
                 <div>
-                  <div className="flex items-center justify-between mb-3">
-                    {fotosCount > 0 && (
-                      <button onClick={downloadAllFotos}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs font-medium hover:bg-muted absolute right-6"
-                        style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}>
-                        <Download size={13} /> Descargar todas las fotos
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h3 className="text-sm font-bold">📷 Registro Fotográfico Requerido</h3>
-                      <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Haz clic en cada cuadrante para cargar la vista correspondiente.</p>
+                  {/* Header + acciones */}
+                  <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
+                    <div className="min-w-[200px]">
+                      <h3 className="text-sm font-bold">📷 Registro Fotográfico</h3>
+                      <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Haz clic en cada cuadrante o usa "Subir múltiples" para cargar varias a la vez.
+                      </p>
                     </div>
-                    <span className="text-xs font-medium px-3 py-1 rounded-full bg-muted">{fotosCount} / 9 fotos</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-medium px-3 py-1 rounded-full bg-muted">
+                        {fotosCount} / {FOTO_SLOTS.length} fotos
+                      </span>
+                      {/* Subir multiples */}
+                      <button
+                        onClick={() => multiUploadRef.current?.click()}
+                        disabled={batchUploading || fotosCount >= FOTO_SLOTS.length}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                        style={{ background: "hsl(var(--primary))" }}
+                        title={fotosCount >= FOTO_SLOTS.length ? "Todos los slots ocupados" : "Selecciona varias fotos a la vez"}
+                      >
+                        {batchUploading ? <Loader2 size={13} className="animate-spin" /> : <Images size={13} />}
+                        Subir múltiples
+                      </button>
+                      <input
+                        ref={multiUploadRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleMultiFotoChange}
+                      />
+                      {/* Descargar todas (ZIP) */}
+                      <button
+                        onClick={downloadAllFotos}
+                        disabled={zipDownloading || fotosCount === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
+                        style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
+                        title="Descarga todas las fotos en un solo archivo ZIP"
+                      >
+                        {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Archive size={13} />}
+                        Descargar todas (ZIP)
+                      </button>
+                    </div>
                   </div>
 
                   {/* ── AI Background panel ─────────────────────────────── */}
