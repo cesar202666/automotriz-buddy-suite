@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Archive, Loader2 } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2 } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
-import JSZip from "jszip";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
@@ -337,9 +336,12 @@ export default function Vehiculos() {
   const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería" };
 
   /**
-   * Descarga todas las fotos cargadas en UN solo archivo ZIP.
-   * Mucho mejor que disparar N descargas (el navegador bloquea las
-   * adicionales y los nombres se pierden).
+   * Descarga TODAS las fotos cargadas como archivos individuales (no ZIP).
+   * El navegador disparará una descarga por cada foto. Modern Chrome/Edge
+   * pide "Permitir descargas múltiples" la primera vez por sitio.
+   *
+   * Nombres con prefijo numerico (01_, 02_) + label + patente para no pisar
+   * archivos si descargas fotos de varios vehiculos en la misma carpeta.
    */
   const downloadAllFotos = async () => {
     const available = fotoSlots.filter((s) => s.preview);
@@ -349,40 +351,27 @@ export default function Vehiculos() {
     }
     setZipDownloading(true);
     try {
-      const zip = new JSZip();
-      // Sanitizar label para nombre de archivo (no slashes ni caracteres raros)
       const safe = (s: string) => s.replace(/[^a-zA-Z0-9_\- ]/g, "_").trim() || "foto";
-      // Patente + marca + modelo como prefijo de carpeta interna del zip
-      const folio = (form.folio || "vehiculo").toString().replace(/[^a-zA-Z0-9]/g, "_");
       const patente = (form.patente || "").toString().replace(/[^a-zA-Z0-9]/g, "");
-      const marca = (form.marca || "").toString();
-      const modelo = (form.modelo || "").toString();
-      const folder = [folio, patente, marca, modelo].filter(Boolean).join("_") || "vehiculo";
+      const marca = (form.marca || "").toString().replace(/[^a-zA-Z0-9]/g, "");
+      const prefix = [patente, marca].filter(Boolean).join("_") || "vehiculo";
 
+      // Pequeño delay entre descargas para que el browser las maneje bien
       let idx = 1;
       for (const slot of available) {
-        const dataUrl = slot.preview!;
-        // dataUrl shape: data:image/jpeg;base64,XXXX → extraer mime y base64
-        const m = /^data:(image\/[a-zA-Z0-9+.-]+);base64,(.*)$/.exec(dataUrl);
-        if (!m) continue;
-        const mime = m[1];
-        const ext = mime.split("/")[1].replace("jpeg", "jpg");
-        const data = m[2];
-        const filename = `${String(idx).padStart(2, "0")}_${safe(slot.label)}.${ext}`;
-        zip.file(`${folder}/${filename}`, data, { base64: true });
+        const filename = `${prefix}_${String(idx).padStart(2, "0")}_${safe(slot.label)}.jpg`;
+        const a = document.createElement("a");
+        a.href = slot.preview!;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
         idx++;
+        // 120ms delay para que el navegador procese cada descarga
+        await new Promise((r) => setTimeout(r, 120));
       }
-
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${folder}.zip`;
-      a.click();
-      // Limpieza
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err) {
-      alert("Error generando ZIP: " + (err instanceof Error ? err.message : String(err)));
+      alert("Error descargando: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setZipDownloading(false);
     }
@@ -625,16 +614,16 @@ export default function Vehiculos() {
                         className="hidden"
                         onChange={handleMultiFotoChange}
                       />
-                      {/* Descargar todas (ZIP) */}
+                      {/* Descargar todas (individuales) */}
                       <button
                         onClick={downloadAllFotos}
                         disabled={zipDownloading || fotosCount === 0}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
                         style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
-                        title="Descarga todas las fotos en un solo archivo ZIP"
+                        title="Descarga cada foto como archivo individual (.jpg)"
                       >
-                        {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Archive size={13} />}
-                        Descargar todas (ZIP)
+                        {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                        Descargar todas
                       </button>
                     </div>
                   </div>
