@@ -3,6 +3,7 @@ import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, 
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
@@ -562,11 +563,18 @@ export default function Vehiculos() {
                   {(form as any).procedencia === "Consignado" && (
                     <div className="mb-4">
                       <label className="block text-xs font-medium mb-1">Cliente Consignatario *</label>
-                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={(form as any).consignatarioId || ""} onChange={e => setForm({ ...form, consignatarioId: e.target.value } as any)}>
-                        <option value="">— Seleccionar Cliente —</option>
-                        {clientes.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos} {c.rut ? `(${c.rut})` : ""}</option>)}
-                      </select>
+                      <SearchableSelect
+                        value={(form as any).consignatarioId || ""}
+                        onChange={(v) => setForm({ ...form, consignatarioId: v } as any)}
+                        placeholder="Escribe nombre, RUT o teléfono del cliente..."
+                        emptyMessage="Sin clientes que coincidan"
+                        options={clientes.map(c => ({
+                          value: c.id,
+                          label: `${c.nombres} ${c.apellidos}`.trim() || "Sin nombre",
+                          hint: [c.rut ? `RUT: ${c.rut}` : null, c.telefono].filter(Boolean).join(" · "),
+                          search: `${c.nombres} ${c.apellidos} ${c.rut ?? ""} ${c.telefono ?? ""} ${c.email ?? ""}`,
+                        }))}
+                      />
                     </div>
                   )}
                 </div>

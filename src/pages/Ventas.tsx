@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Plus, Search, Check, X, Upload, FileText, Download, AlertTriangle, Lock, ChevronRight, ChevronLeft } from "lucide-react";
 import { useApp, Venta, TipoVenta, Cliente } from "@/context/AppContext";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "—";
 
@@ -398,10 +399,18 @@ export default function Ventas() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Cliente Asignado</label>
-                      <select className={inp} style={bd} value={form.clienteId} onChange={e => { selectCliente(e.target.value); setShowCreateCliente(false); }}>
-                        <option value="">-- Seleccionar --</option>
-                        {clientes.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos} {c.telefono ? `(${c.telefono})` : ""}</option>)}
-                      </select>
+                      <SearchableSelect
+                        value={form.clienteId}
+                        onChange={(v) => { selectCliente(v); setShowCreateCliente(false); }}
+                        placeholder="Escribe nombre, teléfono o RUT..."
+                        emptyMessage="Sin clientes que coincidan"
+                        options={clientes.map(c => ({
+                          value: c.id,
+                          label: `${c.nombres} ${c.apellidos}`.trim() || "Sin nombre",
+                          hint: [c.telefono, c.rut ? `RUT: ${c.rut}` : null].filter(Boolean).join(" · "),
+                          search: `${c.nombres} ${c.apellidos} ${c.telefono ?? ""} ${c.rut ?? ""} ${c.email ?? ""}`,
+                        }))}
+                      />
                       {form.clienteId && (
                         <div className="mt-1.5 text-xs p-2 rounded bg-muted/40">
                           {(() => {
@@ -431,10 +440,18 @@ export default function Ventas() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="block text-xs font-medium mb-1">Patente *</label>
-                      <select className={inp} style={bd} value={form.patente} onChange={e => selectVehiculo(e.target.value)}>
-                        <option value="">-- Seleccionar --</option>
-                        {vehiculos.map(v => <option key={v.id} value={v.patente}>{v.patente} - {v.marca} {v.modelo} ({v.anio})</option>)}
-                      </select>
+                      <SearchableSelect
+                        value={form.patente}
+                        onChange={(v) => selectVehiculo(v)}
+                        placeholder="Escribe patente, marca o modelo..."
+                        emptyMessage="Sin vehículos que coincidan"
+                        options={vehiculos.map(v => ({
+                          value: v.patente,
+                          label: `${v.patente} — ${v.marca} ${v.modelo}`,
+                          hint: [v.anio ? `Año ${v.anio}` : null, v.color, v.estado].filter(Boolean).join(" · "),
+                          search: `${v.patente} ${v.marca} ${v.modelo} ${v.anio} ${v.color ?? ""}`,
+                        }))}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Marca</label>

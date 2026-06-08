@@ -3,6 +3,7 @@ import { Lock, Users, ShoppingCart, TrendingDown, TrendingUp, BarChart3, Plus, E
 import { useApp, CuentaPagar, CuentaCobrar, Usuario, Venta } from "@/context/AppContext";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "$0";
 const CLAVE_ADMIN = "ankker2026$$";
@@ -743,11 +744,19 @@ export default function Administracion() {
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={cobrarForm.patente} onChange={e => setCobrarForm(f => ({ ...f, patente: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1">Fecha Venta</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="DD-MM-YYYY" value={cobrarForm.fechaVenta} onChange={e => setCobrarForm(f => ({ ...f, fechaVenta: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">ID Comprador</label>
-                <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={cobrarForm.idComprador} onChange={e => setCobrarForm(f => ({ ...f, idComprador: e.target.value }))}>
-                  <option value="">-- Seleccionar --</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.id} - {c.nombres} {c.apellidos}</option>)}
-                </select></div>
+              <div><label className="block text-xs font-medium mb-1">Comprador</label>
+                <SearchableSelect
+                  value={cobrarForm.idComprador}
+                  onChange={(v) => setCobrarForm(f => ({ ...f, idComprador: v }))}
+                  placeholder="Escribe nombre, RUT o teléfono..."
+                  emptyMessage="Sin clientes que coincidan"
+                  options={clientes.map(c => ({
+                    value: c.id,
+                    label: `${c.nombres} ${c.apellidos}`.trim() || "Sin nombre",
+                    hint: [c.rut ? `RUT: ${c.rut}` : null, c.telefono].filter(Boolean).join(" · "),
+                    search: `${c.nombres} ${c.apellidos} ${c.rut ?? ""} ${c.telefono ?? ""} ${c.email ?? ""}`,
+                  }))}
+                /></div>
               <div><label className="block text-xs font-medium mb-1">Precio Venta</label>
                 <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={cobrarForm.precioVenta} onChange={e => setCobrarForm(f => ({ ...f, precioVenta: Number(e.target.value) }))} /></div>
               <div><label className="block text-xs font-medium mb-1">Comisión Crédito</label>
