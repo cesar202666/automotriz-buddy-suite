@@ -4,7 +4,8 @@ import {
   Phone, CheckCheck, Bot, User as UserIcon, Clock, Target,
   Users, BarChart3, Megaphone, Plus, X, ChevronRight, Edit3,
   Trash2, Send, Filter, GripVertical, AlertCircle, Info,
-  TrendingUp, DollarSign, Award, Zap, RefreshCw
+  TrendingUp, DollarSign, Award, Zap, RefreshCw,
+  AlertTriangle, Loader2
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { toast } from "sonner";
@@ -51,6 +52,10 @@ interface Message {
   channel: string;
   sent_at: string;
   created_at: string;
+  /** Estado del envio del outbound. Inbound siempre 'sent'. */
+  send_status?: "sent" | "pending" | "failed" | "failed_window_closed";
+  send_error?: string | null;
+  manychat_message_id?: string | null;
 }
 
 interface Lead {
@@ -394,7 +399,7 @@ function TabMensajes() {
     const msgText = replyText.trim();
     setReplyText("");
 
-    // Optimistic: add message to UI immediately
+    // Optimistic: add message to UI immediately con status pending
     const optimisticMsg: Message = {
       id: `temp-${Date.now()}`,
       conversation_id: conv.id,
@@ -404,6 +409,7 @@ function TabMensajes() {
       channel: conv.channel,
       sent_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
+      send_status: "pending",
     };
     setMessages((prev) => [...prev, optimisticMsg]);
     // Update conversation list optimistically
@@ -733,6 +739,19 @@ function TabMensajes() {
                 const isInbound = msg.direction === "inbound";
                 const prevMsg = idx > 0 ? messages[idx - 1] : null;
                 const showDateSep = !prevMsg || new Date(msg.sent_at).toDateString() !== new Date(prevMsg.sent_at).toDateString();
+                // Status del envio para outbound
+                const sendFailed = !isInbound && (msg.send_status === "failed" || msg.send_status === "failed_window_closed");
+                const sendPending = !isInbound && msg.send_status === "pending";
+                const bubbleBg = sendFailed
+                  ? "#fee2e2"
+                  : isInbound
+                    ? "white"
+                    : "hsl(var(--primary))";
+                const bubbleColor = sendFailed
+                  ? "#991b1b"
+                  : isInbound
+                    ? "hsl(var(--foreground))"
+                    : "white";
                 return (
                   <div key={msg.id}>
                     {showDateSep && (
@@ -745,14 +764,51 @@ function TabMensajes() {
                     <div className={`flex items-end gap-2 ${isInbound ? "justify-start" : "justify-end"}`}>
                       {isInbound && <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5" style={{ background: "hsl(var(--primary)/0.15)" }}><UserIcon size={14} style={{ color: "hsl(var(--primary))" }} /></div>}
                       <div className={`max-w-sm lg:max-w-lg ${isInbound ? "" : "items-end"} flex flex-col`}>
-                        <div className="px-4 py-2.5 text-sm shadow-sm" style={{ background: isInbound ? "white" : "hsl(var(--primary))", color: isInbound ? "hsl(var(--foreground))" : "white", borderRadius: isInbound ? "0px 16px 16px 16px" : "16px 0px 16px 16px", boxShadow: "0 1px 2px rgba(0,0,0,0.1)" }}>{msg.content}</div>
+                        <div
+                          className="px-4 py-2.5 text-sm shadow-sm"
+                          style={{
+                            background: bubbleBg,
+                            color: bubbleColor,
+                            borderRadius: isInbound ? "0px 16px 16px 16px" : "16px 0px 16px 16px",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                            border: sendFailed ? "1px solid #fca5a5" : undefined,
+                            opacity: sendPending ? 0.65 : 1,
+                          }}
+                        >
+                          {msg.content}
+                        </div>
+                        {/* Error message debajo de la burbuja cuando fallo */}
+                        {sendFailed && (
+                          <div
+                            className="flex items-start gap-1 mt-1 px-2 py-1 rounded text-[11px] max-w-full"
+                            style={{ background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }}
+                          >
+                            <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
+                            <span>
+                              {msg.send_status === "failed_window_closed"
+                                ? "No enviado: cliente fuera de ventana de 24h. Espera a que escriba primero."
+                                : msg.send_error || "No se pudo enviar al cliente."}
+                            </span>
+                          </div>
+                        )}
                         <div className={`flex items-center gap-1 mt-1 text-xs ${isInbound ? "justify-start" : "justify-end"}`} style={{ color: "hsl(var(--muted-foreground))" }}>
-                          {!isInbound && <Bot size={9} />}
+                          {!isInbound && !sendFailed && !sendPending && <Bot size={9} />}
+                          {sendPending && <Loader2 size={9} className="animate-spin" />}
+                          {sendFailed && <AlertTriangle size={9} style={{ color: "#dc2626" }} />}
                           <span>{fmtFullTime(msg.sent_at)}</span>
-                          {!isInbound && <CheckCheck size={10} style={{ color: "#3b82f6" }} />}
+                          {!isInbound && msg.send_status === "sent" && <CheckCheck size={10} style={{ color: "#3b82f6" }} />}
+                          {!isInbound && sendPending && <span style={{ color: "#a16207" }}>Enviando…</span>}
+                          {!isInbound && sendFailed && <span style={{ color: "#dc2626" }}>No enviado</span>}
                         </div>
                       </div>
-                      {!isInbound && <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5" style={{ background: "hsl(var(--primary))" }}><Bot size={14} className="text-white" /></div>}
+                      {!isInbound && (
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5"
+                          style={{ background: sendFailed ? "#dc2626" : "hsl(var(--primary))" }}
+                        >
+                          {sendFailed ? <AlertTriangle size={14} className="text-white" /> : <Bot size={14} className="text-white" />}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
