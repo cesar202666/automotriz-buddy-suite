@@ -320,6 +320,7 @@ function TabMensajes() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<{ message: string; isWindowClosed: boolean } | null>(null);
   const [vendedoresList, setVendedoresList] = useState<Vendedor[]>([]);
   const [showAssignMenu, setShowAssignMenu] = useState(false);
 
@@ -398,10 +399,12 @@ function TabMensajes() {
     if (!conv) return;
     const msgText = replyText.trim();
     setReplyText("");
+    setSendError(null);
 
-    // Optimistic: add message to UI immediately con status pending
+    // Optimistic: agregar mensaje en pending mientras ManyChat decide
+    const tempId = `temp-${Date.now()}`;
     const optimisticMsg: Message = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       conversation_id: conv.id,
       contact_id: conv.contact_id,
       direction: "outbound",
@@ -412,19 +415,30 @@ function TabMensajes() {
       send_status: "pending",
     };
     setMessages((prev) => [...prev, optimisticMsg]);
-    // Update conversation list optimistically
-    setConversations((prev) => prev.map((c) => c.id === conv.id ? { ...c, last_message: msgText, last_message_at: new Date().toISOString() } : c));
-
-    // Send in background - no loading state needed
+    setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("manychat-send-message", {
         body: { conversation_id: conv.id, contact_id: conv.contact_id, message: msgText, channel: conv.channel },
       });
-      if (error || !data?.success) {
-        toast.error(`Error al enviar: ${data?.error || error?.message || 'Error desconocido'}`, { duration: 10000 });
+      const success = !error && data?.success;
+      if (!success) {
+        // Falló → remover el optimistic message Y mostrar banner persistente
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        const errMsg = data?.error || error?.message || "No se pudo enviar el mensaje.";
+        const isWindowClosed = data?.send_status === "failed_window_closed";
+        setSendError({ message: errMsg, isWindowClosed });
+        // Devolver el texto al input para que el vendedor lo pueda re-enviar
+        setReplyText(msgText);
+      } else {
+        // OK: actualizar list y dejar que realtime reemplace el temp con el real
+        setConversations((prev) => prev.map((c) => c.id === conv.id ? { ...c, last_message: msgText, last_message_at: new Date().toISOString() } : c));
       }
     } catch (e: any) {
-      toast.error(e.message || "Error al enviar mensaje");
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setSendError({ message: e?.message || "Error de conexión al enviar", isWindowClosed: false });
+      setReplyText(msgText);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -818,29 +832,65 @@ function TabMensajes() {
           </div>
 
           {(selectedConv.escalated || (selectedConv.assigned_to && selectedConv.assigned_to.trim() !== "")) ? (
-            <div className="px-4 py-3 border-t flex items-center gap-2 flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-              <input
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && replyText.trim()) { e.preventDefault(); handleSendReply(); } }}
-                placeholder="Escribe una respuesta al cliente..."
-                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none border"
-                style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
-              />
-              <button
-                onClick={handleSendReply}
-                disabled={!replyText.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                style={{
-                  background: !replyText.trim() ? "hsl(var(--muted))" : "hsl(var(--primary))",
-                  color: !replyText.trim() ? "hsl(var(--muted-foreground))" : "white",
-                  cursor: !replyText.trim() ? "not-allowed" : "pointer",
-                  opacity: !replyText.trim() ? 0.6 : 1,
-                }}
-              >
-                <Send size={14} />
-                Enviar
-              </button>
+            <div className="flex-shrink-0" style={{ background: "hsl(var(--card))" }}>
+              {/* Banner de error persistente cuando falla el envio */}
+              {sendError && (
+                <div
+                  className="flex items-start gap-2 px-4 py-3 border-t border-b"
+                  style={{
+                    background: sendError.isWindowClosed ? "#fef3c7" : "#fef2f2",
+                    borderColor: sendError.isWindowClosed ? "#fde68a" : "#fecaca",
+                    color: sendError.isWindowClosed ? "#78350f" : "#991b1b",
+                  }}
+                >
+                  <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 text-xs leading-relaxed">
+                    <p className="font-semibold mb-0.5">
+                      {sendError.isWindowClosed
+                        ? "WhatsApp bloqueó el envío"
+                        : "No se pudo enviar el mensaje"}
+                    </p>
+                    <p>{sendError.message}</p>
+                    {sendError.isWindowClosed && (
+                      <p className="mt-1 opacity-90">
+                        Tu texto quedó en el campo de respuesta. Cuando el cliente escriba primero, intenta enviarlo de nuevo.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setSendError(null)}
+                    className="text-current opacity-60 hover:opacity-100 flex-shrink-0"
+                    title="Cerrar"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <div className="px-4 py-3 border-t flex items-center gap-2" style={{ borderColor: "hsl(var(--border))" }}>
+                <input
+                  value={replyText}
+                  onChange={(e) => { setReplyText(e.target.value); if (sendError) setSendError(null); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && replyText.trim() && !sending) { e.preventDefault(); handleSendReply(); } }}
+                  placeholder="Escribe una respuesta al cliente..."
+                  disabled={sending}
+                  className="flex-1 px-3 py-2 rounded-lg text-sm outline-none border disabled:opacity-50"
+                  style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
+                />
+                <button
+                  onClick={handleSendReply}
+                  disabled={!replyText.trim() || sending}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  style={{
+                    background: (!replyText.trim() || sending) ? "hsl(var(--muted))" : "hsl(var(--primary))",
+                    color: (!replyText.trim() || sending) ? "hsl(var(--muted-foreground))" : "white",
+                    cursor: (!replyText.trim() || sending) ? "not-allowed" : "pointer",
+                    opacity: (!replyText.trim() || sending) ? 0.6 : 1,
+                  }}
+                >
+                  {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {sending ? "Enviando..." : "Enviar"}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="px-5 py-2 border-t flex items-center gap-3 text-xs flex-shrink-0" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))" }}>

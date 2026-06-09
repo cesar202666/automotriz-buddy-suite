@@ -9,17 +9,12 @@ const corsHeaders = {
 /**
  * Envia un mensaje outbound al cliente via ManyChat API.
  *
- * Flujo robusto (anti perdida de mensajes del vendedor):
- *   1. Insertar mensaje en DB con send_status='pending'.
- *   2. Llamar a ManyChat sendContent.
- *   3. Actualizar send_status='sent' (OK) o 'failed*' (KO) con error_msg.
- *   4. SIEMPRE devolver el mensaje al frontend para que NO se pierda
- *      visualmente. El frontend muestra badge segun status.
+ * Politica:
+ *   - Si ManyChat acepta y entrega al cliente → guardar en BD.
+ *   - Si ManyChat rechaza (ventana 24h, etc) → NO guardar, devolver error
+ *     claro al frontend para que muestre al vendedor el motivo.
  *
- * Esto resuelve el bug reportado por Cristobal: cuando ManyChat rechazaba
- * el envio (ventana 24h cerrada, etc.) la version anterior NO guardaba el
- * mensaje en DB. El vendedor lo veia 1 seg via optimistic update y al
- * refrescar desaparecia, generando confusion total.
+ * No tiene sentido guardar mensajes que el cliente nunca recibió.
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
@@ -48,55 +43,16 @@ Deno.serve(async (req) => {
 
     if (contactError || !contact) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Contacto no encontrado' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        JSON.stringify({ success: false, error: 'Contacto no encontrado en CRM' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    const now = new Date().toISOString()
-    const ch = channel || 'whatsapp'
-
-    // ── PASO 1: Insertar el mensaje YA en DB con send_status='pending' ─
-    // Asi el vendedor nunca pierde su mensaje, aunque ManyChat falle.
-    const { data: msgInserted, error: insertErr } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id,
-        contact_id,
-        direction: 'outbound',
-        content: message,
-        channel: ch,
-        sent_at: now,
-        send_status: 'pending',
-      })
-      .select('id')
-      .single()
-
-    if (insertErr || !msgInserted) {
-      return new Response(
-        JSON.stringify({ success: false, error: `Error guardando: ${insertErr?.message ?? '?'}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
-    const messageId: string = msgInserted.id
-
-    // Actualizar conversation.last_message para que aparezca en la lista
-    await supabase
-      .from('conversations')
-      .update({ last_message: message, last_message_at: now })
-      .eq('id', conversation_id)
-
-    // ── Validar prerequisitos para enviar a ManyChat ────────────
     if (!contact.manychat_subscriber_id) {
-      await supabase
-        .from('messages')
-        .update({ send_status: 'failed', send_error: 'Contacto sin manychat_subscriber_id' })
-        .eq('id', messageId)
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'El contacto no tiene subscriber_id de ManyChat. El mensaje quedó guardado pero NO se envió.',
-          message_id: messageId,
+          error: 'Este contacto no tiene ID de ManyChat asociado. No se puede enviar.',
           send_status: 'failed',
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -105,22 +61,18 @@ Deno.serve(async (req) => {
 
     const manychatKey = Deno.env.get('MANYCHAT_API_KEY')
     if (!manychatKey) {
-      await supabase
-        .from('messages')
-        .update({ send_status: 'failed', send_error: 'MANYCHAT_API_KEY no configurada' })
-        .eq('id', messageId)
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'MANYCHAT_API_KEY no configurada',
-          message_id: messageId,
+          error: 'MANYCHAT_API_KEY no configurada en el sistema',
           send_status: 'failed',
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    // ── PASO 2: Enviar via ManyChat ─────────────────────────────
+    // ── Enviar via ManyChat ─────────────────────────────────────
+    const ch = channel || 'whatsapp'
     const normalizedChannel = String(ch).toLowerCase()
     const contentType =
       normalizedChannel === 'whatsapp'
@@ -154,15 +106,10 @@ Deno.serve(async (req) => {
       })
     } catch (fetchErr) {
       const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
-      await supabase
-        .from('messages')
-        .update({ send_status: 'failed', send_error: `Fetch error: ${msg}` })
-        .eq('id', messageId)
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Error de red al ManyChat: ${msg}`,
-          message_id: messageId,
+          error: `Error de red al conectar con ManyChat: ${msg}`,
           send_status: 'failed',
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -178,7 +125,7 @@ Deno.serve(async (req) => {
     }
     console.log('ManyChat response:', JSON.stringify(mcResult).slice(0, 500))
 
-    // ── PASO 3: Actualizar el status del mensaje segun resultado ─
+    // ── Si ManyChat rechaza → NO guardar, devolver error claro ──
     if (!mcResponse.ok || mcResult?.status === 'error') {
       const manychatMessage = mcResult?.message || mcResponse.statusText || 'Error desconocido'
       const isWindowRestriction =
@@ -186,43 +133,63 @@ Deno.serve(async (req) => {
         String(manychatMessage).toLowerCase().includes('over 24 hours') ||
         String(manychatMessage).toLowerCase().includes('outside the')
 
-      const status = isWindowRestriction ? 'failed_window_closed' : 'failed'
-      const errorMsg = isWindowRestriction
-        ? 'ManyChat bloqueó el envío: el cliente está fuera de la ventana de 24h. Debe escribir primero para reabrir el chat.'
-        : `ManyChat: ${manychatMessage}`
-
-      await supabase
-        .from('messages')
-        .update({ send_status: status, send_error: errorMsg.slice(0, 500) })
-        .eq('id', messageId)
-
       return new Response(
         JSON.stringify({
           success: false,
-          error: errorMsg,
-          message_id: messageId,
-          send_status: status,
+          error: isWindowRestriction
+            ? 'WhatsApp bloqueó el envío: el cliente lleva más de 24 horas sin escribir. Para reactivar la conversación, el cliente debe escribir primero.'
+            : `ManyChat rechazó el envío: ${manychatMessage}`,
+          send_status: isWindowRestriction ? 'failed_window_closed' : 'failed',
           details: mcResult,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    // OK: marcar como enviado
+    // ── ManyChat acepto → guardar en BD ────────────────────────
+    const now = new Date().toISOString()
     const mcMessageId =
       mcResult?.data?.message_id ?? mcResult?.message_id ?? null
-    await supabase
+
+    const { data: msgInserted, error: insertErr } = await supabase
       .from('messages')
-      .update({
+      .insert({
+        conversation_id,
+        contact_id,
+        direction: 'outbound',
+        content: message,
+        channel: ch,
+        sent_at: now,
         send_status: 'sent',
         manychat_message_id: mcMessageId ? String(mcMessageId) : null,
       })
-      .eq('id', messageId)
+      .select('id')
+      .single()
+
+    if (insertErr || !msgInserted) {
+      // Caso raro: ManyChat envio OK pero no pudimos guardar.
+      // El cliente ya recibio el mensaje pero el CRM no lo tendra.
+      console.error('Error guardando outbound a BD:', insertErr)
+      return new Response(
+        JSON.stringify({
+          success: true,
+          warning: `Mensaje enviado al cliente pero NO se guardó en el CRM: ${insertErr?.message ?? 'error desconocido'}`,
+          send_status: 'sent',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Update conversation last_message
+    await supabase
+      .from('conversations')
+      .update({ last_message: message, last_message_at: now })
+      .eq('id', conversation_id)
 
     return new Response(
       JSON.stringify({
         success: true,
-        message_id: messageId,
+        message_id: msgInserted.id,
         send_status: 'sent',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
