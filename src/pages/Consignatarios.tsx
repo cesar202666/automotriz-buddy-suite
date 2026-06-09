@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { useApp } from "@/context/AppContext";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { NumberInput } from "@/components/NumberInput";
 
 interface Consignatario {
   id: string;
@@ -723,15 +724,11 @@ export default function Consignatarios() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1">Valor Pactado (CLP)</label>
-                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={f.valorPactado || ""} placeholder="0"
-                        onChange={e => setF({ valorPactado: e.target.value === "" ? 0 : Number(e.target.value) })} />
+                      <NumberInput value={f.valorPactado ?? 0} onChange={(n) => setF({ valorPactado: n })} currency placeholder="Ej: 10.500.000" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Valor Consignación (CLP)</label>
-                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={f.valorConsig || ""} placeholder="0"
-                        onChange={e => setF({ valorConsig: e.target.value === "" ? 0 : Number(e.target.value) })} />
+                      <NumberInput value={f.valorConsig ?? 0} onChange={(n) => setF({ valorConsig: n })} currency placeholder="Ej: 10.500.000" />
                     </div>
                   </div>
                   <div>

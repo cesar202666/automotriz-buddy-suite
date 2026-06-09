@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Search, ChevronDown, X } from "lucide-react";
+import { NumberInput } from "@/components/NumberInput";
 
 type EstadoSolicitud = "EN EVALUACIÓN" | "APROBADA" | "NEGOCIO CERRADO" | "SIN RESPUESTA" | "RECHAZADA";
 
@@ -100,13 +101,30 @@ export default function Creditos() {
   const f = form as Credito;
   const setF = (p: Partial<Credito>) => setForm(prev => ({ ...prev, ...p }));
 
-  const Field = ({ label, field, type = "text", placeholder = "" }: { label: string; field: keyof Credito; type?: string; placeholder?: string }) => (
-    <div>
-      <label className="block text-xs font-medium mb-1">{label}</label>
-      <input type={type} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-        placeholder={placeholder} value={String(f[field] ?? "")} onChange={e => setF({ [field]: type === "number" ? Number(e.target.value) : e.target.value } as any)} />
-    </div>
-  );
+  const Field = ({ label, field, type = "text", placeholder = "" }: { label: string; field: keyof Credito; type?: string; placeholder?: string }) => {
+    if (type === "number") {
+      return (
+        <div>
+          <label className="block text-xs font-medium mb-1">{label}</label>
+          <NumberInput
+            value={Number(f[field] ?? 0)}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            onChange={(n) => setF({ [field]: n } as any)}
+            currency
+            placeholder={placeholder || "Ej: 10.500.000"}
+          />
+        </div>
+      );
+    }
+    return (
+      <div>
+        <label className="block text-xs font-medium mb-1">{label}</label>
+        <input type={type} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          placeholder={placeholder} value={String(f[field] ?? "")} onChange={e => setF({ [field]: e.target.value } as any)} />
+      </div>
+    );
+  };
 
   const SECTIONS = [
     { key: "oferta", label: "Oferta Solicitud" },

@@ -4,6 +4,7 @@ import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { NumberInput } from "@/components/NumberInput";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
@@ -599,19 +600,13 @@ export default function Vehiculos() {
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.color || ""} onChange={e => setForm({ ...form, color: e.target.value })} /></div>
                     <div><label className="block text-xs font-medium mb-1">Kilometraje</label>
-                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.kilometraje || ""} placeholder="0"
-                        onChange={e => setForm({ ...form, kilometraje: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
+                      <NumberInput value={form.kilometraje ?? 0} onChange={(n) => setForm({ ...form, kilometraje: n })} placeholder="0 km" /></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Precio Venta</label>
-                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioVenta || ""} placeholder="0"
-                        onChange={e => setForm({ ...form, precioVenta: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
+                      <NumberInput value={form.precioVenta ?? 0} onChange={(n) => setForm({ ...form, precioVenta: n })} currency placeholder="Ej: 10.500.000" /></div>
                     <div><label className="block text-xs font-medium mb-1">Precio Piso</label>
-                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioPiso || ""} placeholder="0"
-                        onChange={e => setForm({ ...form, precioPiso: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
+                      <NumberInput value={form.precioPiso ?? 0} onChange={(n) => setForm({ ...form, precioPiso: n })} currency placeholder="Ej: 9.000.000" /></div>
                     <div><label className="block text-xs font-medium mb-1">Sucursal</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.sucursal || ""} onChange={e => setForm({ ...form, sucursal: e.target.value })} /></div>

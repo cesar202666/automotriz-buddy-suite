@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { Plus, Search, Check, X, Upload, FileText, Download, AlertTriangle, Lock, ChevronRight, ChevronLeft } from "lucide-react";
 import { useApp, Venta, TipoVenta, Cliente } from "@/context/AppContext";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { NumberInput } from "@/components/NumberInput";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "—";
 
@@ -471,11 +472,11 @@ export default function Ventas() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Kilometraje</label>
-                      <input type="number" min={0} className={inp} style={bd} value={form.kilometrajeVehiculo || ""} placeholder="0" onChange={e => setForm(f => ({ ...f, kilometrajeVehiculo: e.target.value === "" ? 0 : Number(e.target.value) }))} />
+                      <NumberInput value={form.kilometrajeVehiculo ?? 0} onChange={(n) => setForm(f => ({ ...f, kilometrajeVehiculo: n }))} placeholder="0 km" className={inp} style={bd} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio Publicado</label>
-                      <input type="number" className={inp} style={bd} value={form.precioPublicado || ""} onChange={e => setForm(f => ({ ...f, precioPublicado: Number(e.target.value) }))} />
+                      <NumberInput value={form.precioPublicado ?? 0} onChange={(n) => setForm(f => ({ ...f, precioPublicado: n }))} currency placeholder="Ej: 10.500.000" className={inp} style={bd} />
                     </div>
                     {/* Prepago in vehiculo card */}
                     <div className="col-span-2 border rounded-lg p-3" style={bd}>
@@ -563,7 +564,7 @@ export default function Ventas() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio Venta *</label>
-                      <input type="number" className={inp} style={bd} value={form.precioVenta || ""} onChange={e => updatePrecio("precioVenta", Number(e.target.value))} />
+                      <NumberInput value={form.precioVenta ?? 0} onChange={(n) => updatePrecio("precioVenta", n)} currency placeholder="Ej: 10.500.000" className={inp} style={bd} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Margen Bruto (auto)</label>
@@ -572,7 +573,7 @@ export default function Ventas() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Monto Pie Caja</label>
-                      <input type="number" className={inp} style={bd} value={form.montoPieCaja || ""} onChange={e => setForm(f => ({ ...f, montoPieCaja: Number(e.target.value) }))} />
+                      <NumberInput value={form.montoPieCaja ?? 0} onChange={(n) => setForm(f => ({ ...f, montoPieCaja: n }))} currency placeholder="Ej: 1.500.000" className={inp} style={bd} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">N° Crédito</label>
@@ -580,7 +581,7 @@ export default function Ventas() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
-                      <input type="number" className={inp} style={bd} value={form.gastosAdmin || ""} onChange={e => updatePrecio("gastosAdmin", Number(e.target.value))} />
+                      <NumberInput value={form.gastosAdmin ?? 0} onChange={(n) => updatePrecio("gastosAdmin", n)} currency placeholder="Ej: 200.000" className={inp} style={bd} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$80k)</label>

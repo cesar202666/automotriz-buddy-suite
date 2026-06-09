@@ -4,6 +4,7 @@ import { useApp, CuentaPagar, CuentaCobrar, Usuario, Venta } from "@/context/App
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { NumberInput } from "@/components/NumberInput";
 
 const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "$0";
 const CLAVE_ADMIN = "ankker2026$$";
@@ -713,7 +714,7 @@ export default function Administracion() {
               <div><label className="block text-xs font-medium mb-1">Cuenta Cliente (Banco/Rut)</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} value={pagarForm.cuentaCliente} onChange={e => setPagarForm(f => ({ ...f, cuentaCliente: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1" style={{ color: "hsl(var(--primary))" }}>Monto Total a Pagar</label>
-                <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="Ej: 5000000" value={pagarForm.montoTotal || ""} onChange={e => setPagarForm(f => ({ ...f, montoTotal: e.target.value === "" ? 0 : Number(e.target.value) }))} /></div>
+                <NumberInput value={pagarForm.montoTotal ?? 0} onChange={(n) => setPagarForm(f => ({ ...f, montoTotal: n }))} currency placeholder="Ej: 5.000.000" /></div>
               <div><label className="block text-xs font-medium mb-1" style={{ color: "#22c55e" }}>Pagado a la fecha</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="Ej: 2000000 o CONFIRMADO" value={pagarForm.pagadoFecha} onChange={e => {
                   const val = e.target.value;
@@ -758,9 +759,9 @@ export default function Administracion() {
                   }))}
                 /></div>
               <div><label className="block text-xs font-medium mb-1">Precio Venta</label>
-                <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="0" value={cobrarForm.precioVenta || ""} onChange={e => setCobrarForm(f => ({ ...f, precioVenta: e.target.value === "" ? 0 : Number(e.target.value) }))} /></div>
+                <NumberInput value={cobrarForm.precioVenta ?? 0} onChange={(n) => setCobrarForm(f => ({ ...f, precioVenta: n }))} currency placeholder="Ej: 10.500.000" /></div>
               <div><label className="block text-xs font-medium mb-1">Comisión Crédito</label>
-                <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="0" value={cobrarForm.comisionCredito || ""} onChange={e => setCobrarForm(f => ({ ...f, comisionCredito: e.target.value === "" ? 0 : Number(e.target.value) }))} /></div>
+                <NumberInput value={cobrarForm.comisionCredito ?? 0} onChange={(n) => setCobrarForm(f => ({ ...f, comisionCredito: n }))} currency placeholder="Ej: 80.000" /></div>
               <div className="col-span-2"><label className="block text-xs font-medium mb-1">Tipo Financiamiento</label>
                 <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }} placeholder="Ej: FALABELLA" value={cobrarForm.tipoFinanciamiento} onChange={e => setCobrarForm(f => ({ ...f, tipoFinanciamiento: e.target.value }))} /></div>
             </div>
