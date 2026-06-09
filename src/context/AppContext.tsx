@@ -340,6 +340,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from("vehiculos")
         .select("*")
+        // Orden: ultima vez modificado (o creado si nunca se actualizo) primero
+        .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (!error && data) {
         setVehiculos(data.map(row => fromDb(row as Record<string, unknown>)));
@@ -480,9 +482,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .select()
       .single();
     if (!error && data) {
-      setVehiculos(prev =>
-        prev.map(x => x.id === v.id ? fromDb(data as Record<string, unknown>) : x)
-      );
+      const updated = fromDb(data as Record<string, unknown>);
+      // Mover el vehiculo actualizado al inicio (ordenado por ultima modificacion)
+      setVehiculos(prev => [updated, ...prev.filter(x => x.id !== v.id)]);
     }
   };
 
