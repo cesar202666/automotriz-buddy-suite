@@ -39,7 +39,7 @@ OUTPUT FORMAT: high-quality photo of the SAME vehicle on the new background. No 
 
 const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: string; consignatarioId: string }> => ({
   folio: "", patente: "", tipo: "Sedan", marca: "", modelo: "", anio: "2026",
-  estado: "DISPONIBLE", precioVenta: 0, precioCosto: 0, sucursal: "", usuarioAsignado,
+  estado: "DISPONIBLE", precioVenta: 0, precioPiso: 0, precioCosto: 0, sucursal: "", usuarioAsignado,
   combustible: "Bencina", nMotor: "", vin: "", color: "", kilometraje: 0, ubicacion: "",
   comentarios: "", transmision: "", traccion: "", aireAcondicionado: false,
   equipamientoExtra: [], fotos: [],
@@ -118,7 +118,7 @@ export default function Vehiculos() {
     const data = vehiculos.map(v => ({
       ID: v.id, Folio: v.folio, Patente: v.patente, Tipo: v.tipo,
       Marca: v.marca, Modelo: v.modelo, "Año": v.anio, Estado: v.estado,
-      "Precio Venta": v.precioVenta, "Precio Costo": v.precioCosto,
+      "Precio Venta": v.precioVenta, "Precio Piso": v.precioPiso, "Precio Costo": v.precioCosto,
       Sucursal: v.sucursal, Kilometraje: v.kilometraje, Color: v.color,
       Combustible: v.combustible, Transmision: v.transmision, Traccion: v.traccion,
     }));
@@ -146,6 +146,7 @@ export default function Vehiculos() {
         anio: String(r["Año"] || r["Anio"] || ""),
         estado: (String(r["Estado"] || "DISPONIBLE")) as Vehiculo["estado"],
         precioVenta: Number(r["Precio Venta"] || 0),
+        precioPiso: Number(r["Precio Piso"] || 0),
         precioCosto: Number(r["Precio Costo"] || 0),
         sucursal: String(r["Sucursal"] || ""),
         usuarioAsignado: "", combustible: String(r["Combustible"] || "Bencina"),
@@ -427,6 +428,7 @@ export default function Vehiculos() {
               <th className="px-4 py-3 text-left font-semibold">Modelo</th>
               <th className="px-4 py-3 text-left font-semibold">Año</th>
               <th className="px-4 py-3 text-left font-semibold">Precio Venta</th>
+              <th className="px-4 py-3 text-left font-semibold">Precio Piso</th>
               <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
               <th className="px-4 py-3 text-left font-semibold">Estado</th>
               <th className="px-4 py-3 text-left font-semibold">Acciones</th>
@@ -441,6 +443,7 @@ export default function Vehiculos() {
                 <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))", cursor: "pointer" }} onClick={() => openEdit(v)}>{v.modelo}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.anio}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{fmt(v.precioVenta)}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer", color: "hsl(var(--muted-foreground))" }}>{v.precioPiso ? fmt(v.precioPiso) : "—"}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.sucursal || "—"}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{statusBadge(v.estado)}</td>
                 <td className="px-4 py-3">
@@ -530,16 +533,24 @@ export default function Vehiculos() {
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.color || ""} onChange={e => setForm({ ...form, color: e.target.value })} /></div>
                     <div><label className="block text-xs font-medium mb-1">Kilometraje</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.kilometraje || 0} onChange={e => setForm({ ...form, kilometraje: Number(e.target.value) })} /></div>
+                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.kilometraje || ""} placeholder="0"
+                        onChange={e => setForm({ ...form, kilometraje: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Precio Venta</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={form.precioVenta || 0} onChange={e => setForm({ ...form, precioVenta: Number(e.target.value) })} /></div>
+                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.precioVenta || ""} placeholder="0"
+                        onChange={e => setForm({ ...form, precioVenta: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Precio Piso</label>
+                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.precioPiso || ""} placeholder="0"
+                        onChange={e => setForm({ ...form, precioPiso: e.target.value === "" ? 0 : Number(e.target.value) })} /></div>
                     <div><label className="block text-xs font-medium mb-1">Sucursal</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.sucursal || ""} onChange={e => setForm({ ...form, sucursal: e.target.value })} /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Ubicación</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.ubicacion || ""} onChange={e => setForm({ ...form, ubicacion: e.target.value })} /></div>

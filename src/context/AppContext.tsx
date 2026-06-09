@@ -31,6 +31,7 @@ export interface Vehiculo {
   anio: string;
   estado: "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "EN PROCESO" | "RETIRADO";
   precioVenta: number;
+  precioPiso: number;
   precioCosto: number;
   sucursal: string;
   usuarioAsignado: string;
@@ -194,6 +195,7 @@ function toDb(v: Vehiculo) {
     anio: v.anio,
     estado: v.estado,
     precio_venta: v.precioVenta,
+    precio_piso: v.precioPiso,
     precio_costo: v.precioCosto,
     sucursal: v.sucursal,
     usuario_asignado: v.usuarioAsignado,
@@ -224,6 +226,7 @@ function fromDb(row: Record<string, unknown>): Vehiculo {
     anio: String(row.anio ?? ""),
     estado: (row.estado ?? "DISPONIBLE") as Vehiculo["estado"],
     precioVenta: Number(row.precio_venta ?? 0),
+    precioPiso: Number(row.precio_piso ?? 0),
     precioCosto: Number(row.precio_costo ?? 0),
     sucursal: String(row.sucursal ?? ""),
     usuarioAsignado: String(row.usuario_asignado ?? ""),

@@ -471,7 +471,7 @@ export default function Ventas() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Kilometraje</label>
-                      <input type="number" className={inp} style={bd} value={form.kilometrajeVehiculo} onChange={e => setForm(f => ({ ...f, kilometrajeVehiculo: Number(e.target.value) }))} />
+                      <input type="number" min={0} className={inp} style={bd} value={form.kilometrajeVehiculo || ""} placeholder="0" onChange={e => setForm(f => ({ ...f, kilometrajeVehiculo: e.target.value === "" ? 0 : Number(e.target.value) }))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio Publicado</label>

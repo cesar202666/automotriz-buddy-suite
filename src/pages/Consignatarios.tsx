@@ -674,13 +674,15 @@ export default function Consignatarios() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1">Valor Pactado (CLP)</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={f.valorPactado || 0} onChange={e => setF({ valorPactado: Number(e.target.value) })} />
+                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={f.valorPactado || ""} placeholder="0"
+                        onChange={e => setF({ valorPactado: e.target.value === "" ? 0 : Number(e.target.value) })} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Valor Consignación (CLP)</label>
-                      <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        value={f.valorConsig || 0} onChange={e => setF({ valorConsig: Number(e.target.value) })} />
+                      <input type="number" min={0} className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={f.valorConsig || ""} placeholder="0"
+                        onChange={e => setF({ valorConsig: e.target.value === "" ? 0 : Number(e.target.value) })} />
                     </div>
                   </div>
                   <div>
