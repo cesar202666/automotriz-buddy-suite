@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2 } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight } from "lucide-react";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
@@ -124,6 +124,7 @@ export default function Vehiculos() {
   const [saving, setSaving] = useState(false);
   const [batchUploading, setBatchUploading] = useState(false);
   const [zipDownloading, setZipDownloading] = useState(false);
+  const [dragSrcIdx, setDragSrcIdx] = useState<number | null>(null);
   // Por defecto cuando se abre un vehiculo a editar, esta en modo lectura.
   // El usuario debe pulsar "Editar" para habilitar los inputs (previene clicks accidentales).
   const [isReadOnly, setIsReadOnly] = useState(true);
@@ -276,6 +277,24 @@ export default function Vehiculos() {
 
   const downloadFoto = (dataUrl: string, label: string) => {
     const a = document.createElement("a"); a.href = dataUrl; a.download = label + ".jpg"; a.click();
+  };
+
+  /** Intercambia el contenido (file + preview) de dos slots. Los labels NO se mueven. */
+  const swapSlots = (i: number, j: number) => {
+    if (i === j || i < 0 || j < 0 || i >= fotoSlots.length || j >= fotoSlots.length) return;
+    setFotoSlots((prev) => {
+      const arr = [...prev];
+      const a = arr[i];
+      const b = arr[j];
+      arr[i] = { ...a, file: b.file, preview: b.preview };
+      arr[j] = { ...b, file: a.file, preview: a.preview };
+      return arr;
+    });
+  };
+
+  /** Quita el contenido de un slot (deja el label) */
+  const removeFoto = (i: number) => {
+    setFotoSlots((prev) => prev.map((s, idx) => idx === i ? { ...s, file: null, preview: null } : s));
   };
 
   /**
@@ -742,15 +761,36 @@ export default function Vehiculos() {
                   </div>
 
                   {/* ── Photo grid ──────────────────────────────────────── */}
+                  <p className="text-[11px] mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    💡 Las fotos se suben por orden alfabético del nombre del archivo. Usa las flechas ◀ ▶ en cada foto, o arrástralas, para reordenarlas.
+                  </p>
                   <div className="grid grid-cols-3 gap-3">
                     {fotoSlots.map((slot, i) => (
-                      <div key={i} className="relative group">
+                      <div
+                        key={i}
+                        className="relative group"
+                        draggable={!!slot.preview && processingAI !== i}
+                        onDragStart={(e) => {
+                          if (!slot.preview) return;
+                          setDragSrcIdx(i);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragSrcIdx !== null && dragSrcIdx !== i) swapSlots(dragSrcIdx, i);
+                          setDragSrcIdx(null);
+                        }}
+                        onDragEnd={() => setDragSrcIdx(null)}
+                      >
                         <div
                           onClick={() => processingAI !== i && fotoRefs.current[i]?.click()}
                           className="border-2 border-dashed rounded-xl aspect-square flex flex-col items-center justify-center transition-colors relative overflow-hidden"
                           style={{
-                            borderColor: slot.preview ? "hsl(var(--primary))" : "hsl(var(--border))",
+                            borderColor: dragSrcIdx === i ? "hsl(var(--primary))" :
+                                          slot.preview ? "hsl(var(--primary))" : "hsl(var(--border))",
                             cursor: processingAI === i ? "default" : "pointer",
+                            opacity: dragSrcIdx === i ? 0.4 : 1,
                           }}>
 
                           {slot.preview ? (
@@ -788,9 +828,9 @@ export default function Vehiculos() {
                           )}
                         </div>
 
-                        {/* Hover action buttons */}
+                        {/* Hover action buttons — esquina superior derecha */}
                         {slot.preview && processingAI !== i && (
-                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 transition-opacity z-10">
                             <button
                               onClick={e => { e.stopPropagation(); applyAIBackground(i); }}
                               className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
@@ -805,7 +845,38 @@ export default function Vehiculos() {
                               title="Descargar foto">
                               <Download size={11} className="text-white" />
                             </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); if (confirm("¿Quitar esta foto?")) removeFoto(i); }}
+                              className="p-1.5 rounded-lg shadow-lg"
+                              style={{ background: "#dc2626" }}
+                              title="Quitar foto">
+                              <X size={11} className="text-white" />
+                            </button>
                           </div>
+                        )}
+
+                        {/* Botones reordenar — visibles SIEMPRE (mobile) cuando hay foto */}
+                        {slot.preview && processingAI !== i && (
+                          <>
+                            {i > 0 && (
+                              <button
+                                onClick={e => { e.stopPropagation(); swapSlots(i, i - 1); }}
+                                className="absolute left-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-70 hover:opacity-100 active:opacity-100 z-10"
+                                style={{ background: "rgba(0,0,0,0.65)" }}
+                                title="Mover a la posición anterior">
+                                <ArrowLeft size={12} className="text-white" />
+                              </button>
+                            )}
+                            {i < fotoSlots.length - 1 && (
+                              <button
+                                onClick={e => { e.stopPropagation(); swapSlots(i, i + 1); }}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-70 hover:opacity-100 active:opacity-100 z-10"
+                                style={{ background: "rgba(0,0,0,0.65)" }}
+                                title="Mover a la posición siguiente">
+                                <ArrowRight size={12} className="text-white" />
+                              </button>
+                            )}
+                          </>
                         )}
 
                         <input
