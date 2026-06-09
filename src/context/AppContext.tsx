@@ -47,6 +47,10 @@ export interface Vehiculo {
   aireAcondicionado: boolean;
   equipamientoExtra: string[];
   fotos: string[];
+  /** ISO timestamp de creacion (para badge "Nueva unidad" en lista). */
+  createdAt?: string;
+  /** ISO timestamp de ultima modificacion. */
+  updatedAt?: string;
 }
 
 export interface Consignatario {
@@ -242,6 +246,8 @@ function fromDb(row: Record<string, unknown>): Vehiculo {
     aireAcondicionado: Boolean(row.aire_acondicionado ?? false),
     equipamientoExtra: (row.equipamiento_extra as string[]) ?? [],
     fotos: (row.fotos as string[]) ?? [],
+    createdAt: row.created_at ? String(row.created_at) : undefined,
+    updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   };
 }
 

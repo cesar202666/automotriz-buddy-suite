@@ -11,8 +11,10 @@ interface FotoSlot { label: string; file: File | null; preview: string | null; }
 
 const FOTO_SLOTS = [
   "FRONTAL 3/4 IZQUIERDA", "FRONTAL", "TRASERA 3/4 DERECHA",
-  "TRASERA", "ASIENTOS DELANTEROS", "ASIENTOS TRASEROS",
-  "MALETERO / CAJA CARGA", "INTERIOR FRONTAL", "FOTOS ESPECIALES"
+  "TRASERA", "LATERAL IZQUIERDO", "LATERAL DERECHO",
+  "ASIENTOS DELANTEROS", "ASIENTOS TRASEROS", "MALETERO / CAJA CARGA",
+  "INTERIOR FRONTAL", "TABLERO", "MOTOR",
+  "RUEDAS", "DOCUMENTACIÓN", "FOTOS ESPECIALES"
 ];
 const TRANSMISIONES = ["Manual", "Automático"];
 const TRACCIONES = ["Tracción Delantera", "Tracción Trasera", "Tracción 4x4", "Tracción Integral"];
@@ -37,14 +39,28 @@ Replace ONLY the background with a clean professional automotive studio setting:
 
 OUTPUT FORMAT: high-quality photo of the SAME vehicle on the new background. No text overlays, no logos, no watermarks, no people, no other cars.`;
 
+/** Defaults Egaña: La Vara / Av Ferrocarriles km 4, Puerto Montt */
+const DEFAULT_SUCURSAL = "La Vara";
+const DEFAULT_UBICACION = "Av Ferrocarriles km 4, Puerto Montt";
+
 const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: string; consignatarioId: string }> => ({
   folio: "", patente: "", tipo: "Sedan", marca: "", modelo: "", anio: "2026",
-  estado: "DISPONIBLE", precioVenta: 0, precioPiso: 0, precioCosto: 0, sucursal: "", usuarioAsignado,
-  combustible: "Bencina", nMotor: "", vin: "", color: "", kilometraje: 0, ubicacion: "",
+  estado: "DISPONIBLE", precioVenta: 0, precioPiso: 0, precioCosto: 0,
+  sucursal: DEFAULT_SUCURSAL, usuarioAsignado,
+  combustible: "Bencina", nMotor: "", vin: "", color: "", kilometraje: 0,
+  ubicacion: DEFAULT_UBICACION,
   comentarios: "", transmision: "", traccion: "", aireAcondicionado: false,
   equipamientoExtra: [], fotos: [],
   procedencia: "Propio", consignatarioId: "",
 });
+
+/** True si el vehiculo se creo hace menos de 24h (badge "Nueva unidad"). */
+function esVehiculoNuevo(v: Vehiculo): boolean {
+  if (!v.createdAt) return false;
+  const ms = new Date(v.createdAt).getTime();
+  if (!Number.isFinite(ms)) return false;
+  return Date.now() - ms < 24 * 60 * 60 * 1000;
+}
 
 const fmt = (n: number) => "$" + n.toLocaleString("es-CL");
 
@@ -108,6 +124,9 @@ export default function Vehiculos() {
   const [saving, setSaving] = useState(false);
   const [batchUploading, setBatchUploading] = useState(false);
   const [zipDownloading, setZipDownloading] = useState(false);
+  // Por defecto cuando se abre un vehiculo a editar, esta en modo lectura.
+  // El usuario debe pulsar "Editar" para habilitar los inputs (previene clicks accidentales).
+  const [isReadOnly, setIsReadOnly] = useState(true);
 
   // AI bg state
   const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
@@ -174,12 +193,14 @@ export default function Vehiculos() {
     setForm(emptyVehiculo(ua));
     setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
     setEditId(null); setTab("general"); setShowModal(true);
+    setIsReadOnly(false); // crear siempre editable
   };
 
   const openEdit = (v: Vehiculo) => {
     setForm({ ...v });
     setFotoSlots(FOTO_SLOTS.map((label, i) => ({ label, file: null, preview: v.fotos[i] || null })));
     setEditId(v.id); setTab("general"); setShowModal(true);
+    setIsReadOnly(true); // editar arranca en modo lectura
   };
 
   const handleSave = async () => {
@@ -422,7 +443,7 @@ export default function Vehiculos() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
-              <th className="px-4 py-3 text-left font-semibold">Folio/Patente</th>
+              <th className="px-4 py-3 text-left font-semibold">Patente</th>
               <th className="px-4 py-3 text-left font-semibold">Marca</th>
               <th className="px-4 py-3 text-left font-semibold">Tipo</th>
               <th className="px-4 py-3 text-left font-semibold">Modelo</th>
@@ -437,7 +458,20 @@ export default function Vehiculos() {
           <tbody>
             {filtered.map(v => (
               <tr key={v.id} className="table-row-hover border-b" style={{ borderColor: "hsl(var(--border))" }}>
-                <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))" }} onClick={() => openEdit(v)}>{v.folio} - {v.patente}</td>
+                <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))" }} onClick={() => openEdit(v)}>
+                  <div className="flex items-center gap-2">
+                    <span>{v.patente || "—"}</span>
+                    {esVehiculoNuevo(v) && (
+                      <span
+                        className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full"
+                        style={{ background: "#16a34a", color: "white", letterSpacing: 0.3 }}
+                        title={`Subido el ${v.createdAt ? new Date(v.createdAt).toLocaleString("es-CL") : ""}`}
+                      >
+                        ★ Nueva unidad
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.marca}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.tipo}</td>
                 <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))", cursor: "pointer" }} onClick={() => openEdit(v)}>{v.modelo}</td>
@@ -465,11 +499,23 @@ export default function Vehiculos() {
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 pb-4 overflow-y-auto" style={{ background: "rgba(0,0,0,0.55)" }}>
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-3xl mx-4 animate-fade-in">
             <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "hsl(var(--border))" }}>
-              <span className="text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>
-                {editId ? `Editar Vehículo — ${form.patente}` : "Nuevo Vehículo"}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold" style={{ color: "hsl(var(--primary))" }}>
+                  {editId ? `${isReadOnly ? "Vehículo" : "Editar Vehículo"} — ${form.patente}` : "Nuevo Vehículo"}
+                </span>
+                {editId && isReadOnly && (
+                  <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold" style={{ background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
+                    Solo lectura
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
-                {editId && (
+                {editId && isReadOnly && (
+                  <button onClick={() => setIsReadOnly(false)} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-white" style={{ background: "hsl(var(--primary))" }}>
+                    <Edit2 size={13} /> Editar
+                  </button>
+                )}
+                {editId && !isReadOnly && (
                   <button onClick={() => confirmDelete(editId)} className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium" style={{ color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
                     <Trash2 size={13} /> Eliminar
                   </button>
@@ -488,6 +534,7 @@ export default function Vehiculos() {
             </div>
 
             <div className="px-6 py-5 max-h-[60vh] overflow-y-auto">
+              <fieldset disabled={isReadOnly} className="contents">
               {tab === "general" && (
                 <div>
                   <div className="section-divider mb-4">DATOS PRINCIPALES</div>
@@ -831,13 +878,18 @@ export default function Vehiculos() {
                   </div>
                 </div>
               )}
+              </fieldset>
             </div>
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
-              <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>
-                {saving ? "Guardando..." : "Guardar"}
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>
+                {isReadOnly ? "Cerrar" : "Cancelar"}
               </button>
+              {!isReadOnly && (
+                <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>
+                  {saving ? "Guardando..." : "Guardar"}
+                </button>
+              )}
             </div>
           </div>
         </div>
