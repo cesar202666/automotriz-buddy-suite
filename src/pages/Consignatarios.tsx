@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, FileText, Eye, Upload, Download, Table } from "lucide-react";
+import { Plus, Search, FileText, Eye, Upload, Download, Table, Link2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { useApp } from "@/context/AppContext";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 interface Consignatario {
   id: string;
@@ -233,7 +234,7 @@ function generateContratoPDF(c: Consignatario) {
 const MASTER_PASS = "ankker2026$$";
 
 function DeleteConsigModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  const { usuarioActual } = useApp();
+  const { usuarioActual, vehiculos } = useApp();
   const [pass, setPass] = useState("");
   const [err, setErr] = useState(false);
   const isMaster = usuarioActual?.rol === "master";
@@ -601,25 +602,73 @@ export default function Consignatarios() {
               )}
 
               {activeSection === "vehiculo" && (
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    ["Vehículo (Folio - Patente)", "vehiculo", "00002 - ABC123"],
-                    ["Marca", "marca", "Toyota"], ["Modelo", "modelo", "Corolla"],
-                    ["Patente", "patente", "ABC123"], ["Año", "anio", "2026"],
-                    ["Color", "color", "Blanco"], ["Kilometraje", "kilometraje", "0"],
-                  ].map(([label, field, placeholder]) => (
-                    <div key={field}>
-                      <label className="block text-xs font-medium mb-1">{label}</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder={placeholder as string} value={String((f as any)[field as string] || "")} onChange={e => setF({ [field as string]: e.target.value } as any)} />
+                <div className="space-y-3">
+                  {/* Selector para enlazar con un vehiculo ya creado del inventario */}
+                  <div
+                    className="border rounded-lg p-3"
+                    style={{
+                      borderColor: "hsl(var(--primary)/0.3)",
+                      background: "hsl(var(--primary)/0.04)",
+                    }}
+                  >
+                    <label className="text-xs font-semibold flex items-center gap-1.5 mb-2" style={{ color: "hsl(var(--primary))" }}>
+                      <Link2 size={13} /> Enlazar con vehículo existente del inventario
+                    </label>
+                    <SearchableSelect
+                      value={""}
+                      onChange={(vehId) => {
+                        const v = vehiculos.find((x) => x.id === vehId);
+                        if (!v) return;
+                        // Auto-completar todos los campos del vehiculo en el consignatario
+                        setF({
+                          vehiculo: `${v.folio || ""} - ${v.patente || ""}`.trim().replace(/^-\s*/, ""),
+                          marca: v.marca || "",
+                          modelo: v.modelo || "",
+                          patente: v.patente || "",
+                          anio: v.anio || "",
+                          color: v.color || "",
+                          kilometraje: String(v.kilometraje ?? 0),
+                        } as Partial<Consignatario>);
+                      }}
+                      placeholder="Escribe patente, marca o modelo para enlazar..."
+                      emptyMessage="Sin vehículos en inventario que coincidan"
+                      options={vehiculos.map((v) => ({
+                        value: v.id,
+                        label: `${v.patente || "?"} — ${v.marca} ${v.modelo}`,
+                        hint: [
+                          v.anio ? `Año ${v.anio}` : null,
+                          v.color || null,
+                          v.estado,
+                        ].filter(Boolean).join(" · "),
+                        search: `${v.patente} ${v.marca} ${v.modelo} ${v.anio} ${v.color ?? ""} ${v.folio ?? ""}`,
+                      }))}
+                    />
+                    <p className="text-[10px] mt-1.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Selecciona el vehículo del inventario y los datos abajo se autocompletan.
+                      También puedes editarlos manualmente.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      ["Vehículo (Folio - Patente)", "vehiculo", "00002 - ABC123"],
+                      ["Marca", "marca", "Toyota"], ["Modelo", "modelo", "Corolla"],
+                      ["Patente", "patente", "ABC123"], ["Año", "anio", "2026"],
+                      ["Color", "color", "Blanco"], ["Kilometraje", "kilometraje", "0"],
+                    ].map(([label, field, placeholder]) => (
+                      <div key={field}>
+                        <label className="block text-xs font-medium mb-1">{label}</label>
+                        <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                          placeholder={placeholder as string} value={String((f as any)[field as string] || "")} onChange={e => setF({ [field as string]: e.target.value } as any)} />
+                      </div>
+                    ))}
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Disponibilidad</label>
+                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={f.disponibilidad || "DISPONIBLE"} onChange={e => setF({ disponibilidad: e.target.value })}>
+                        <option>DISPONIBLE</option><option>VENDIDO</option><option>RESERVADO</option>
+                      </select>
                     </div>
-                  ))}
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Disponibilidad</label>
-                    <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                      value={f.disponibilidad || "DISPONIBLE"} onChange={e => setF({ disponibilidad: e.target.value })}>
-                      <option>DISPONIBLE</option><option>VENDIDO</option><option>RESERVADO</option>
-                    </select>
                   </div>
                 </div>
               )}
