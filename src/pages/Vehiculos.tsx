@@ -834,78 +834,64 @@ export default function Vehiculos() {
                         className="hidden"
                         onChange={handleMultiFotoChange}
                       />
-                      {/* Descargar todas — dropdown ZIP / individuales */}
-                      <div className="relative">
+                      {/* Descargar todas — accion directa: baja todas a la carpeta de Descargas.
+                          El dropdown queda como kebab (⋮) con ZIP como opcion alternativa. */}
+                      <div className="relative flex">
+                        <button
+                          onClick={downloadAllIndividual}
+                          disabled={zipDownloading || fotosCount === 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
+                          style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
+                          title="Descarga todas las fotos a tu carpeta de Descargas. La primera vez tu navegador te pedirá permitir descargas múltiples — acéptalo."
+                        >
+                          {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                          {zipDownloading ? "Descargando…" : "Descargar todas"}
+                        </button>
                         <button
                           onClick={() => setShowDownloadMenu(v => !v)}
                           disabled={zipDownloading || fotosCount === 0}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
+                          className="flex items-center px-2 py-1.5 rounded-r-lg border border-l-0 text-xs font-semibold hover:bg-muted disabled:opacity-50"
                           style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
-                          title="Elige el modo de descarga"
+                          title="Más opciones de descarga"
                         >
-                          {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                          {zipDownloading ? `Descargando…` : "Descargar todas"}
-                          {!zipDownloading && <ChevronDown size={11} />}
+                          <ChevronDown size={12} />
                         </button>
                         {showDownloadMenu && !zipDownloading && (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setShowDownloadMenu(false)} />
                             <div
-                              className="absolute right-0 top-full mt-1 w-80 rounded-lg shadow-xl border bg-popover z-50 overflow-hidden"
+                              className="absolute right-0 top-full mt-1 w-72 rounded-lg shadow-xl border bg-popover z-50 overflow-hidden"
                               style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))" }}
                             >
-                              {/* Opcion 1: Carpeta (solo Chrome/Edge desktop) */}
-                              {SUPPORTS_FS_ACCESS && (
-                                <>
-                                  <button
-                                    onClick={downloadAllToFolder}
-                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
-                                  >
-                                    <FolderOpen size={15} className="mt-0.5 flex-shrink-0" style={{ color: "hsl(var(--primary))" }} />
-                                    <div>
-                                      <div className="text-xs font-semibold flex items-center gap-1.5">
-                                        En una carpeta <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "#dcfce7", color: "#16a34a" }}>RECOMENDADO</span>
-                                      </div>
-                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                        Eliges la carpeta destino y se guardan ahí. Sin ZIP, sin permisos extra. (Chrome/Edge)
-                                      </div>
-                                    </div>
-                                  </button>
-                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
-                                </>
-                              )}
-
-                              {/* Opcion 2: ZIP */}
                               <button
                                 onClick={downloadAllAsZip}
                                 className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
                               >
-                                <Archive size={15} className="mt-0.5 flex-shrink-0" style={{ color: SUPPORTS_FS_ACCESS ? "inherit" : "hsl(var(--primary))" }} />
+                                <Archive size={15} className="mt-0.5 flex-shrink-0" />
                                 <div>
-                                  <div className="text-xs font-semibold flex items-center gap-1.5">
-                                    Como ZIP {!SUPPORTS_FS_ACCESS && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "#dcfce7", color: "#16a34a" }}>RECOMENDADO</span>}
-                                  </div>
+                                  <div className="text-xs font-semibold">Como ZIP (1 archivo)</div>
                                   <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                    1 solo archivo .zip. Funciona en cualquier navegador (móvil incluido).
+                                    Útil si tu navegador bloquea descargas múltiples o estás en celular.
                                   </div>
                                 </div>
                               </button>
-
-                              <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
-
-                              {/* Opcion 3: Individuales */}
-                              <button
-                                onClick={downloadAllIndividual}
-                                className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
-                              >
-                                <Download size={15} className="mt-0.5 flex-shrink-0" />
-                                <div>
-                                  <div className="text-xs font-semibold">Archivos individuales</div>
-                                  <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                    {fotosCount} archivos .jpg sueltos. Requiere permitir "descargas múltiples" en tu navegador.
-                                  </div>
-                                </div>
-                              </button>
+                              {SUPPORTS_FS_ACCESS && (
+                                <>
+                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
+                                  <button
+                                    onClick={downloadAllToFolder}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
+                                  >
+                                    <FolderOpen size={15} className="mt-0.5 flex-shrink-0" />
+                                    <div>
+                                      <div className="text-xs font-semibold">Elegir carpeta destino</div>
+                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                        Eliges dónde guardarlas. Solo Chrome/Edge en computador.
+                                      </div>
+                                    </div>
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </>
                         )}
