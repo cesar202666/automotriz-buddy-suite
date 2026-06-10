@@ -834,18 +834,19 @@ export default function Vehiculos() {
                         className="hidden"
                         onChange={handleMultiFotoChange}
                       />
-                      {/* Descargar todas — accion directa: baja todas a la carpeta de Descargas.
-                          El dropdown queda como kebab (⋮) con ZIP como opcion alternativa. */}
+                      {/* Descargar todas — accion directa: ZIP (la unica forma que funciona
+                          siempre, en cualquier navegador, sin ningun permiso extra). El usuario
+                          puede abrir el ZIP como una carpeta y ahi estan las fotos. */}
                       <div className="relative flex">
                         <button
-                          onClick={downloadAllIndividual}
+                          onClick={downloadAllAsZip}
                           disabled={zipDownloading || fotosCount === 0}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
                           style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
-                          title="Descarga todas las fotos a tu carpeta de Descargas. La primera vez tu navegador te pedirá permitir descargas múltiples — acéptalo."
+                          title="Descarga 1 archivo .zip con todas las fotos. Lo abres como una carpeta."
                         >
-                          {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                          {zipDownloading ? "Descargando…" : "Descargar todas"}
+                          {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Archive size={13} />}
+                          {zipDownloading ? "Empacando…" : "Descargar todas"}
                         </button>
                         <button
                           onClick={() => setShowDownloadMenu(v => !v)}
@@ -860,38 +861,39 @@ export default function Vehiculos() {
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setShowDownloadMenu(false)} />
                             <div
-                              className="absolute right-0 top-full mt-1 w-72 rounded-lg shadow-xl border bg-popover z-50 overflow-hidden"
+                              className="absolute right-0 top-full mt-1 w-80 rounded-lg shadow-xl border bg-popover z-50 overflow-hidden"
                               style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))" }}
                             >
+                              <div className="px-3 py-2 text-[10px] uppercase tracking-wider border-b" style={{ color: "hsl(var(--muted-foreground))", borderColor: "hsl(var(--border))" }}>
+                                Opciones alternativas
+                              </div>
+                              {SUPPORTS_FS_ACCESS && (
+                                <button
+                                  onClick={downloadAllToFolder}
+                                  className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
+                                >
+                                  <FolderOpen size={15} className="mt-0.5 flex-shrink-0" />
+                                  <div>
+                                    <div className="text-xs font-semibold">Elegir carpeta destino</div>
+                                    <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                      Tú eliges dónde guardar las fotos sueltas. (Chrome/Edge desktop)
+                                    </div>
+                                  </div>
+                                </button>
+                              )}
+                              {SUPPORTS_FS_ACCESS && <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />}
                               <button
-                                onClick={downloadAllAsZip}
+                                onClick={downloadAllIndividual}
                                 className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
                               >
-                                <Archive size={15} className="mt-0.5 flex-shrink-0" />
+                                <Download size={15} className="mt-0.5 flex-shrink-0" />
                                 <div>
-                                  <div className="text-xs font-semibold">Como ZIP (1 archivo)</div>
+                                  <div className="text-xs font-semibold">Descargar archivos sueltos</div>
                                   <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                    Útil si tu navegador bloquea descargas múltiples o estás en celular.
+                                    {fotosCount} archivos .jpg directo a Descargas. Tu navegador puede bloquear varias — debes permitir "descargas múltiples" cuando lo pida.
                                   </div>
                                 </div>
                               </button>
-                              {SUPPORTS_FS_ACCESS && (
-                                <>
-                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
-                                  <button
-                                    onClick={downloadAllToFolder}
-                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
-                                  >
-                                    <FolderOpen size={15} className="mt-0.5 flex-shrink-0" />
-                                    <div>
-                                      <div className="text-xs font-semibold">Elegir carpeta destino</div>
-                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                        Eliges dónde guardarlas. Solo Chrome/Edge en computador.
-                                      </div>
-                                    </div>
-                                  </button>
-                                </>
-                              )}
                             </div>
                           </>
                         )}
