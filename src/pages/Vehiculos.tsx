@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2 } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, FileText, Copy, ExternalLink } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
+import { supabase } from "@/integrations/supabase/client";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
@@ -55,6 +56,46 @@ const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: 
   equipamientoExtra: [], fotos: [],
   procedencia: "Propio", consignatarioId: "",
 });
+
+/**
+ * Plantilla base para el aviso de Yapo. Las llaves {variable} se reemplazan
+ * con los datos del vehiculo. El vendedor puede editar el texto antes de publicar.
+ */
+const YAPO_BODY_TEMPLATE = `🚗 {marca} {modelo} {anio}
+
+✅ Kilometraje: {kilometraje} km
+✅ Color: {color}
+✅ Combustible: {combustible}
+✅ Transmisión: {transmision}
+✅ Tracción: {traccion}
+{equipamiento}
+
+💰 Valor: $ {precio}
+
+📍 Disponible en EGAÑA AUTOMOTRIZ — Av Ferrocarriles km 4, Puerto Montt.
+📞 Atendemos todos los días. Recibimos tu auto en parte de pago.
+🔧 Vehículo revisado y al día con su documentación.
+
+¡Consúltanos sin compromiso!`;
+
+/** Reemplaza las {variables} de la plantilla con los datos reales del vehiculo. */
+function renderYapoBody(template: string, v: Partial<Vehiculo>): string {
+  const equip = (v.equipamientoExtra || []).filter(Boolean);
+  const equipLine = equip.length ? `✅ Equipamiento extra: ${equip.join(", ")}` : "";
+  const map: Record<string, string> = {
+    marca: (v.marca || "").toString().toUpperCase(),
+    modelo: (v.modelo || "").toString().toUpperCase(),
+    anio: (v.anio || "").toString(),
+    kilometraje: Number(v.kilometraje || 0).toLocaleString("es-CL"),
+    color: (v.color || "—").toString(),
+    combustible: (v.combustible || "—").toString(),
+    transmision: (v.transmision || "—").toString(),
+    traccion: (v.traccion || "—").toString(),
+    precio: Number(v.precioVenta || 0).toLocaleString("es-CL"),
+    equipamiento: equipLine,
+  };
+  return template.replace(/\{(\w+)\}/g, (_, key) => (key in map ? map[key] : `{${key}}`));
+}
 
 /** True si el vehiculo se creo hace menos de 24h (badge "Nueva unidad"). */
 function esVehiculoNuevo(v: Vehiculo): boolean {
@@ -131,6 +172,12 @@ export default function Vehiculos() {
   // Por defecto cuando se abre un vehiculo a editar, esta en modo lectura.
   // El usuario debe pulsar "Editar" para habilitar los inputs (previene clicks accidentales).
   const [isReadOnly, setIsReadOnly] = useState(true);
+
+  // Publicar en Yapo (texto editable + estado de publicacion)
+  const [yapoTemplate, setYapoTemplate] = useState(YAPO_BODY_TEMPLATE);
+  const [yapoTitulo, setYapoTitulo] = useState("");
+  const [yapoPublishing, setYapoPublishing] = useState(false);
+  const [yapoResult, setYapoResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // AI bg state
   const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
@@ -377,8 +424,81 @@ export default function Vehiculos() {
     setNuevoEquipamiento("");
   };
 
-  const TABS = ["general", "equipamiento", "datos_adicionales", "galeria"];
-  const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería" };
+  // Texto renderizado para Yapo (con datos del vehiculo) — derivado del template editable.
+  const yapoCuerpoRenderizado = renderYapoBody(yapoTemplate, form);
+  const yapoTituloFinal = yapoTitulo.trim() || `${form.marca || ""} ${form.modelo || ""} ${form.anio || ""}`.trim();
+  const fotosCargadas = fotoSlots.filter(s => s.preview).map(s => s.preview as string);
+
+  /** Publica el aviso en Yapo via edge function. */
+  const publicarEnYapo = async () => {
+    if (!form.marca || !form.modelo || !form.precioVenta) {
+      alert("Faltan datos basicos: marca, modelo y precio son obligatorios.");
+      return;
+    }
+    if (fotosCargadas.length === 0) {
+      alert("Subi al menos 1 foto antes de publicar.");
+      return;
+    }
+    setYapoPublishing(true);
+    setYapoResult(null);
+    try {
+      const externalId = `${form.patente || "VEH"}_${editId || "new"}`.replace(/[^a-zA-Z0-9_-]/g, "");
+      const { data, error } = await supabase.functions.invoke("yapo-publish", {
+        body: {
+          action: "publish",
+          vehiculo: {
+            patente: form.patente || "",
+            marca: form.marca,
+            modelo: form.modelo,
+            anio: form.anio || "",
+            kilometraje: form.kilometraje || 0,
+            precio: form.precioVenta || 0,
+            color: form.color || "",
+            combustible: form.combustible || "",
+            transmision: form.transmision || "",
+            traccion: form.traccion || "",
+            tipo: form.tipo || "",
+            comentarios: form.comentarios || "",
+            equipamientoExtra: form.equipamientoExtra || [],
+            aireAcondicionado: !!form.aireAcondicionado,
+            ubicacion: form.ubicacion || DEFAULT_UBICACION,
+            externalId,
+          },
+          fotos: fotosCargadas,
+          cuerpo: yapoCuerpoRenderizado,
+          titulo: yapoTituloFinal,
+        },
+      });
+      if (error) {
+        setYapoResult({ ok: false, msg: error.message || "Error al publicar" });
+      } else if (data?.ok) {
+        setYapoResult({ ok: true, msg: `Publicado. Yapo respondio status ${data.status}. ${(data.response || "").slice(0, 200)}` });
+      } else {
+        setYapoResult({ ok: false, msg: `Yapo respondio status ${data?.status ?? "?"}: ${(data?.response || data?.error || "Error desconocido").toString().slice(0, 400)}` });
+      }
+    } catch (e) {
+      setYapoResult({ ok: false, msg: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setYapoPublishing(false);
+    }
+  };
+
+  const probarConexionYapo = async () => {
+    setYapoPublishing(true);
+    setYapoResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("yapo-publish", { body: { action: "test" } });
+      if (error) setYapoResult({ ok: false, msg: error.message });
+      else setYapoResult({ ok: !!data?.ok, msg: JSON.stringify(data, null, 2) });
+    } catch (e) {
+      setYapoResult({ ok: false, msg: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setYapoPublishing(false);
+    }
+  };
+
+  const TABS = ["general", "equipamiento", "datos_adicionales", "galeria", "publicar_yapo"];
+  const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería", publicar_yapo: "Publicar Yapo" };
 
   /** Genera el prefijo de nombre de archivo: PATENTE_MARCA */
   const filePrefix = (): string => {
@@ -1187,6 +1307,191 @@ export default function Vehiculos() {
                         />
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {tab === "publicar_yapo" && (
+                <div className="space-y-5">
+                  <div className="rounded-lg border p-4" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted)/0.3)" }}>
+                    <div className="flex items-start gap-3">
+                      <Send size={18} style={{ color: "hsl(var(--primary))", flexShrink: 0, marginTop: 2 }} />
+                      <div className="flex-1">
+                        <h3 className="text-sm font-bold mb-1">📢 Publicar en Yapo.cl</h3>
+                        <p className="text-xs leading-relaxed" style={{ color: "hsl(var(--muted-foreground))" }}>
+                          Se enviarán <b>{fotosCargadas.length} fotos</b> y los datos del vehículo a tu cuenta Yapo Pro
+                          ({" "}<i>bastian-rey-aguirre</i> ). La plantilla de texto se autocompleta con la info del auto —
+                          podés editarla antes de publicar.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Resumen de datos que se enviaran */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                    <div className="rounded border p-2" style={{ borderColor: "hsl(var(--border))" }}>
+                      <div className="text-[10px] uppercase font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Marca / Modelo</div>
+                      <div className="font-semibold">{(form.marca || "—") + " " + (form.modelo || "")}</div>
+                    </div>
+                    <div className="rounded border p-2" style={{ borderColor: "hsl(var(--border))" }}>
+                      <div className="text-[10px] uppercase font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Año</div>
+                      <div className="font-semibold">{form.anio || "—"}</div>
+                    </div>
+                    <div className="rounded border p-2" style={{ borderColor: "hsl(var(--border))" }}>
+                      <div className="text-[10px] uppercase font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Precio</div>
+                      <div className="font-semibold">{fmt(form.precioVenta || 0)}</div>
+                    </div>
+                    <div className="rounded border p-2" style={{ borderColor: "hsl(var(--border))" }}>
+                      <div className="text-[10px] uppercase font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Kilometraje</div>
+                      <div className="font-semibold">{Number(form.kilometraje || 0).toLocaleString("es-CL")} km</div>
+                    </div>
+                    <div className="rounded border p-2" style={{ borderColor: "hsl(var(--border))" }}>
+                      <div className="text-[10px] uppercase font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Color</div>
+                      <div className="font-semibold">{form.color || "—"}</div>
+                    </div>
+                    <div className="rounded border p-2" style={{ borderColor: "hsl(var(--border))" }}>
+                      <div className="text-[10px] uppercase font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>Fotos</div>
+                      <div className="font-semibold">{fotosCargadas.length} / {FOTO_SLOTS.length}</div>
+                    </div>
+                  </div>
+
+                  {/* Titulo del aviso */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Título del aviso
+                    </label>
+                    <input
+                      type="text"
+                      value={yapoTitulo}
+                      onChange={e => setYapoTitulo(e.target.value)}
+                      placeholder={yapoTituloFinal || "Marca Modelo Año"}
+                      className="w-full border rounded px-3 py-2 text-sm bg-background"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                      maxLength={80}
+                    />
+                    <p className="text-[10px] mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Dejá vacío para usar: <b>{yapoTituloFinal || "Marca Modelo Año"}</b>
+                    </p>
+                  </div>
+
+                  {/* Plantilla editable */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Plantilla del aviso (editable)
+                      </label>
+                      <button
+                        onClick={() => setYapoTemplate(YAPO_BODY_TEMPLATE)}
+                        className="text-[10px] underline"
+                        style={{ color: "hsl(var(--primary))" }}
+                      >
+                        Restaurar plantilla
+                      </button>
+                    </div>
+                    <textarea
+                      value={yapoTemplate}
+                      onChange={e => setYapoTemplate(e.target.value)}
+                      rows={10}
+                      className="w-full border rounded px-3 py-2 text-xs bg-background font-mono"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                    />
+                    <p className="text-[10px] mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Variables disponibles: <code>{"{marca}"}</code>, <code>{"{modelo}"}</code>, <code>{"{anio}"}</code>,{" "}
+                      <code>{"{kilometraje}"}</code>, <code>{"{color}"}</code>, <code>{"{combustible}"}</code>,{" "}
+                      <code>{"{transmision}"}</code>, <code>{"{traccion}"}</code>, <code>{"{precio}"}</code>,{" "}
+                      <code>{"{equipamiento}"}</code>
+                    </p>
+                  </div>
+
+                  {/* Preview del texto final */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Vista previa del aviso
+                      </label>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(yapoCuerpoRenderizado); alert("Texto copiado"); }}
+                        className="flex items-center gap-1 text-[10px] underline"
+                        style={{ color: "hsl(var(--primary))" }}
+                      >
+                        <Copy size={11} /> Copiar
+                      </button>
+                    </div>
+                    <pre
+                      className="rounded border p-3 text-xs whitespace-pre-wrap font-sans"
+                      style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted)/0.4)", maxHeight: 280, overflow: "auto" }}
+                    >
+                      {yapoCuerpoRenderizado}
+                    </pre>
+                  </div>
+
+                  {/* Preview fotos */}
+                  {fotosCargadas.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Fotos a publicar ({fotosCargadas.length})
+                      </label>
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                        {fotosCargadas.map((src, i) => (
+                          <img
+                            key={i}
+                            src={src}
+                            alt={`foto-${i + 1}`}
+                            className="h-20 w-28 object-cover rounded border flex-shrink-0"
+                            style={{ borderColor: "hsl(var(--border))" }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Resultado */}
+                  {yapoResult && (
+                    <div
+                      className="rounded border p-3 text-xs"
+                      style={{
+                        borderColor: yapoResult.ok ? "rgb(34 197 94)" : "rgb(239 68 68)",
+                        background: yapoResult.ok ? "rgb(34 197 94 / 0.08)" : "rgb(239 68 68 / 0.08)",
+                      }}
+                    >
+                      <div className="font-semibold mb-1">{yapoResult.ok ? "✅ OK" : "❌ Error"}</div>
+                      <pre className="whitespace-pre-wrap font-mono text-[10px]" style={{ maxHeight: 200, overflow: "auto" }}>
+                        {yapoResult.msg}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Botones de accion */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap pt-2">
+                    <button
+                      onClick={probarConexionYapo}
+                      disabled={yapoPublishing}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded border text-xs font-semibold hover:bg-muted disabled:opacity-50"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                      title="Verifica que las credenciales esten cargadas correctamente"
+                    >
+                      <FileText size={13} /> Probar conexión
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href="https://www.yapo.cl/perfil/bastian-rey-aguirre"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded border text-xs font-semibold hover:bg-muted"
+                        style={{ borderColor: "hsl(var(--border))" }}
+                      >
+                        <ExternalLink size={13} /> Ver perfil Yapo
+                      </a>
+                      <button
+                        onClick={publicarEnYapo}
+                        disabled={yapoPublishing || !form.marca || !form.modelo || !form.precioVenta || fotosCargadas.length === 0}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-semibold text-white disabled:opacity-50"
+                        style={{ background: "hsl(var(--primary))" }}
+                      >
+                        {yapoPublishing ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                        {yapoPublishing ? "Publicando…" : "Publicar en Yapo"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
