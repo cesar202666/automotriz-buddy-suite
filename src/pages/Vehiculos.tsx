@@ -379,12 +379,16 @@ export default function Vehiculos() {
   const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería" };
 
   /**
-   * Descarga TODAS las fotos cargadas como archivos individuales (no ZIP).
-   * El navegador disparará una descarga por cada foto. Modern Chrome/Edge
-   * pide "Permitir descargas múltiples" la primera vez por sitio.
+   * Descarga TODAS las fotos cargadas como archivos individuales.
    *
-   * Nombres con prefijo numerico (01_, 02_) + label + patente para no pisar
-   * archivos si descargas fotos de varios vehiculos en la misma carpeta.
+   * Trucos para que el navegador no bloquee descargas multiples:
+   *  1. Convertir cada dataUrl a Blob + Object URL (mas confiable que
+   *     dataUrls largas en bucle, que Chrome puede rechazar).
+   *  2. Delay generoso (600ms) entre cada descarga — Chrome necesita tiempo
+   *     para procesar cada una antes de aceptar la siguiente.
+   *  3. La primera vez Chrome/Edge mostraran un banner pidiendo permiso
+   *     para "Descargar varios archivos automaticamente" — el usuario debe
+   *     pulsar "Permitir" o no descargara nada despues de la primera.
    */
   const downloadAllFotos = async () => {
     const available = fotoSlots.filter((s) => s.preview);
@@ -393,29 +397,58 @@ export default function Vehiculos() {
       return;
     }
     setZipDownloading(true);
+    const urlsToCleanup: string[] = [];
     try {
       const safe = (s: string) => s.replace(/[^a-zA-Z0-9_\- ]/g, "_").trim() || "foto";
       const patente = (form.patente || "").toString().replace(/[^a-zA-Z0-9]/g, "");
       const marca = (form.marca || "").toString().replace(/[^a-zA-Z0-9]/g, "");
       const prefix = [patente, marca].filter(Boolean).join("_") || "vehiculo";
 
-      // Pequeño delay entre descargas para que el browser las maneje bien
       let idx = 1;
+      let failures = 0;
+
       for (const slot of available) {
-        const filename = `${prefix}_${String(idx).padStart(2, "0")}_${safe(slot.label)}.jpg`;
-        const a = document.createElement("a");
-        a.href = slot.preview!;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        idx++;
-        // 120ms delay para que el navegador procese cada descarga
-        await new Promise((r) => setTimeout(r, 120));
+        try {
+          // Convertir dataUrl a Blob (mas eficiente y compatible que dataUrl directo)
+          const dataUrl = slot.preview!;
+          const blob = await (await fetch(dataUrl)).blob();
+          const objectUrl = URL.createObjectURL(blob);
+          urlsToCleanup.push(objectUrl);
+
+          const filename = `${prefix}_${String(idx).padStart(2, "0")}_${safe(slot.label)}.jpg`;
+          const a = document.createElement("a");
+          a.href = objectUrl;
+          a.download = filename;
+          a.rel = "noopener";
+          a.style.display = "none";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          idx++;
+          // 600ms entre descargas: Chrome necesita tiempo para no rechazar
+          // las siguientes. Probado: 120ms no era suficiente.
+          await new Promise((r) => setTimeout(r, 600));
+        } catch (e) {
+          failures++;
+          console.error("Error descargando foto", idx, e);
+        }
+      }
+
+      if (failures > 0) {
+        alert(
+          `${idx - 1 - failures} fotos descargadas. ${failures} fallaron.\n\n` +
+          `Si solo se descargó la primera, tu navegador bloqueó las demás. ` +
+          `Mira arriba del navegador: aparece un aviso "Este sitio quiere descargar varios archivos". ` +
+          `Pulsa "Permitir" y reintenta.`
+        );
       }
     } catch (err) {
       alert("Error descargando: " + (err instanceof Error ? err.message : String(err)));
     } finally {
+      // Cleanup de Object URLs despues de 30s (margen para que las descargas terminen)
+      setTimeout(() => {
+        urlsToCleanup.forEach((url) => URL.revokeObjectURL(url));
+      }, 30000);
       setZipDownloading(false);
     }
   };
@@ -704,10 +737,10 @@ export default function Vehiculos() {
                         disabled={zipDownloading || fotosCount === 0}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
                         style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
-                        title="Descarga cada foto como archivo individual (.jpg)"
+                        title="Descarga cada foto como archivo individual. La primera vez tu navegador te pedirá Permitir descargas múltiples — acéptalo."
                       >
                         {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                        Descargar todas
+                        {zipDownloading ? `Descargando ${fotosCount}…` : "Descargar todas"}
                       </button>
                     </div>
                   </div>
