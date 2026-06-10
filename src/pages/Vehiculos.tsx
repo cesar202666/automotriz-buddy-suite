@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
@@ -388,6 +388,77 @@ export default function Vehiculos() {
   };
 
   const safeLabel = (s: string): string => s.replace(/[^a-zA-Z0-9_\- ]/g, "_").trim() || "foto";
+
+  /** Si el navegador soporta showDirectoryPicker → permite elegir carpeta. */
+  const SUPPORTS_FS_ACCESS =
+    typeof window !== "undefined" && "showDirectoryPicker" in window;
+
+  /**
+   * Descarga todas las fotos directamente a una CARPETA elegida por el usuario.
+   *
+   * Usa la File System Access API (showDirectoryPicker). Solo funciona en
+   * Chrome/Edge desktop. El usuario elige la carpeta UNA vez y las N fotos
+   * quedan ahi sin ZIP ni descargas multiples.
+   *
+   * Permite tambien crear un subdirectorio PATENTE_MARCA dentro de la
+   * carpeta elegida para no mezclar fotos de varios autos.
+   */
+  const downloadAllToFolder = async () => {
+    const available = fotoSlots.filter((s) => s.preview);
+    if (available.length === 0) {
+      alert("No hay fotos cargadas.");
+      return;
+    }
+    if (!SUPPORTS_FS_ACCESS) {
+      alert("Tu navegador no soporta elegir carpeta. Usa la opción ZIP o cambia a Chrome/Edge en desktop.");
+      return;
+    }
+
+    setShowDownloadMenu(false);
+    let parentHandle: FileSystemDirectoryHandle;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      parentHandle = await (window as any).showDirectoryPicker({
+        id: "egana-fotos-vehiculos",
+        mode: "readwrite",
+        startIn: "downloads",
+      });
+    } catch {
+      // El usuario cerró el picker — no es error real, salimos en silencio
+      return;
+    }
+
+    setZipDownloading(true);
+    try {
+      const prefix = filePrefix();
+      // Crear sub-carpeta con el nombre del vehiculo para no mezclar
+      const targetHandle = await parentHandle.getDirectoryHandle(prefix, {
+        create: true,
+      });
+
+      let idx = 1;
+      for (const slot of available) {
+        try {
+          const dataUrl = slot.preview!;
+          const blob = await (await fetch(dataUrl)).blob();
+          const filename = `${String(idx).padStart(2, "0")}_${safeLabel(slot.label)}.jpg`;
+          const fileHandle = await targetHandle.getFileHandle(filename, { create: true });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const writable = await (fileHandle as any).createWritable();
+          await writable.write(blob);
+          await writable.close();
+          idx++;
+        } catch (e) {
+          console.error("Error escribiendo foto", idx, e);
+        }
+      }
+      alert(`${idx - 1} fotos guardadas en la carpeta "${prefix}".`);
+    } catch (err) {
+      alert("Error guardando en carpeta: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setZipDownloading(false);
+    }
+  };
 
   /**
    * Descarga todas las fotos en UN solo archivo .zip.
@@ -780,24 +851,49 @@ export default function Vehiculos() {
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setShowDownloadMenu(false)} />
                             <div
-                              className="absolute right-0 top-full mt-1 w-72 rounded-lg shadow-xl border bg-popover z-50 overflow-hidden"
+                              className="absolute right-0 top-full mt-1 w-80 rounded-lg shadow-xl border bg-popover z-50 overflow-hidden"
                               style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))" }}
                             >
+                              {/* Opcion 1: Carpeta (solo Chrome/Edge desktop) */}
+                              {SUPPORTS_FS_ACCESS && (
+                                <>
+                                  <button
+                                    onClick={downloadAllToFolder}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
+                                  >
+                                    <FolderOpen size={15} className="mt-0.5 flex-shrink-0" style={{ color: "hsl(var(--primary))" }} />
+                                    <div>
+                                      <div className="text-xs font-semibold flex items-center gap-1.5">
+                                        En una carpeta <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "#dcfce7", color: "#16a34a" }}>RECOMENDADO</span>
+                                      </div>
+                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                        Eliges la carpeta destino y se guardan ahí. Sin ZIP, sin permisos extra. (Chrome/Edge)
+                                      </div>
+                                    </div>
+                                  </button>
+                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
+                                </>
+                              )}
+
+                              {/* Opcion 2: ZIP */}
                               <button
                                 onClick={downloadAllAsZip}
                                 className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
                               >
-                                <Archive size={15} className="mt-0.5 flex-shrink-0" style={{ color: "hsl(var(--primary))" }} />
+                                <Archive size={15} className="mt-0.5 flex-shrink-0" style={{ color: SUPPORTS_FS_ACCESS ? "inherit" : "hsl(var(--primary))" }} />
                                 <div>
                                   <div className="text-xs font-semibold flex items-center gap-1.5">
-                                    Como ZIP <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "#dcfce7", color: "#16a34a" }}>RECOMENDADO</span>
+                                    Como ZIP {!SUPPORTS_FS_ACCESS && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "#dcfce7", color: "#16a34a" }}>RECOMENDADO</span>}
                                   </div>
                                   <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                    1 solo archivo .zip con todas dentro. Funciona siempre.
+                                    1 solo archivo .zip. Funciona en cualquier navegador (móvil incluido).
                                   </div>
                                 </div>
                               </button>
+
                               <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
+
+                              {/* Opcion 3: Individuales */}
                               <button
                                 onClick={downloadAllIndividual}
                                 className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
