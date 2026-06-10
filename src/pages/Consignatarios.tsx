@@ -75,6 +75,50 @@ const fmt = (n: number) => "$" + n.toLocaleString("es-CL");
 
 const ESTADO_VEHICULO_OPTIONS = ["Bueno", "Regular", "Malo"];
 
+// ── Constantes Egaña Automotriz (siempre las mismas, no dependen de la BD) ──
+const EGANA_NOMBRE_LEGAL = "AUTOMOTORA EGAÑA SPA";
+const EGANA_RUT = "77.728.698-6";
+const EGANA_REPRESENTANTE = "Egaña Automotriz";
+const EGANA_LUGAR_DEFAULT = "Puerto Montt";
+const EGANA_DOMICILIO = "Av Ferrocarriles km 4, Puerto Montt";
+
+/** Compone nombre + apellidos sin duplicar tokens. */
+function nombreCompletoSinDuplicar(nombre: string, apellidos: string): string {
+  const limpiar = (s: string) => (s || "").trim().replace(/\s+/g, " ");
+  const n = limpiar(nombre).toUpperCase();
+  const a = limpiar(apellidos).toUpperCase();
+  if (!a) return n;
+  if (!n) return a;
+  // Si el nombre ya termina con los apellidos, no los repetimos
+  if (n.endsWith(" " + a) || n === a) return n;
+  // Si el apellido empieza con el ultimo token del nombre, dedupe
+  const nTokens = n.split(" ");
+  const aTokens = a.split(" ");
+  // Quitar tokens del inicio de apellido que ya esten al final del nombre
+  let overlap = 0;
+  for (let k = Math.min(nTokens.length, aTokens.length); k > 0; k--) {
+    const tail = nTokens.slice(-k).join(" ");
+    const head = aTokens.slice(0, k).join(" ");
+    if (tail === head) { overlap = k; break; }
+  }
+  const apellidosFinales = aTokens.slice(overlap).join(" ");
+  return apellidosFinales ? `${n} ${apellidosFinales}` : n;
+}
+
+/** DD-MM-YYYY desde un string fecha o Date. Default: hoy. */
+function fechaFormateada(raw?: string): string {
+  if (raw) {
+    // Si ya tiene formato legible, usar tal cual
+    if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(raw)) return raw;
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+    }
+  }
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+}
+
 function generateContratoPDF(c: Consignatario) {
   const doc = new jsPDF({ format: "a4", unit: "mm" });
   const pageW = 210;
@@ -82,34 +126,45 @@ function generateContratoPDF(c: Consignatario) {
   const col = pageW - margin * 2;
   let y = 15;
 
+  // ── Valores resueltos: usar lo del registro si existe, si no defaults Egaña
+  const rutEmpresa = c.automotrizRut?.trim() || EGANA_RUT;
+  const representante = c.automotrizNombre?.trim() || EGANA_REPRESENTANTE;
+  const lugar = c.lugar?.trim() || c.ciudad?.trim() || EGANA_LUGAR_DEFAULT;
+  const fechaTxt = fechaFormateada(c.fecha);
+  const nombreCompleto = nombreCompletoSinDuplicar(c.nombre || "", c.apellidos || "");
+
   const setFont = (size: number, style: "normal" | "bold" = "normal") => {
     doc.setFontSize(size);
     doc.setFont("helvetica", style);
   };
 
-  // Header con logo EA (negro con texto amarillo simulado)
-  // Fondo negro del logo
+  // ── Header con logo EA (negro + amarillo) ──────────────────
+  // Fondo negro redondeado
   doc.setFillColor(10, 10, 10);
   doc.roundedRect(margin, y, 22, 22, 3, 3, "F");
   // Círculo amarillo
   doc.setDrawColor(234, 179, 8);
   doc.setLineWidth(1.5);
   doc.circle(margin + 11, y + 11, 9, "S");
-  // Letras EA en amarillo
+  // Letras EA amarillas centradas en el círculo
   doc.setTextColor(234, 179, 8);
   setFont(11, "bold");
   doc.text("EA", margin + 7, y + 13.5);
-  // Texto empresa en negro
+
+  // Texto empresa
   doc.setTextColor(0, 0, 0);
   setFont(12, "bold");
   doc.text("EGAÑA AUTOMOTRIZ", margin + 26, y + 8);
   setFont(8);
   doc.setTextColor(80, 80, 80);
-  doc.text("RUT: " + c.automotrizRut, margin + 26, y + 14);
+  doc.text("RUT: " + rutEmpresa, margin + 26, y + 14);
+
+  // Fecha arriba derecha
   setFont(8);
   doc.setTextColor(0, 0, 0);
-  doc.text(`En ${c.lugar}, ${c.fecha}`, pageW - margin - 55, y + 11);
-  // línea separadora
+  doc.text(`En ${lugar}, ${fechaTxt}`, pageW - margin, y + 11, { align: "right" });
+
+  // Línea separadora
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.4);
   doc.line(margin, y + 25, pageW - margin, y + 25);
@@ -120,7 +175,7 @@ function generateContratoPDF(c: Consignatario) {
   y += 10;
 
   setFont(8);
-  const introText = `Entre AUTOMOTORA EGAÑA, RUT N° ${c.automotrizRut}, representada por ${c.automotrizNombre}, en adelante "LA PARTE INTERMEDIARIA", por una parte; y por la otra, ${c.nombre.toUpperCase()} ${c.apellidos.toUpperCase()}, cédula de identidad N° ${c.rut}, en adelante "EL CONSIGNADOR", se ha convenido el siguiente Contrato de Consignación de Vehículo:`;
+  const introText = `Entre ${EGANA_NOMBRE_LEGAL}, RUT N° ${rutEmpresa}, representada por ${representante}, en adelante "LA PARTE INTERMEDIARIA", por una parte; y por la otra, ${nombreCompleto}, cédula de identidad N° ${c.rut || "—"}, domiciliado en ${c.direccion || "—"}, ${c.ciudad || lugar}, en adelante "EL CONSIGNADOR", se ha convenido el siguiente Contrato de Consignación de Vehículo:`;
   const introLines = doc.splitTextToSize(introText, col);
   doc.text(introLines, margin, y);
   y += introLines.length * 4 + 4;
@@ -212,7 +267,7 @@ function generateContratoPDF(c: Consignatario) {
   doc.text("DÉCIMO: Jurisdicción y domicilio", margin, y);
   y += 5;
   setFont(8);
-  doc.text(`Para todos los efectos legales, las partes fijan su domicilio en la ciudad de ${c.lugar}.`, margin, y);
+  doc.text(`Para todos los efectos legales, las partes fijan su domicilio en la ciudad de ${lugar}.`, margin, y);
   y += 10;
 
   // Firmas
@@ -224,12 +279,17 @@ function generateContratoPDF(c: Consignatario) {
   doc.text("Firma Consignador:", margin, y + 20);
   doc.text("Automotora Egaña:", mid + 10, y + 20);
   setFont(8);
-  doc.text(`Nombre: ${c.nombre.toUpperCase()} ${c.apellidos.toUpperCase()}`, margin, y + 25);
-  doc.text(`C.N.I: ${c.rut}`, margin, y + 30);
-  doc.text(`P.p ${c.automotrizNombre}`, mid + 10, y + 25);
-  doc.text(`RUT: ${c.automotrizRut}`, mid + 10, y + 30);
+  doc.text(`Nombre: ${nombreCompleto}`, margin, y + 25);
+  doc.text(`C.N.I: ${c.rut || "—"}`, margin, y + 30);
+  if (c.telefono) doc.text(`Teléfono: ${c.telefono}`, margin, y + 35);
+  doc.text(`p.p. ${representante}`, mid + 10, y + 25);
+  doc.text(`RUT: ${rutEmpresa}`, mid + 10, y + 30);
+  doc.text(`Domicilio: ${EGANA_DOMICILIO}`, mid + 10, y + 35);
 
-  doc.save(`Contrato_Consignacion_${c.apellidos}_${c.patente}.pdf`);
+  // Nombre archivo: limpiar caracteres especiales
+  const safeApellidos = (c.apellidos || c.nombre || "Consignatario").replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "_");
+  const safePatente = (c.patente || "SinPatente").replace(/[^a-zA-Z0-9]/g, "");
+  doc.save(`Contrato_Consignacion_${safeApellidos}_${safePatente}.pdf`);
 }
 
 const MASTER_PASS = "ankker2026$$";
