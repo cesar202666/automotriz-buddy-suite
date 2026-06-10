@@ -660,6 +660,10 @@ export default function Vehiculos() {
                     value={form.comentarios || ""} onChange={e => setForm({ ...form, comentarios: e.target.value })} />
                 </div>
               )}
+              </fieldset>
+              {/* ⚠️ Galeria FUERA del fieldset: la descarga debe funcionar incluso en modo lectura.
+                  Los botones de modificacion (Subir, IA, X, flechas, drag) se deshabilitan
+                  manualmente con isReadOnly. */}
 
               {tab === "galeria" && (
                 <div>
@@ -678,10 +682,10 @@ export default function Vehiculos() {
                       {/* Subir multiples */}
                       <button
                         onClick={() => multiUploadRef.current?.click()}
-                        disabled={batchUploading || fotosCount >= FOTO_SLOTS.length}
+                        disabled={batchUploading || fotosCount >= FOTO_SLOTS.length || isReadOnly}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
                         style={{ background: "hsl(var(--primary))" }}
-                        title={fotosCount >= FOTO_SLOTS.length ? "Todos los slots ocupados" : "Selecciona varias fotos a la vez"}
+                        title={isReadOnly ? "Activa el modo Editar para subir fotos" : fotosCount >= FOTO_SLOTS.length ? "Todos los slots ocupados" : "Selecciona varias fotos a la vez"}
                       >
                         {batchUploading ? <Loader2 size={13} className="animate-spin" /> : <Images size={13} />}
                         Subir múltiples
@@ -764,14 +768,15 @@ export default function Vehiculos() {
                       <div
                         key={i}
                         className="relative group"
-                        draggable={!!slot.preview && processingAI !== i}
+                        draggable={!isReadOnly && !!slot.preview && processingAI !== i}
                         onDragStart={(e) => {
-                          if (!slot.preview) return;
+                          if (isReadOnly || !slot.preview) return;
                           setDragSrcIdx(i);
                           e.dataTransfer.effectAllowed = "move";
                         }}
-                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                        onDragOver={(e) => { if (!isReadOnly) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } }}
                         onDrop={(e) => {
+                          if (isReadOnly) return;
                           e.preventDefault();
                           if (dragSrcIdx !== null && dragSrcIdx !== i) swapSlots(dragSrcIdx, i);
                           setDragSrcIdx(null);
@@ -779,7 +784,7 @@ export default function Vehiculos() {
                         onDragEnd={() => setDragSrcIdx(null)}
                       >
                         <div
-                          onClick={() => processingAI !== i && fotoRefs.current[i]?.click()}
+                          onClick={() => !isReadOnly && processingAI !== i && fotoRefs.current[i]?.click()}
                           className="border-2 border-dashed rounded-xl aspect-square flex flex-col items-center justify-center transition-colors relative overflow-hidden"
                           style={{
                             borderColor: dragSrcIdx === i ? "hsl(var(--primary))" :
@@ -826,13 +831,17 @@ export default function Vehiculos() {
                         {/* Hover action buttons — esquina superior derecha */}
                         {slot.preview && processingAI !== i && (
                           <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 transition-opacity z-10">
-                            <button
-                              onClick={e => { e.stopPropagation(); applyAIBackground(i); }}
-                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
-                              style={{ background: "hsl(var(--primary))" }}
-                              title="Aplicar IA — cambiar fondo">
-                              <Sparkles size={11} /> IA
-                            </button>
+                            {/* IA — solo en modo edicion */}
+                            {!isReadOnly && (
+                              <button
+                                onClick={e => { e.stopPropagation(); applyAIBackground(i); }}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
+                                style={{ background: "hsl(var(--primary))" }}
+                                title="Aplicar IA — cambiar fondo">
+                                <Sparkles size={11} /> IA
+                              </button>
+                            )}
+                            {/* Download — SIEMPRE activo (es solo lectura) */}
                             <button
                               onClick={e => { e.stopPropagation(); downloadFoto(slot.preview!, slot.label); }}
                               className="p-1.5 rounded-lg shadow-lg"
@@ -840,18 +849,21 @@ export default function Vehiculos() {
                               title="Descargar foto">
                               <Download size={11} className="text-white" />
                             </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); if (confirm("¿Quitar esta foto?")) removeFoto(i); }}
-                              className="p-1.5 rounded-lg shadow-lg"
-                              style={{ background: "#dc2626" }}
-                              title="Quitar foto">
-                              <X size={11} className="text-white" />
-                            </button>
+                            {/* X eliminar — solo en modo edicion */}
+                            {!isReadOnly && (
+                              <button
+                                onClick={e => { e.stopPropagation(); if (confirm("¿Quitar esta foto?")) removeFoto(i); }}
+                                className="p-1.5 rounded-lg shadow-lg"
+                                style={{ background: "#dc2626" }}
+                                title="Quitar foto">
+                                <X size={11} className="text-white" />
+                              </button>
+                            )}
                           </div>
                         )}
 
-                        {/* Botones reordenar — visibles SIEMPRE (mobile) cuando hay foto */}
-                        {slot.preview && processingAI !== i && (
+                        {/* Botones reordenar — solo en modo edicion */}
+                        {slot.preview && processingAI !== i && !isReadOnly && (
                           <>
                             {i > 0 && (
                               <button
@@ -944,7 +956,6 @@ export default function Vehiculos() {
                   </div>
                 </div>
               )}
-              </fieldset>
             </div>
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
