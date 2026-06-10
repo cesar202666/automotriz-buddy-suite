@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2 } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
@@ -392,6 +392,65 @@ export default function Vehiculos() {
   /** Si el navegador soporta showDirectoryPicker → permite elegir carpeta. */
   const SUPPORTS_FS_ACCESS =
     typeof window !== "undefined" && "showDirectoryPicker" in window;
+
+  /** Si el navegador soporta navigator.share con files (mobile principalmente). */
+  const SUPPORTS_SHARE_FILES = (() => {
+    if (typeof navigator === "undefined") return false;
+    if (!navigator.canShare) return false;
+    try {
+      const testFile = new File([new Blob(["test"])], "test.txt", { type: "text/plain" });
+      return navigator.canShare({ files: [testFile] });
+    } catch { return false; }
+  })();
+
+  /**
+   * Compartir todas las fotos usando el menú nativo del sistema.
+   * En celular abre el "Share Sheet" (iOS) o "Compartir" (Android) donde
+   * el usuario puede elegir: Guardar en Galería, Guardar en Archivos,
+   * abrir en Marketplace/Yapo/WhatsApp, etc.
+   *
+   * Esta es la forma MAS NATURAL para vendedores en celular: 1 click →
+   * eligen "Guardar en Fotos" → todas las fotos quedan en su galería
+   * lista para subir al marketplace.
+   */
+  const downloadAllViaShare = async () => {
+    const available = fotoSlots.filter((s) => s.preview);
+    if (available.length === 0) {
+      alert("No hay fotos cargadas.");
+      return;
+    }
+    setShowDownloadMenu(false);
+    setZipDownloading(true);
+    try {
+      const prefix = filePrefix();
+      const files: File[] = [];
+      let idx = 1;
+      for (const slot of available) {
+        const dataUrl = slot.preview!;
+        const blob = await (await fetch(dataUrl)).blob();
+        const filename = `${prefix}_${String(idx).padStart(2, "0")}_${safeLabel(slot.label)}.jpg`;
+        files.push(new File([blob], filename, { type: blob.type || "image/jpeg" }));
+        idx++;
+      }
+      if (!navigator.canShare || !navigator.canShare({ files })) {
+        alert("Tu dispositivo no permite compartir todas las fotos a la vez. Usa la opción ZIP.");
+        return;
+      }
+      await navigator.share({
+        files,
+        title: `Fotos ${prefix}`,
+        text: `${files.length} fotos del vehículo`,
+      });
+    } catch (err) {
+      // El usuario puede haber cancelado — no es error real
+      const errName = (err as Error).name;
+      if (errName !== "AbortError" && errName !== "NotAllowedError") {
+        alert("Error compartiendo: " + (err instanceof Error ? err.message : String(err)));
+      }
+    } finally {
+      setZipDownloading(false);
+    }
+  };
 
   /**
    * Descarga todas las fotos directamente a una CARPETA elegida por el usuario.
@@ -834,19 +893,27 @@ export default function Vehiculos() {
                         className="hidden"
                         onChange={handleMultiFotoChange}
                       />
-                      {/* Descargar todas — accion directa: ZIP (la unica forma que funciona
-                          siempre, en cualquier navegador, sin ningun permiso extra). El usuario
-                          puede abrir el ZIP como una carpeta y ahi estan las fotos. */}
+                      {/* Boton principal: en CELULAR usa Share API (menu nativo del SO,
+                          guarda en Fotos/Marketplace/etc directo). En DESKTOP usa ZIP
+                          que funciona en todos los navegadores sin permisos extra. */}
                       <div className="relative flex">
                         <button
-                          onClick={downloadAllAsZip}
+                          onClick={SUPPORTS_SHARE_FILES ? downloadAllViaShare : downloadAllAsZip}
                           disabled={zipDownloading || fotosCount === 0}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
                           style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
-                          title="Descarga 1 archivo .zip con todas las fotos. Lo abres como una carpeta."
+                          title={
+                            SUPPORTS_SHARE_FILES
+                              ? "Abre el menú compartir del celular: guarda en tu galería, Marketplace, WhatsApp, etc."
+                              : "Descarga 1 archivo .zip con todas las fotos. Lo abres como una carpeta."
+                          }
                         >
-                          {zipDownloading ? <Loader2 size={13} className="animate-spin" /> : <Archive size={13} />}
-                          {zipDownloading ? "Empacando…" : "Descargar todas"}
+                          {zipDownloading
+                            ? <Loader2 size={13} className="animate-spin" />
+                            : SUPPORTS_SHARE_FILES ? <Share2 size={13} /> : <Archive size={13} />}
+                          {zipDownloading
+                            ? (SUPPORTS_SHARE_FILES ? "Preparando…" : "Empacando…")
+                            : (SUPPORTS_SHARE_FILES ? "Compartir todas" : "Descargar todas")}
                         </button>
                         <button
                           onClick={() => setShowDownloadMenu(v => !v)}
@@ -865,23 +932,61 @@ export default function Vehiculos() {
                               style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))" }}
                             >
                               <div className="px-3 py-2 text-[10px] uppercase tracking-wider border-b" style={{ color: "hsl(var(--muted-foreground))", borderColor: "hsl(var(--border))" }}>
-                                Opciones alternativas
+                                Otras opciones
                               </div>
-                              {SUPPORTS_FS_ACCESS && (
-                                <button
-                                  onClick={downloadAllToFolder}
-                                  className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
-                                >
-                                  <FolderOpen size={15} className="mt-0.5 flex-shrink-0" />
-                                  <div>
-                                    <div className="text-xs font-semibold">Elegir carpeta destino</div>
-                                    <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                      Tú eliges dónde guardar las fotos sueltas. (Chrome/Edge desktop)
+                              {/* En desktop con Share API: ofrecerlo tambien como secundario */}
+                              {SUPPORTS_SHARE_FILES && (
+                                <>
+                                  <button
+                                    onClick={downloadAllViaShare}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
+                                  >
+                                    <Share2 size={15} className="mt-0.5 flex-shrink-0" />
+                                    <div>
+                                      <div className="text-xs font-semibold">Compartir con app</div>
+                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                        Abre el menú compartir del sistema (WhatsApp, Mail, Drive, etc.).
+                                      </div>
                                     </div>
-                                  </div>
-                                </button>
+                                  </button>
+                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
+                                </>
                               )}
-                              {SUPPORTS_FS_ACCESS && <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />}
+                              {/* En mobile el principal es Share — ofrecer ZIP como alternativa */}
+                              {SUPPORTS_SHARE_FILES && (
+                                <>
+                                  <button
+                                    onClick={downloadAllAsZip}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
+                                  >
+                                    <Archive size={15} className="mt-0.5 flex-shrink-0" />
+                                    <div>
+                                      <div className="text-xs font-semibold">Como archivo .zip</div>
+                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                        1 solo archivo. En móvil necesitarás una app para abrirlo.
+                                      </div>
+                                    </div>
+                                  </button>
+                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
+                                </>
+                              )}
+                              {SUPPORTS_FS_ACCESS && (
+                                <>
+                                  <button
+                                    onClick={downloadAllToFolder}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
+                                  >
+                                    <FolderOpen size={15} className="mt-0.5 flex-shrink-0" />
+                                    <div>
+                                      <div className="text-xs font-semibold">Elegir carpeta destino</div>
+                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                        Tú eliges dónde guardar las fotos sueltas. (Chrome/Edge desktop)
+                                      </div>
+                                    </div>
+                                  </button>
+                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
+                                </>
+                              )}
                               <button
                                 onClick={downloadAllIndividual}
                                 className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
@@ -890,7 +995,7 @@ export default function Vehiculos() {
                                 <div>
                                   <div className="text-xs font-semibold">Descargar archivos sueltos</div>
                                   <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                    {fotosCount} archivos .jpg directo a Descargas. Tu navegador puede bloquear varias — debes permitir "descargas múltiples" cuando lo pida.
+                                    {fotosCount} archivos .jpg directo a Descargas. El navegador puede pedir "permitir descargas múltiples" — acéptalo.
                                   </div>
                                 </div>
                               </button>
