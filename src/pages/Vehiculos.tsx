@@ -1327,6 +1327,30 @@ export default function Vehiculos() {
                     </div>
                   </div>
 
+                  {/* Feed XML para la Importacion automatica de Yapo */}
+                  <div className="rounded-lg border p-4" style={{ borderColor: "hsl(var(--primary)/0.4)", background: "hsl(var(--primary)/0.05)" }}>
+                    <h4 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--primary))" }}>
+                      ⚡ Importación automática (recomendado)
+                    </h4>
+                    <p className="text-xs mb-2 leading-relaxed" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Todo el stock <b>DISPONIBLE</b> (con sus fotos y la plantilla de texto) está publicado como
+                      feed XML que Yapo puede importar y sincronizar solo. Configuralo una vez en Yapo:{" "}
+                      <b>Mis anuncios → Importación de XML/XLS</b> y pegá esta URL:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-[10px] px-2 py-1.5 rounded border bg-background break-all" style={{ borderColor: "hsl(var(--border))" }}>
+                        https://nxeepkpfvhwobhgpltml.supabase.co/functions/v1/yapo-feed?key=rj41deS3hsrbFtZDR5cDKzlKtuWMgqlr
+                      </code>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText("https://nxeepkpfvhwobhgpltml.supabase.co/functions/v1/yapo-feed?key=rj41deS3hsrbFtZDR5cDKzlKtuWMgqlr"); alert("URL del feed copiada"); }}
+                        className="flex items-center gap-1 px-2 py-1.5 rounded border text-[10px] font-semibold hover:bg-muted flex-shrink-0"
+                        style={{ borderColor: "hsl(var(--border))" }}
+                      >
+                        <Copy size={11} /> Copiar
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Resumen de datos que se enviaran */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                     <div className="rounded border p-2" style={{ borderColor: "hsl(var(--border))" }}>
