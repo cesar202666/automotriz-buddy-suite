@@ -47,6 +47,8 @@ export interface Vehiculo {
   aireAcondicionado: boolean;
   equipamientoExtra: string[];
   fotos: string[];
+  /** True si el usuario lo publico en Yapo (aparece en el feed XML). */
+  publicadoYapo?: boolean;
   /** ISO timestamp de creacion (para badge "Nueva unidad" en lista). */
   createdAt?: string;
   /** ISO timestamp de ultima modificacion. */
@@ -215,6 +217,7 @@ function toDb(v: Vehiculo) {
     aire_acondicionado: v.aireAcondicionado,
     equipamiento_extra: v.equipamientoExtra,
     fotos: v.fotos,
+    publicado_yapo: v.publicadoYapo ?? false,
     updated_at: new Date().toISOString(),
   };
 }
@@ -246,6 +249,7 @@ function fromDb(row: Record<string, unknown>): Vehiculo {
     aireAcondicionado: Boolean(row.aire_acondicionado ?? false),
     equipamientoExtra: (row.equipamiento_extra as string[]) ?? [],
     fotos: (row.fotos as string[]) ?? [],
+    publicadoYapo: Boolean(row.publicado_yapo ?? false),
     createdAt: row.created_at ? String(row.created_at) : undefined,
     updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   };

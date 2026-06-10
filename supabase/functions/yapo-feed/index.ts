@@ -102,10 +102,13 @@ async function serveFoto(vehiculoId: string, n: number): Promise<Response> {
 /** Genera el feed XML con todos los vehiculos disponibles. */
 async function serveFeed(baseUrl: string): Promise<Response> {
   const supabase = getSupabase();
+  // Solo vehiculos que el usuario marco manualmente con "Publicar en Yapo"
+  // (ademas de estar DISPONIBLES). Sin publicacion automatica de todo el stock.
   const { data, error } = await supabase
     .from("vehiculos")
     .select("id, patente, marca, modelo, anio, tipo, estado, precio_venta, kilometraje, color, combustible, transmision, traccion, equipamiento_extra, fotos, updated_at")
     .eq("estado", "DISPONIBLE")
+    .eq("publicado_yapo", true)
     .order("updated_at", { ascending: false });
 
   if (error) {

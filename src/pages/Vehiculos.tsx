@@ -1,12 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, FileText, Copy, ExternalLink } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
-import { supabase } from "@/integrations/supabase/client";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
@@ -429,67 +428,43 @@ export default function Vehiculos() {
   const yapoTituloFinal = yapoTitulo.trim() || `${form.marca || ""} ${form.modelo || ""} ${form.anio || ""}`.trim();
   const fotosCargadas = fotoSlots.filter(s => s.preview).map(s => s.preview as string);
 
-  /** Publica el aviso en Yapo via edge function. */
-  const publicarEnYapo = async () => {
-    if (!form.marca || !form.modelo || !form.precioVenta) {
-      alert("Faltan datos basicos: marca, modelo y precio son obligatorios.");
+  /**
+   * Publica (o quita) el vehiculo en Yapo marcando publicado_yapo en la DB.
+   * El feed XML (yapo-feed) solo incluye vehiculos con ese flag, asi que
+   * Yapo lo importa/quita en su proxima sincronizacion. Sin publicacion
+   * automatica: cada auto se publica solo cuando el usuario lo decide aca.
+   */
+  const togglePublicarYapo = async (publicar: boolean) => {
+    if (!editId) {
+      alert("Primero guarda el vehículo, después publicalo en Yapo.");
       return;
     }
-    if (fotosCargadas.length === 0) {
-      alert("Subi al menos 1 foto antes de publicar.");
-      return;
-    }
-    setYapoPublishing(true);
-    setYapoResult(null);
-    try {
-      const externalId = `${form.patente || "VEH"}_${editId || "new"}`.replace(/[^a-zA-Z0-9_-]/g, "");
-      const { data, error } = await supabase.functions.invoke("yapo-publish", {
-        body: {
-          action: "publish",
-          vehiculo: {
-            patente: form.patente || "",
-            marca: form.marca,
-            modelo: form.modelo,
-            anio: form.anio || "",
-            kilometraje: form.kilometraje || 0,
-            precio: form.precioVenta || 0,
-            color: form.color || "",
-            combustible: form.combustible || "",
-            transmision: form.transmision || "",
-            traccion: form.traccion || "",
-            tipo: form.tipo || "",
-            comentarios: form.comentarios || "",
-            equipamientoExtra: form.equipamientoExtra || [],
-            aireAcondicionado: !!form.aireAcondicionado,
-            ubicacion: form.ubicacion || DEFAULT_UBICACION,
-            externalId,
-          },
-          fotos: fotosCargadas,
-          cuerpo: yapoCuerpoRenderizado,
-          titulo: yapoTituloFinal,
-        },
-      });
-      if (error) {
-        setYapoResult({ ok: false, msg: error.message || "Error al publicar" });
-      } else if (data?.ok) {
-        setYapoResult({ ok: true, msg: `Publicado. Yapo respondio status ${data.status}. ${(data.response || "").slice(0, 200)}` });
-      } else {
-        setYapoResult({ ok: false, msg: `Yapo respondio status ${data?.status ?? "?"}: ${(data?.response || data?.error || "Error desconocido").toString().slice(0, 400)}` });
+    if (publicar) {
+      if (!form.marca || !form.modelo || !form.precioVenta) {
+        alert("Faltan datos basicos: marca, modelo y precio son obligatorios.");
+        return;
       }
-    } catch (e) {
-      setYapoResult({ ok: false, msg: e instanceof Error ? e.message : String(e) });
-    } finally {
-      setYapoPublishing(false);
+      if (fotosCargadas.length === 0) {
+        alert("Subi al menos 1 foto antes de publicar.");
+        return;
+      }
+      if (form.estado !== "DISPONIBLE") {
+        alert("Solo los vehículos DISPONIBLES se publican en Yapo.");
+        return;
+      }
     }
-  };
-
-  const probarConexionYapo = async () => {
     setYapoPublishing(true);
     setYapoResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke("yapo-publish", { body: { action: "test" } });
-      if (error) setYapoResult({ ok: false, msg: error.message });
-      else setYapoResult({ ok: !!data?.ok, msg: JSON.stringify(data, null, 2) });
+      const fotos = fotoSlots.map(s => s.preview || "");
+      await updateVehiculo({ ...form, fotos, id: editId, publicadoYapo: publicar } as Vehiculo);
+      setForm({ ...form, publicadoYapo: publicar });
+      setYapoResult({
+        ok: true,
+        msg: publicar
+          ? "✅ Publicado: el vehículo ya está en el feed de Yapo. Yapo lo importará en su próxima sincronización (normalmente dentro de unas horas)."
+          : "El vehículo fue quitado del feed. Yapo eliminará el aviso en su próxima sincronización.",
+      });
     } catch (e) {
       setYapoResult({ ok: false, msg: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -787,6 +762,7 @@ export default function Vehiculos() {
               <th className="px-4 py-3 text-left font-semibold">Precio Piso</th>
               <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
               <th className="px-4 py-3 text-left font-semibold">Estado</th>
+              <th className="px-4 py-3 text-left font-semibold">Publicado</th>
               <th className="px-4 py-3 text-left font-semibold">Acciones</th>
             </tr>
           </thead>
@@ -815,6 +791,17 @@ export default function Vehiculos() {
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer", color: "hsl(var(--muted-foreground))" }}>{v.precioPiso ? fmt(v.precioPiso) : "—"}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.sucursal || "—"}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{statusBadge(v.estado)}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>
+                  {v.publicadoYapo ? (
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
+                      style={{ background: "#f97316", color: "white", letterSpacing: 0.3 }}
+                      title="Publicado en Yapo.cl">
+                      YAPO
+                    </span>
+                  ) : (
+                    <span style={{ color: "hsl(var(--muted-foreground))" }}>—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button onClick={() => openEdit(v)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
@@ -824,7 +811,7 @@ export default function Vehiculos() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vehículos</td></tr>
+              <tr><td colSpan={11} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vehículos</td></tr>
             )}
           </tbody>
         </table>
@@ -1330,11 +1317,11 @@ export default function Vehiculos() {
                   {/* Feed XML para la Importacion automatica de Yapo */}
                   <div className="rounded-lg border p-4" style={{ borderColor: "hsl(var(--primary)/0.4)", background: "hsl(var(--primary)/0.05)" }}>
                     <h4 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--primary))" }}>
-                      ⚡ Importación automática (recomendado)
+                      ⚡ Conexión con Yapo (configurar una sola vez)
                     </h4>
                     <p className="text-xs mb-2 leading-relaxed" style={{ color: "hsl(var(--muted-foreground))" }}>
-                      Todo el stock <b>DISPONIBLE</b> (con sus fotos y la plantilla de texto) está publicado como
-                      feed XML que Yapo puede importar y sincronizar solo. Configuralo una vez en Yapo:{" "}
+                      Solo los vehículos que vos publiques con el botón <b>"Publicar en Yapo"</b> entran al feed —
+                      nada se publica automático. Para conectar tu cuenta (una sola vez): en Yapo andá a{" "}
                       <b>Mis anuncios → Importación de XML/XLS</b> y pegá esta URL:
                     </p>
                     <div className="flex items-center gap-2">
@@ -1487,15 +1474,14 @@ export default function Vehiculos() {
 
                   {/* Botones de accion */}
                   <div className="flex items-center justify-between gap-2 flex-wrap pt-2">
-                    <button
-                      onClick={probarConexionYapo}
-                      disabled={yapoPublishing}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded border text-xs font-semibold hover:bg-muted disabled:opacity-50"
-                      style={{ borderColor: "hsl(var(--border))" }}
-                      title="Verifica que las credenciales esten cargadas correctamente"
-                    >
-                      <FileText size={13} /> Probar conexión
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {form.publicadoYapo && (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
+                          style={{ background: "rgb(34 197 94 / 0.12)", color: "rgb(22 163 74)" }}>
+                          ✅ Publicado en Yapo
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <a
                         href="https://www.yapo.cl/perfil/bastian-rey-aguirre"
@@ -1506,15 +1492,27 @@ export default function Vehiculos() {
                       >
                         <ExternalLink size={13} /> Ver perfil Yapo
                       </a>
-                      <button
-                        onClick={publicarEnYapo}
-                        disabled={yapoPublishing || !form.marca || !form.modelo || !form.precioVenta || fotosCargadas.length === 0}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-semibold text-white disabled:opacity-50"
-                        style={{ background: "hsl(var(--primary))" }}
-                      >
-                        {yapoPublishing ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                        {yapoPublishing ? "Publicando…" : "Publicar en Yapo"}
-                      </button>
+                      {form.publicadoYapo ? (
+                        <button
+                          onClick={() => togglePublicarYapo(false)}
+                          disabled={yapoPublishing}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded border text-xs font-semibold hover:bg-muted disabled:opacity-50"
+                          style={{ borderColor: "rgb(239 68 68)", color: "rgb(239 68 68)" }}
+                        >
+                          {yapoPublishing ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                          {yapoPublishing ? "Quitando…" : "Quitar de Yapo"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => togglePublicarYapo(true)}
+                          disabled={yapoPublishing || !form.marca || !form.modelo || !form.precioVenta || fotosCargadas.length === 0}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-semibold text-white disabled:opacity-50"
+                          style={{ background: "hsl(var(--primary))" }}
+                        >
+                          {yapoPublishing ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                          {yapoPublishing ? "Publicando…" : "Publicar en Yapo"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
