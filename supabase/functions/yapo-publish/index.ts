@@ -22,6 +22,10 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+/** Bucket público donde subimos las fotos para que Yapo pueda descargarlas. */
+const YAPO_BUCKET = "yapo-fotos";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,6 +79,80 @@ function getCreds() {
     slugApiKey: Deno.env.get("YAPO_SLUG_APIKEY") ?? "",
     email: Deno.env.get("YAPO_EMAIL") ?? "",
   };
+}
+
+/** Cliente Supabase con service role (acceso a Storage). */
+function getSupabase() {
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  return createClient(url, serviceKey);
+}
+
+/** Decodifica un data URL (data:image/jpeg;base64,XXXX) a bytes + mime. */
+function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; mime: string; ext: string } | null {
+  const m = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+  if (!m) return null;
+  const mime = m[1] || "image/jpeg";
+  const b64 = m[2];
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+  return { bytes, mime, ext };
+}
+
+/** Asegura que el bucket público exista. */
+async function ensureBucket(supabase: ReturnType<typeof getSupabase>) {
+  const { data } = await supabase.storage.getBucket(YAPO_BUCKET);
+  if (!data) {
+    await supabase.storage.createBucket(YAPO_BUCKET, {
+      public: true,
+      fileSizeLimit: "15MB",
+      allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+    });
+  }
+}
+
+/**
+ * Convierte las fotos (data URLs base64) en URLs públicas subiéndolas a Storage.
+ * Las que ya son http(s) se dejan pasar tal cual.
+ * Devuelve { urls, errores }.
+ */
+async function fotosAUrlsPublicas(
+  fotos: string[],
+  externalId: string,
+): Promise<{ urls: string[]; errores: string[] }> {
+  const urls: string[] = [];
+  const errores: string[] = [];
+  const supabase = getSupabase();
+  await ensureBucket(supabase);
+
+  let idx = 0;
+  for (const foto of fotos) {
+    idx++;
+    if (/^https?:\/\//i.test(foto)) {
+      urls.push(foto);
+      continue;
+    }
+    const decoded = decodeDataUrl(foto);
+    if (!decoded) {
+      errores.push(`Foto ${idx}: formato no reconocido (se omite)`);
+      continue;
+    }
+    const safeId = externalId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const path = `${safeId}/foto_${String(idx).padStart(2, "0")}.${decoded.ext}`;
+    const { error: upErr } = await supabase.storage
+      .from(YAPO_BUCKET)
+      .upload(path, decoded.bytes, { contentType: decoded.mime, upsert: true });
+    if (upErr) {
+      errores.push(`Foto ${idx}: ${upErr.message}`);
+      continue;
+    }
+    const { data: pub } = supabase.storage.from(YAPO_BUCKET).getPublicUrl(path);
+    if (pub?.publicUrl) urls.push(pub.publicUrl);
+    else errores.push(`Foto ${idx}: no se pudo obtener URL pública`);
+  }
+  return { urls, errores };
 }
 
 /** Genera el XML que Yapo Pro Import API espera. */
@@ -194,14 +272,25 @@ function actionPreview(req: PublishRequest) {
 async function actionPublish(req: PublishRequest) {
   if (!req.vehiculo) return { ok: false, error: "Falta vehiculo en el payload" };
   if (!req.fotos || req.fotos.length === 0) {
-    return { ok: false, error: "Yapo requiere al menos 1 foto en URL pública" };
+    return { ok: false, error: "Yapo requiere al menos 1 foto" };
   }
-  const xml = buildYapoXml(req);
+
+  // 1. Subir las fotos base64 a Storage → URLs públicas que Yapo puede descargar.
+  const externalId = req.vehiculo.externalId || `${req.vehiculo.patente}_${Date.now()}`;
+  const { urls, errores } = await fotosAUrlsPublicas(req.fotos, externalId);
+  if (urls.length === 0) {
+    return { ok: false, error: "No se pudo subir ninguna foto a Storage", detalle: errores };
+  }
+
+  // 2. Construir el XML usando las URLs públicas (no base64).
+  const xml = buildYapoXml({ ...req, fotos: urls });
   const result = await callYapoImport(xml);
   return {
     ok: result.ok,
     status: result.status,
     response: result.body.slice(0, 4000),
+    fotos_subidas: urls.length,
+    fotos_errores: errores,
     xml_sent: xml,
   };
 }
