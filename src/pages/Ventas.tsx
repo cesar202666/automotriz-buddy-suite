@@ -156,6 +156,7 @@ export default function Ventas() {
     setCreditoFirmDoc({ dataUrl: null, name: null });
     setDocVentaDoc({ dataUrl: null, name: null });
     setEditId(null);
+    setSelectedVehiculoId("");
     setWizardStep("identificacion");
     setShowCreateCliente(false);
     setShowModal(true);
@@ -168,6 +169,8 @@ export default function Ventas() {
     setCreditoFirmDoc({ dataUrl: v.creditoFirmadoDoc, name: v.creditoFirmadoDocName });
     setDocVentaDoc({ dataUrl: v.documentacionVenta, name: v.documentacionVentaName });
     setEditId(v.id);
+    // Derivar el id del vehiculo desde la patente guardada (primera coincidencia)
+    setSelectedVehiculoId(vehiculos.find(x => x.patente === v.patente)?.id ?? "");
     setWizardStep("identificacion");
     setShowCreateCliente(false);
     setShowModal(true);
@@ -182,8 +185,13 @@ export default function Ventas() {
     }
   };
 
-  const selectVehiculo = (patente: string) => {
-    const v = vehiculos.find(x => x.patente === patente);
+  // Vehiculo seleccionado por ID (la patente NO es unica: muchos son "S/P",
+  // lo que rompia el buscador con keys duplicadas y seleccion ambigua).
+  const [selectedVehiculoId, setSelectedVehiculoId] = useState("");
+
+  const selectVehiculo = (id: string) => {
+    setSelectedVehiculoId(id);
+    const v = vehiculos.find(x => x.id === id);
     if (v) {
       const calc = calcFields(v.precioVenta, v.precioCosto, form.gastosAdmin);
       setForm(f => ({
@@ -192,6 +200,8 @@ export default function Ventas() {
         sucursal: v.sucursal, anioVehiculo: v.anio, colorVehiculo: v.color,
         kilometrajeVehiculo: v.kilometraje, ...calc
       }));
+    } else {
+      setForm(f => ({ ...f, patente: "" }));
     }
   };
 
@@ -442,13 +452,13 @@ export default function Ventas() {
                     <div className="col-span-2">
                       <label className="block text-xs font-medium mb-1">Patente *</label>
                       <SearchableSelect
-                        value={form.patente}
+                        value={selectedVehiculoId || (vehiculos.find(x => x.patente === form.patente)?.id ?? "")}
                         onChange={(v) => selectVehiculo(v)}
                         placeholder="Escribe patente, marca o modelo..."
                         emptyMessage="Sin vehículos que coincidan"
                         options={vehiculos.map(v => ({
-                          value: v.patente,
-                          label: `${v.patente} — ${v.marca} ${v.modelo}`,
+                          value: v.id,
+                          label: `${v.patente || "S/P"} — ${v.marca} ${v.modelo}`,
                           hint: [v.anio ? `Año ${v.anio}` : null, v.color, v.estado].filter(Boolean).join(" · "),
                           search: `${v.patente} ${v.marca} ${v.modelo} ${v.anio} ${v.color ?? ""}`,
                         }))}

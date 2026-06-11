@@ -253,7 +253,9 @@ export function SearchableSelect({
                 const isHighlighted = idx === highlightIdx;
                 return (
                   <div
-                    key={opt.value}
+                    // value puede repetirse (ej: vehiculos con patente "S/P") —
+                    // el idx evita keys duplicadas que rompen el render del filtro
+                    key={`${opt.value}_${idx}`}
                     data-idx={idx}
                     onMouseEnter={() => setHighlightIdx(idx)}
                     onClick={() => handleSelect(opt)}
