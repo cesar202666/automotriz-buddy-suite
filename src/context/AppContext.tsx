@@ -222,6 +222,27 @@ function toDb(v: Vehiculo) {
   };
 }
 
+/**
+ * Supabase limita cada consulta a 1000 filas. Con 1237+ vehiculos y 4777
+ * clientes, una sola consulta deja registros invisibles (ej: el buscador
+ * de vehiculos en Ventas no encontraba los mas antiguos). Este helper
+ * pagina de a 1000 hasta traer todo.
+ */
+async function fetchAllRows(
+  query: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>,
+): Promise<Record<string, unknown>[] | null> {
+  const PAGE = 1000;
+  const all: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await query(from, from + PAGE - 1);
+    if (error) return all.length ? all : null;
+    const rows = (data ?? []) as Record<string, unknown>[];
+    all.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return all;
+}
+
 function fromDb(row: Record<string, unknown>): Vehiculo {
   return {
     id: String(row.id ?? ""),
@@ -350,15 +371,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadVehiculos = async () => {
       setVehiculosLoading(true);
-      const { data, error } = await supabase
-        .from("vehiculos")
-        .select("*")
-        // Orden: ultima vez modificado (o creado si nunca se actualizo) primero
-        .order("updated_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false });
-      if (!error && data) {
-        setVehiculos(data.map(row => fromDb(row as Record<string, unknown>)));
-      }
+      const rows = await fetchAllRows((from, to) =>
+        supabase
+          .from("vehiculos")
+          .select("*")
+          // Orden: ultima vez modificado (o creado si nunca se actualizo) primero
+          .order("updated_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
+      if (rows) setVehiculos(rows.map(row => fromDb(row)));
       setVehiculosLoading(false);
     };
     loadVehiculos();
@@ -367,11 +389,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Load clientes from DB on mount ─────────────────────────────────────────
   useEffect(() => {
     const loadClientes = async () => {
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error || !data) return;
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from("clientes")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
+      if (!data) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mapped: Cliente[] = data.map((row: any) => ({
         id: String(row.id ?? ""),
@@ -400,11 +425,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Load consignatarios from DB on mount ───────────────────────────────────
   useEffect(() => {
     const loadConsignatarios = async () => {
-      const { data, error } = await supabase
-        .from("consignatarios")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error || !data) return;
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from("consignatarios")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
+      if (!data) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mapped: Consignatario[] = data.map((row: any) => ({
         id: String(row.id ?? ""),
@@ -428,11 +456,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Load ventas from DB on mount ───────────────────────────────────────────
   useEffect(() => {
     const loadVentas = async () => {
-      const { data, error } = await supabase
-        .from("ventas")
-        .select("*")
-        .order("fecha_venta", { ascending: false });
-      if (error || !data) return;
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from("ventas")
+          .select("*")
+          .order("fecha_venta", { ascending: false })
+          .range(from, to),
+      );
+      if (!data) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mapped: Venta[] = data.map((row: any) => ({
         id: String(row.id ?? ""),

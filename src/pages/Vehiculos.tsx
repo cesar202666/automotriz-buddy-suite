@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
@@ -172,6 +172,10 @@ export default function Vehiculos() {
   // El usuario debe pulsar "Editar" para habilitar los inputs (previene clicks accidentales).
   const [isReadOnly, setIsReadOnly] = useState(true);
 
+  // Precio Piso oculto por defecto (dato sensible): el ojo lo revela.
+  const [showPiso, setShowPiso] = useState(false);          // columna en la tabla
+  const [showPisoModal, setShowPisoModal] = useState(false); // campo en el modal
+
   // Publicar en Yapo (texto editable + estado de publicacion)
   const [yapoTemplate, setYapoTemplate] = useState(YAPO_BODY_TEMPLATE);
   const [yapoTitulo, setYapoTitulo] = useState("");
@@ -244,6 +248,7 @@ export default function Vehiculos() {
     setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
     setEditId(null); setTab("general"); setShowModal(true);
     setIsReadOnly(false); // crear siempre editable
+    setShowPisoModal(true); // al crear, el campo se escribe directo
   };
 
   const openEdit = (v: Vehiculo) => {
@@ -251,6 +256,7 @@ export default function Vehiculos() {
     setFotoSlots(FOTO_SLOTS.map((label, i) => ({ label, file: null, preview: v.fotos[i] || null })));
     setEditId(v.id); setTab("general"); setShowModal(true);
     setIsReadOnly(true); // editar arranca en modo lectura
+    setShowPisoModal(false); // precio piso oculto por defecto
   };
 
   const handleSave = async () => {
@@ -759,7 +765,18 @@ export default function Vehiculos() {
               <th className="px-4 py-3 text-left font-semibold">Modelo</th>
               <th className="px-4 py-3 text-left font-semibold">Año</th>
               <th className="px-4 py-3 text-left font-semibold">Precio Venta</th>
-              <th className="px-4 py-3 text-left font-semibold">Precio Piso</th>
+              <th className="px-4 py-3 text-left font-semibold">
+                <span className="inline-flex items-center gap-1.5">
+                  Precio Piso
+                  <button
+                    onClick={() => setShowPiso(v => !v)}
+                    className="p-0.5 rounded hover:bg-muted"
+                    title={showPiso ? "Ocultar precios piso" : "Mostrar precios piso"}
+                  >
+                    {showPiso ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                </span>
+              </th>
               <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
               <th className="px-4 py-3 text-left font-semibold">Estado</th>
               <th className="px-4 py-3 text-left font-semibold">Publicado</th>
@@ -788,7 +805,9 @@ export default function Vehiculos() {
                 <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))", cursor: "pointer" }} onClick={() => openEdit(v)}>{v.modelo}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.anio}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{fmt(v.precioVenta)}</td>
-                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer", color: "hsl(var(--muted-foreground))" }}>{v.precioPiso ? fmt(v.precioPiso) : "—"}</td>
+                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer", color: "hsl(var(--muted-foreground))" }}>
+                  {v.precioPiso ? (showPiso ? fmt(v.precioPiso) : "••••••") : "—"}
+                </td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.sucursal || "—"}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{statusBadge(v.estado)}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>
@@ -907,8 +926,33 @@ export default function Vehiculos() {
                   <div className="grid grid-cols-3 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Precio Venta</label>
                       <NumberInput value={form.precioVenta ?? 0} onChange={(n) => setForm({ ...form, precioVenta: n })} currency placeholder="Ej: 10.500.000" /></div>
-                    <div><label className="block text-xs font-medium mb-1">Precio Piso</label>
-                      <NumberInput value={form.precioPiso ?? 0} onChange={(n) => setForm({ ...form, precioPiso: n })} currency placeholder="Ej: 9.000.000" /></div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">
+                        <span className="inline-flex items-center gap-1.5">
+                          Precio Piso
+                          {/* span (no button): el fieldset disabled del modo lectura
+                              no lo bloquea, y el ojo debe funcionar siempre */}
+                          <span
+                            role="button"
+                            onClick={() => setShowPisoModal(v => !v)}
+                            className="p-0.5 rounded hover:bg-muted cursor-pointer inline-flex"
+                            title={showPisoModal ? "Ocultar precio piso" : "Mostrar precio piso"}
+                          >
+                            {showPisoModal ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </span>
+                        </span>
+                      </label>
+                      {showPisoModal ? (
+                        <NumberInput value={form.precioPiso ?? 0} onChange={(n) => setForm({ ...form, precioPiso: n })} currency placeholder="Ej: 9.000.000" />
+                      ) : (
+                        <div
+                          className="w-full border rounded px-3 py-2 text-sm bg-background select-none"
+                          style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))", letterSpacing: 2 }}
+                        >
+                          {form.precioPiso ? "••••••" : "—"}
+                        </div>
+                      )}
+                    </div>
                     <div><label className="block text-xs font-medium mb-1">Sucursal</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.sucursal || ""} onChange={e => setForm({ ...form, sucursal: e.target.value })} /></div>
