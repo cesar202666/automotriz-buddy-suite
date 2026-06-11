@@ -172,9 +172,8 @@ export default function Vehiculos() {
   // El usuario debe pulsar "Editar" para habilitar los inputs (previene clicks accidentales).
   const [isReadOnly, setIsReadOnly] = useState(true);
 
-  // Precio Piso oculto por defecto (dato sensible): el ojo lo revela.
-  const [showPiso, setShowPiso] = useState(false);          // columna en la tabla
-  const [showPisoModal, setShowPisoModal] = useState(false); // campo en el modal
+  // Precio Piso: solo visible dentro del modal, oculto por defecto (el ojo lo revela).
+  const [showPisoModal, setShowPisoModal] = useState(false);
 
   // Publicar en Yapo (texto editable + estado de publicacion)
   const [yapoTemplate, setYapoTemplate] = useState(YAPO_BODY_TEMPLATE);
@@ -765,18 +764,6 @@ export default function Vehiculos() {
               <th className="px-4 py-3 text-left font-semibold">Modelo</th>
               <th className="px-4 py-3 text-left font-semibold">Año</th>
               <th className="px-4 py-3 text-left font-semibold">Precio Venta</th>
-              <th className="px-4 py-3 text-left font-semibold">
-                <span className="inline-flex items-center gap-1.5">
-                  Precio Piso
-                  <button
-                    onClick={() => setShowPiso(v => !v)}
-                    className="p-0.5 rounded hover:bg-muted"
-                    title={showPiso ? "Ocultar precios piso" : "Mostrar precios piso"}
-                  >
-                    {showPiso ? <EyeOff size={13} /> : <Eye size={13} />}
-                  </button>
-                </span>
-              </th>
               <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
               <th className="px-4 py-3 text-left font-semibold">Estado</th>
               <th className="px-4 py-3 text-left font-semibold">Publicado</th>
@@ -805,9 +792,6 @@ export default function Vehiculos() {
                 <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))", cursor: "pointer" }} onClick={() => openEdit(v)}>{v.modelo}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.anio}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{fmt(v.precioVenta)}</td>
-                <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer", color: "hsl(var(--muted-foreground))" }}>
-                  {v.precioPiso ? (showPiso ? fmt(v.precioPiso) : "••••••") : "—"}
-                </td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{v.sucursal || "—"}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>{statusBadge(v.estado)}</td>
                 <td className="px-4 py-3" onClick={() => openEdit(v)} style={{ cursor: "pointer" }}>
@@ -830,7 +814,7 @@ export default function Vehiculos() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={11} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vehículos</td></tr>
+              <tr><td colSpan={10} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vehículos</td></tr>
             )}
           </tbody>
         </table>
