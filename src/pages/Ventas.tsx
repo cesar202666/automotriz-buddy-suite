@@ -87,7 +87,7 @@ const WIZARD_STEPS = [
 type WizardStep = typeof WIZARD_STEPS[number]["key"];
 
 export default function Ventas() {
-  const { ventas, addVenta, updateVenta, clientes, vehiculos, cuentasCobrar, setCuentasCobrar, usuarioActual } = useApp();
+  const { ventas, addVenta, updateVenta, clientes, vehiculos, addCuentaCobrar, usuarioActual } = useApp();
   const [savingVenta, setSavingVenta] = useState(false);
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
@@ -227,12 +227,12 @@ export default function Ventas() {
       const saved = await addVenta(payload);
       setSavingVenta(false);
       if (!saved) return;
-      setCuentasCobrar([...cuentasCobrar, {
-        id: String(Date.now()), idVenta: saved.id, patente: saved.patente,
+      await addCuentaCobrar({
+        idVenta: saved.id, patente: saved.patente,
         fechaVenta: saved.fechaVenta, idComprador: saved.clienteId,
         nombreComprador: saved.clienteNombre, precioVenta: saved.precioVenta,
         comisionCredito: saved.comisionCredito, tipoFinanciamiento: saved.tipoVenta,
-      }]);
+      });
     }
     setShowModal(false);
   };

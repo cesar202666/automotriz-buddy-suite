@@ -13,7 +13,7 @@ const emptyAdq = (): Omit<Adquisicion, "id"> => ({
 });
 
 export default function Gerencia() {
-  const { adquisiciones, setAdquisiciones, vehiculos, ventas, usuarioActual } = useApp();
+  const { adquisiciones, addAdquisicion, vehiculos, ventas, usuarioActual } = useApp();
   // Solo master puede entrar a Gerencia sin clave; otros deben ingresarla
   const isMaster = usuarioActual?.rol === "master";
   const [unlocked, setUnlocked] = useState(isMaster);
@@ -76,10 +76,11 @@ export default function Gerencia() {
     setForm(f => ({ ...f, gastosExtra: newGastos, costoTotal: ct, precioSugerido: ct + 850000 }));
   };
 
-  const guardarCompra = () => {
+  const guardarCompra = async () => {
     if (!form.patente || !form.marca) return alert("Patente y Marca son requeridos.");
-    setAdquisiciones([...adquisiciones, { id: String(Date.now()), ...form }]);
-    setForm(emptyAdq());
+    // Persistir en DB (antes solo quedaba en memoria y se perdia al recargar)
+    const saved = await addAdquisicion(form);
+    if (saved) setForm(emptyAdq());
   };
 
   // KPI data

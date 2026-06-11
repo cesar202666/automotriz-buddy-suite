@@ -123,7 +123,7 @@ async function syncUserToVendedores(previousUser: Usuario | null, nextUser: Usua
 }
 
 export default function Administracion() {
-  const { ventas, setVentas, clientes, vehiculos, usuarios, setUsuarios, cuentasPagar, setCuentasPagar, cuentasCobrar, setCuentasCobrar, usuarioActual, setUsuarioActual } = useApp();
+  const { ventas, setVentas, clientes, vehiculos, usuarios, setUsuarios, cuentasPagar, addCuentaPagar, updateCuentaPagar, cuentasCobrar, addCuentaCobrar, updateCuentaCobrar, usuarioActual, setUsuarioActual } = useApp();
 
   // Master + admin pueden entrar sin pedir clave; vendedor debe ingresar clave
   const hasAdminAccess = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
@@ -288,10 +288,12 @@ export default function Administracion() {
   // === CUENTAS POR PAGAR ===
   const openCreatePagar = () => { setPagarForm({ concepto: "", vehiculo: "", clientePagar: "", duenio: "", sePagaA: "", cuentaCliente: "", montoTotal: 0, pagadoFecha: 0, fechaVencimiento: "", fechaUltimoPago: "" }); setEditPagarId(null); setShowPagarModal(true); };
   const openEditPagar = (c: CuentaPagar) => { setPagarForm({ ...c }); setEditPagarId(c.id); setShowPagarModal(true); };
-  const savePagar = () => {
-    if (editPagarId) setCuentasPagar(cuentasPagar.map(c => c.id === editPagarId ? { ...c, ...pagarForm } : c));
-    else setCuentasPagar([...cuentasPagar, { id: String(Date.now()), ...pagarForm }]);
-    setShowPagarModal(false);
+  const savePagar = async () => {
+    // Persistir en DB (antes solo quedaba en memoria y se perdia al recargar)
+    const ok = editPagarId
+      ? await updateCuentaPagar({ ...pagarForm, id: editPagarId })
+      : (await addCuentaPagar(pagarForm)) !== null;
+    if (ok) setShowPagarModal(false);
   };
   const diferenciaPagar = (c: CuentaPagar) => {
     const pag = typeof c.pagadoFecha === "number" ? c.pagadoFecha : 0;
@@ -301,12 +303,14 @@ export default function Administracion() {
 
   // === CUENTAS POR COBRAR ===
   const openCreateCobrar = () => { setCobrarForm({ idVenta: "", patente: "", fechaVenta: "", idComprador: "", nombreComprador: "", precioVenta: 0, comisionCredito: 0, tipoFinanciamiento: "" }); setEditCobrarId(null); setShowCobrarModal(true); };
-  const saveCobrar = () => {
+  const saveCobrar = async () => {
     const clienteSeleccionado = clientes.find(c => c.id === cobrarForm.idComprador);
     const form = { ...cobrarForm, nombreComprador: clienteSeleccionado ? `${clienteSeleccionado.nombres} ${clienteSeleccionado.apellidos}` : cobrarForm.nombreComprador };
-    if (editCobrarId) setCuentasCobrar(cuentasCobrar.map(c => c.id === editCobrarId ? { ...c, ...form } : c));
-    else setCuentasCobrar([...cuentasCobrar, { id: String(Date.now()), ...form }]);
-    setShowCobrarModal(false);
+    // Persistir en DB (antes solo quedaba en memoria y se perdia al recargar)
+    const ok = editCobrarId
+      ? await updateCuentaCobrar({ ...form, id: editCobrarId })
+      : (await addCuentaCobrar(form)) !== null;
+    if (ok) setShowCobrarModal(false);
   };
 
   return (

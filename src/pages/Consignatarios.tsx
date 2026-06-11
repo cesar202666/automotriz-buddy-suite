@@ -341,57 +341,112 @@ export default function Consignatarios() {
         .order("created_at", { ascending: false });
       if (error || !data) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mapped: Consignatario[] = data.map((row: any) => ({
-        id: String(row.id ?? ""),
-        folio: String(row.vehiculo ?? "").split(" - ")[0] || "",
-        nombre: String(row.nombre ?? ""),
-        apellidos: String(row.apellidos ?? ""),
-        rut: String(row.rut ?? ""),
-        telefono: String(row.telefono ?? ""),
-        email: String(row.email ?? ""),
-        direccion: String(row.direccion ?? ""),
-        ciudad: "",
-        vehiculo: String(row.vehiculo ?? ""),
-        marca: String(row.marca ?? ""),
-        modelo: String(row.modelo ?? ""),
-        patente: String(row.patente ?? ""),
-        anio: String(row.anio ?? ""),
-        color: String(row.color ?? ""),
-        kilometraje: "0",
-        valorPactado: Number(row.precio ?? 0),
-        valorConsig: 0,
-        disponibilidad: String(row.estado ?? "DISPONIBLE"),
-        permisoCirulacion: false,
-        seguroObligatorio: false,
-        revisionTecnica: false,
-        padron: false,
-        certMultas: false,
-        carroceria: "",
-        pintura: "",
-        neumaticos: "",
-        vidrios: "",
-        focos: "",
-        tapiz: "",
-        gata: false,
-        llaveRueda: false,
-        radio: false,
-        encendedor: false,
-        extintor: false,
-        manibela: false,
-        repuesto: false,
-        cenicero: false,
-        tresLuz: false,
-        triangulos: false,
-        observaciones: String(row.descripcion ?? ""),
-        automotrizRut: "",
-        automotrizNombre: "",
-        lugar: "",
-        fecha: String(row.fecha_ingreso ?? row.created_at ?? "").slice(0, 10),
-      }));
+      const mapped: Consignatario[] = data.map((row: any) => {
+        // Campos del contrato (checkboxes, estados, etc.) viven en la columna jsonb `extra`
+        const ex = (row.extra ?? {}) as Partial<Consignatario>;
+        return {
+          id: String(row.id ?? ""),
+          folio: String(row.folio ?? "") || String(row.vehiculo ?? "").split(" - ")[0] || "",
+          nombre: String(row.nombre ?? ""),
+          apellidos: String(row.apellidos ?? ""),
+          rut: String(row.rut ?? ""),
+          telefono: String(row.telefono ?? ""),
+          email: String(row.email ?? ""),
+          direccion: String(row.direccion ?? ""),
+          ciudad: String(row.ciudad ?? ""),
+          vehiculo: String(row.vehiculo ?? ""),
+          marca: String(row.marca ?? ""),
+          modelo: String(row.modelo ?? ""),
+          patente: String(row.patente ?? ""),
+          anio: String(row.anio ?? ""),
+          color: String(row.color ?? ""),
+          kilometraje: String(row.kilometraje ?? "0"),
+          valorPactado: Number(row.precio ?? 0),
+          valorConsig: Number(row.valor_consig ?? 0),
+          disponibilidad: String(row.estado ?? "DISPONIBLE"),
+          permisoCirulacion: Boolean(ex.permisoCirulacion ?? false),
+          seguroObligatorio: Boolean(ex.seguroObligatorio ?? false),
+          revisionTecnica: Boolean(ex.revisionTecnica ?? false),
+          padron: Boolean(ex.padron ?? false),
+          certMultas: Boolean(ex.certMultas ?? false),
+          carroceria: String(ex.carroceria ?? ""),
+          pintura: String(ex.pintura ?? ""),
+          neumaticos: String(ex.neumaticos ?? ""),
+          vidrios: String(ex.vidrios ?? ""),
+          focos: String(ex.focos ?? ""),
+          tapiz: String(ex.tapiz ?? ""),
+          gata: Boolean(ex.gata ?? false),
+          llaveRueda: Boolean(ex.llaveRueda ?? false),
+          radio: Boolean(ex.radio ?? false),
+          encendedor: Boolean(ex.encendedor ?? false),
+          extintor: Boolean(ex.extintor ?? false),
+          manibela: Boolean(ex.manibela ?? false),
+          repuesto: Boolean(ex.repuesto ?? false),
+          cenicero: Boolean(ex.cenicero ?? false),
+          tresLuz: Boolean(ex.tresLuz ?? false),
+          triangulos: Boolean(ex.triangulos ?? false),
+          observaciones: String(row.descripcion ?? ""),
+          automotrizRut: String(ex.automotrizRut ?? ""),
+          automotrizNombre: String(ex.automotrizNombre ?? ""),
+          lugar: String(ex.lugar ?? ""),
+          fecha: String(ex.fecha ?? "") || String(row.fecha_ingreso ?? row.created_at ?? "").slice(0, 10),
+        };
+      });
       setConsignatarios(mapped);
     };
     loadFromDb();
   }, []);
+
+  /** Mapea el form al row de la tabla consignatarios (campos extra → jsonb). */
+  const consigToDb = (c: Partial<Consignatario>) => ({
+    folio: c.folio ?? "",
+    nombre: c.nombre ?? "",
+    apellidos: c.apellidos ?? "",
+    rut: c.rut ?? "",
+    telefono: c.telefono ?? "",
+    email: c.email ?? "",
+    direccion: c.direccion ?? "",
+    ciudad: c.ciudad ?? "",
+    vehiculo: c.vehiculo ?? "",
+    marca: c.marca ?? "",
+    modelo: c.modelo ?? "",
+    patente: c.patente ?? "",
+    anio: c.anio ?? "",
+    color: c.color ?? "",
+    kilometraje: c.kilometraje ?? "0",
+    precio: c.valorPactado ?? 0,
+    valor_consig: c.valorConsig ?? 0,
+    estado: c.disponibilidad ?? "DISPONIBLE",
+    descripcion: c.observaciones ?? "",
+    extra: {
+      permisoCirulacion: c.permisoCirulacion ?? false,
+      seguroObligatorio: c.seguroObligatorio ?? false,
+      revisionTecnica: c.revisionTecnica ?? false,
+      padron: c.padron ?? false,
+      certMultas: c.certMultas ?? false,
+      carroceria: c.carroceria ?? "",
+      pintura: c.pintura ?? "",
+      neumaticos: c.neumaticos ?? "",
+      vidrios: c.vidrios ?? "",
+      focos: c.focos ?? "",
+      tapiz: c.tapiz ?? "",
+      gata: c.gata ?? false,
+      llaveRueda: c.llaveRueda ?? false,
+      radio: c.radio ?? false,
+      encendedor: c.encendedor ?? false,
+      extintor: c.extintor ?? false,
+      manibela: c.manibela ?? false,
+      repuesto: c.repuesto ?? false,
+      cenicero: c.cenicero ?? false,
+      tresLuz: c.tresLuz ?? false,
+      triangulos: c.triangulos ?? false,
+      automotrizRut: c.automotrizRut ?? "",
+      automotrizNombre: c.automotrizNombre ?? "",
+      lugar: c.lugar ?? "",
+      fecha: c.fecha ?? "",
+    },
+    updated_at: new Date().toISOString(),
+  });
 
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("Todos");
@@ -401,6 +456,7 @@ export default function Consignatarios() {
   const [activeSection, setActiveSection] = useState<"datos" | "vehiculo" | "docs" | "estado" | "valores">("datos");
   const excelImportRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const exportExcel = () => {
     const data = consignatarios.map(c => ({
@@ -419,7 +475,7 @@ export default function Consignatarios() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const wb = XLSX.read(ev.target?.result, { type: "binary" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(ws);
@@ -448,7 +504,15 @@ export default function Consignatarios() {
         observaciones: "", automotrizRut: "", automotrizNombre: "",
         lugar: "", fecha: "", contrato: null, contratoName: null,
       } as Consignatario));
-      setConsignatarios(prev => [...prev, ...nuevos]);
+      // Persistir en DB cada fila importada (antes solo quedaban en memoria)
+      let okCount = 0;
+      const persistidos: Consignatario[] = [];
+      for (const n of nuevos) {
+        const { data, error } = await supabase.from("consignatarios").insert(consigToDb(n)).select().single();
+        if (!error && data) { persistidos.push({ ...n, id: String(data.id) }); okCount++; }
+      }
+      setConsignatarios(prev => [...persistidos, ...prev]);
+      alert(`Importados ${okCount} de ${nuevos.length} consignatarios.`);
     };
     reader.readAsBinaryString(file);
     e.target.value = "";
@@ -472,18 +536,30 @@ export default function Consignatarios() {
     setEditId(c.id); setActiveSection("datos"); setShowModal(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.nombre?.trim() || !form.apellidos?.trim()) return alert("Nombre y Apellidos son requeridos.");
+    setSaving(true);
+    // Persistir en DB (antes solo quedaba en memoria y se perdia al recargar)
     if (editId) {
+      const { error } = await supabase.from("consignatarios").update(consigToDb(form)).eq("id", editId);
+      setSaving(false);
+      if (error) return alert(`No se pudo actualizar el consignatario: ${error.message}`);
       setConsignatarios(consignatarios.map(c => c.id === editId ? { ...c, ...form } as Consignatario : c));
     } else {
-      setConsignatarios([...consignatarios, { id: String(Date.now()), ...form } as Consignatario]);
+      const { data, error } = await supabase.from("consignatarios").insert(consigToDb(form)).select().single();
+      setSaving(false);
+      if (error || !data) return alert(`No se pudo guardar el consignatario: ${error?.message}`);
+      setConsignatarios([{ ...(form as Consignatario), id: String(data.id) }, ...consignatarios]);
     }
     setShowModal(false);
   };
 
-  const doDelete = () => {
-    if (deleteId) setConsignatarios(consignatarios.filter(c => c.id !== deleteId));
+  const doDelete = async () => {
+    if (deleteId) {
+      const { error } = await supabase.from("consignatarios").delete().eq("id", deleteId);
+      if (error) { alert(`No se pudo eliminar: ${error.message}`); setDeleteId(null); return; }
+      setConsignatarios(consignatarios.filter(c => c.id !== deleteId));
+    }
     setDeleteId(null);
     setShowModal(false);
   };
@@ -802,7 +878,7 @@ export default function Consignatarios() {
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
               <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
-              <button onClick={handleSave} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Guardar Consignatario</button>
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>{saving ? "Guardando..." : "Guardar Consignatario"}</button>
             </div>
           </div>
         </div>

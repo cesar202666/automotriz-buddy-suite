@@ -404,6 +404,115 @@ function ventaToDb(v: Omit<Venta, "id">) {
   };
 }
 
+// ─── Mapeos CuentaPagar / CuentaCobrar / Adquisicion ─────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function cuentaPagarFromDb(row: any): CuentaPagar {
+  return {
+    id: String(row.id ?? ""),
+    concepto: String(row.concepto ?? ""),
+    vehiculo: String(row.vehiculo ?? ""),
+    clientePagar: String(row.cliente_pagar ?? ""),
+    duenio: String(row.duenio ?? ""),
+    sePagaA: String(row.se_paga_a ?? ""),
+    cuentaCliente: String(row.cuenta_cliente ?? ""),
+    montoTotal: Number(row.monto_total ?? 0),
+    pagadoFecha: row.pagado_fecha ?? "",
+    fechaVencimiento: String(row.fecha_vencimiento ?? ""),
+    fechaUltimoPago: String(row.fecha_ultimo_pago ?? ""),
+  };
+}
+
+function cuentaPagarToDb(c: Omit<CuentaPagar, "id">) {
+  return {
+    concepto: c.concepto,
+    vehiculo: c.vehiculo,
+    cliente_pagar: c.clientePagar,
+    duenio: c.duenio,
+    se_paga_a: c.sePagaA,
+    cuenta_cliente: c.cuentaCliente,
+    monto_total: c.montoTotal,
+    pagado_fecha: String(c.pagadoFecha ?? ""),
+    fecha_vencimiento: c.fechaVencimiento,
+    fecha_ultimo_pago: c.fechaUltimoPago,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function cuentaCobrarFromDb(row: any): CuentaCobrar {
+  return {
+    id: String(row.id ?? ""),
+    idVenta: String(row.id_venta ?? ""),
+    patente: String(row.patente ?? ""),
+    fechaVenta: String(row.fecha_venta ?? ""),
+    idComprador: String(row.id_comprador ?? ""),
+    nombreComprador: String(row.nombre_comprador ?? ""),
+    precioVenta: Number(row.precio_venta ?? 0),
+    comisionCredito: Number(row.comision_credito ?? 0),
+    tipoFinanciamiento: String(row.tipo_financiamiento ?? ""),
+  };
+}
+
+function cuentaCobrarToDb(c: Omit<CuentaCobrar, "id">) {
+  return {
+    id_venta: c.idVenta,
+    patente: c.patente,
+    fecha_venta: c.fechaVenta,
+    id_comprador: c.idComprador,
+    nombre_comprador: c.nombreComprador,
+    precio_venta: c.precioVenta,
+    comision_credito: c.comisionCredito,
+    tipo_financiamiento: c.tipoFinanciamiento,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function adquisicionFromDb(row: any): Adquisicion {
+  return {
+    id: String(row.id ?? ""),
+    empresa: String(row.empresa ?? ""),
+    tipoProcedencia: String(row.tipo_procedencia ?? ""),
+    observaciones: String(row.observaciones ?? ""),
+    patente: String(row.patente ?? ""),
+    marca: String(row.marca ?? ""),
+    modelo: String(row.modelo ?? ""),
+    anio: String(row.anio ?? ""),
+    kilometraje: String(row.kilometraje ?? ""),
+    tipo: String(row.tipo ?? ""),
+    color: String(row.color ?? ""),
+    obsVehiculo: String(row.obs_vehiculo ?? ""),
+    precioOriginal: Number(row.precio_original ?? 0),
+    fechaCompra: String(row.fecha_compra ?? ""),
+    gastosExtra: (row.gastos_extra as Adquisicion["gastosExtra"]) ?? [],
+    costoTotal: Number(row.costo_total ?? 0),
+    precioSugerido: Number(row.precio_sugerido ?? 0),
+  };
+}
+
+function adquisicionToDb(a: Omit<Adquisicion, "id">) {
+  return {
+    empresa: a.empresa,
+    tipo_procedencia: a.tipoProcedencia,
+    observaciones: a.observaciones,
+    patente: a.patente,
+    marca: a.marca,
+    modelo: a.modelo,
+    anio: a.anio,
+    kilometraje: a.kilometraje,
+    tipo: a.tipo,
+    color: a.color,
+    obs_vehiculo: a.obsVehiculo,
+    precio_original: a.precioOriginal,
+    fecha_compra: a.fechaCompra,
+    gastos_extra: a.gastosExtra,
+    costo_total: a.costoTotal,
+    precio_sugerido: a.precioSugerido,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 interface AppState {
@@ -429,10 +538,18 @@ interface AppState {
   deleteVenta: (id: string) => Promise<boolean>;
   cuentasPagar: CuentaPagar[];
   setCuentasPagar: (c: CuentaPagar[]) => void;
+  addCuentaPagar: (c: Omit<CuentaPagar, "id">) => Promise<CuentaPagar | null>;
+  updateCuentaPagar: (c: CuentaPagar) => Promise<boolean>;
+  deleteCuentaPagar: (id: string) => Promise<boolean>;
   cuentasCobrar: CuentaCobrar[];
   setCuentasCobrar: (c: CuentaCobrar[]) => void;
+  addCuentaCobrar: (c: Omit<CuentaCobrar, "id">) => Promise<CuentaCobrar | null>;
+  updateCuentaCobrar: (c: CuentaCobrar) => Promise<boolean>;
+  deleteCuentaCobrar: (id: string) => Promise<boolean>;
   adquisiciones: Adquisicion[];
   setAdquisiciones: (a: Adquisicion[]) => void;
+  addAdquisicion: (a: Omit<Adquisicion, "id">) => Promise<Adquisicion | null>;
+  deleteAdquisicion: (id: string) => Promise<boolean>;
   usuarios: Usuario[];
   setUsuarios: (u: Usuario[]) => void;
   usuarioActual: Usuario | null;
@@ -585,6 +702,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadVentas();
   }, []);
 
+  // ── Load cuentas y adquisiciones from DB on mount ──────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      const [pagar, cobrar, adq] = await Promise.all([
+        fetchAllRows((from, to) => supabase.from("cuentas_pagar").select("*").order("created_at", { ascending: false }).range(from, to)),
+        fetchAllRows((from, to) => supabase.from("cuentas_cobrar").select("*").order("created_at", { ascending: false }).range(from, to)),
+        fetchAllRows((from, to) => supabase.from("adquisiciones").select("*").order("created_at", { ascending: false }).range(from, to)),
+      ]);
+      if (pagar) setCuentasPagar(pagar.map(cuentaPagarFromDb));
+      if (cobrar) setCuentasCobrar(cobrar.map(cuentaCobrarFromDb));
+      if (adq) setAdquisiciones(adq.map(adquisicionFromDb));
+    };
+    load();
+  }, []);
+
   // ── CRUD ────────────────────────────────────────────────────────────────────
   const addVehiculo = async (v: Vehiculo) => {
     const { data, error } = await supabase
@@ -704,6 +836,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  // Cuentas por pagar / cobrar y adquisiciones: persistentes en DB
+  const addCuentaPagar = async (c: Omit<CuentaPagar, "id">): Promise<CuentaPagar | null> => {
+    const { data, error } = await supabase.from("cuentas_pagar").insert(cuentaPagarToDb(c)).select().single();
+    if (error || !data) { alert(`No se pudo guardar la cuenta por pagar: ${error?.message}`); return null; }
+    const nueva = cuentaPagarFromDb(data);
+    setCuentasPagar(prev => [nueva, ...prev]);
+    return nueva;
+  };
+
+  const updateCuentaPagar = async (c: CuentaPagar): Promise<boolean> => {
+    const { data, error } = await supabase.from("cuentas_pagar").update(cuentaPagarToDb(c)).eq("id", c.id).select().single();
+    if (error || !data) { alert(`No se pudo actualizar la cuenta por pagar: ${error?.message}`); return false; }
+    setCuentasPagar(prev => prev.map(x => (x.id === c.id ? cuentaPagarFromDb(data) : x)));
+    return true;
+  };
+
+  const deleteCuentaPagar = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from("cuentas_pagar").delete().eq("id", id);
+    if (error) { alert(`No se pudo eliminar la cuenta por pagar: ${error.message}`); return false; }
+    setCuentasPagar(prev => prev.filter(x => x.id !== id));
+    return true;
+  };
+
+  const addCuentaCobrar = async (c: Omit<CuentaCobrar, "id">): Promise<CuentaCobrar | null> => {
+    const { data, error } = await supabase.from("cuentas_cobrar").insert(cuentaCobrarToDb(c)).select().single();
+    if (error || !data) { alert(`No se pudo guardar la cuenta por cobrar: ${error?.message}`); return null; }
+    const nueva = cuentaCobrarFromDb(data);
+    setCuentasCobrar(prev => [nueva, ...prev]);
+    return nueva;
+  };
+
+  const updateCuentaCobrar = async (c: CuentaCobrar): Promise<boolean> => {
+    const { data, error } = await supabase.from("cuentas_cobrar").update(cuentaCobrarToDb(c)).eq("id", c.id).select().single();
+    if (error || !data) { alert(`No se pudo actualizar la cuenta por cobrar: ${error?.message}`); return false; }
+    setCuentasCobrar(prev => prev.map(x => (x.id === c.id ? cuentaCobrarFromDb(data) : x)));
+    return true;
+  };
+
+  const deleteCuentaCobrar = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from("cuentas_cobrar").delete().eq("id", id);
+    if (error) { alert(`No se pudo eliminar la cuenta por cobrar: ${error.message}`); return false; }
+    setCuentasCobrar(prev => prev.filter(x => x.id !== id));
+    return true;
+  };
+
+  const addAdquisicion = async (a: Omit<Adquisicion, "id">): Promise<Adquisicion | null> => {
+    const { data, error } = await supabase.from("adquisiciones").insert(adquisicionToDb(a)).select().single();
+    if (error || !data) { alert(`No se pudo guardar la adquisicion: ${error?.message}`); return null; }
+    const nueva = adquisicionFromDb(data);
+    setAdquisiciones(prev => [nueva, ...prev]);
+    return nueva;
+  };
+
+  const deleteAdquisicion = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from("adquisiciones").delete().eq("id", id);
+    if (error) { alert(`No se pudo eliminar la adquisicion: ${error.message}`); return false; }
+    setAdquisiciones(prev => prev.filter(x => x.id !== id));
+    return true;
+  };
+
   return (
     <AppContext.Provider value={{
       clientes, setClientes,
@@ -715,8 +907,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ventas, setVentas,
       addVenta, updateVenta, deleteVenta,
       cuentasPagar, setCuentasPagar,
+      addCuentaPagar, updateCuentaPagar, deleteCuentaPagar,
       cuentasCobrar, setCuentasCobrar,
+      addCuentaCobrar, updateCuentaCobrar, deleteCuentaCobrar,
       adquisiciones, setAdquisiciones,
+      addAdquisicion, deleteAdquisicion,
       usuarios, setUsuarios,
       usuarioActual, setUsuarioActual,
     }}>
