@@ -40,20 +40,22 @@ const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
 
 // Mini form to create a client inline
 function CreateClienteInline({ onCreated, onCancel }: { onCreated: (c: Cliente) => void; onCancel: () => void }) {
-  const { clientes, setClientes } = useApp();
+  const { addCliente, usuarioActual } = useApp();
   const [f, setF] = useState({ nombres: "", apellidos: "", telefono: "", email: "", rut: "", direccion: "" });
-  const save = () => {
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
     if (!f.nombres.trim() || !f.apellidos.trim() || !f.telefono.trim()) return alert("Nombre, apellido y teléfono son obligatorios");
-    const id = String(Math.max(...clientes.map(c => parseInt(c.id) || 100), 100) + 1);
-    const nuevo: Cliente = {
-      id, nombres: f.nombres, apellidos: f.apellidos, telefono: f.telefono,
+    setSaving(true);
+    // Persistir en la DB (antes solo quedaba en memoria y se perdia al recargar)
+    const nuevo = await addCliente({
+      nombres: f.nombres, apellidos: f.apellidos, telefono: f.telefono,
       email: f.email, direccion: f.direccion, rut: f.rut || null,
       comentario: null, estadoCivil: null, ciudad: null, casaHabita: null, estudios: null,
       seguimiento: null, seguimientoComentario1: null, seguimientoComentario2: null, seguimientoComentario3: null,
-      creadoPor: null,
-    };
-    setClientes([...clientes, nuevo]);
-    onCreated(nuevo);
+      creadoPor: usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : null,
+    });
+    setSaving(false);
+    if (nuevo) onCreated(nuevo);
   };
   const inp = "w-full border rounded px-3 py-2 text-sm bg-background";
   const bd = { borderColor: "hsl(var(--border))" };
@@ -70,7 +72,7 @@ function CreateClienteInline({ onCreated, onCancel }: { onCreated: (c: Cliente) 
       </div>
       <div className="flex gap-2 mt-3 justify-end">
         <button onClick={onCancel} className="px-3 py-1.5 text-sm border rounded hover:bg-muted" style={bd}>Cancelar</button>
-        <button onClick={save} className="px-3 py-1.5 text-sm rounded font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Crear y Asignar</button>
+        <button onClick={save} disabled={saving} className="px-3 py-1.5 text-sm rounded font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>{saving ? "Guardando..." : "Crear y Asignar"}</button>
       </div>
     </div>
   );
@@ -85,7 +87,8 @@ const WIZARD_STEPS = [
 type WizardStep = typeof WIZARD_STEPS[number]["key"];
 
 export default function Ventas() {
-  const { ventas, setVentas, clientes, setClientes, vehiculos, cuentasCobrar, setCuentasCobrar, usuarioActual } = useApp();
+  const { ventas, addVenta, updateVenta, clientes, vehiculos, cuentasCobrar, setCuentasCobrar, usuarioActual } = useApp();
+  const [savingVenta, setSavingVenta] = useState(false);
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -205,20 +208,25 @@ export default function Ventas() {
     }
   };
 
-  const handleSave = (solicitar = false) => {
+  const handleSave = async (solicitar = false) => {
     if (!form.patente || !form.ejecutiva) return alert("Ejecutiva y Patente son requeridos.");
-    const saved: Venta = {
-      ...form, id: editId || String(Date.now()),
+    const payload: Omit<Venta, "id"> = {
+      ...form,
       informeTecnico: infTecDoc.dataUrl, informeTecnicoName: infTecDoc.name,
       prepagoDoc: prepagoDoc.dataUrl, prepagoDocName: prepagoDoc.name,
       creditoFirmadoDoc: creditoFirmDoc.dataUrl, creditoFirmadoDocName: creditoFirmDoc.name,
       documentacionVenta: docVentaDoc.dataUrl, documentacionVentaName: docVentaDoc.name,
       estado: solicitar ? "PENDIENTE_VALIDACION" : (editId ? form.estado : "BORRADOR"),
     };
+    setSavingVenta(true);
     if (editId) {
-      setVentas(ventas.map(v => v.id === editId ? saved : v));
+      const ok = await updateVenta({ ...payload, id: editId });
+      setSavingVenta(false);
+      if (!ok) return;
     } else {
-      setVentas([...ventas, saved]);
+      const saved = await addVenta(payload);
+      setSavingVenta(false);
+      if (!saved) return;
       setCuentasCobrar([...cuentasCobrar, {
         id: String(Date.now()), idVenta: saved.id, patente: saved.patente,
         fechaVenta: saved.fechaVenta, idComprador: saved.clienteId,
@@ -229,20 +237,26 @@ export default function Ventas() {
     setShowModal(false);
   };
 
+  const validarVenta = async (id: string) => {
+    const v = ventas.find(x => x.id === id);
+    if (!v) return;
+    await updateVenta({ ...v, estado: "VALIDADA", verificacion: true });
+  };
+
   const iniciarValidacion = (id: string) => {
     // Master valida directo sin pedir clave
     if (usuarioActual?.rol === "master") {
-      setVentas(ventas.map(v => v.id === id ? { ...v, estado: "VALIDADA", verificacion: true } : v));
+      validarVenta(id);
       return;
     }
     setValidarId(id); setClaveValidar(""); setClaveError(""); setShowValidarModal(true);
   };
 
-  const confirmarValidacion = () => {
+  const confirmarValidacion = async () => {
     if (usuarioActual?.rol !== "master" && claveValidar !== "ankker2026$$") {
       setClaveError("Clave incorrecta"); return;
     }
-    setVentas(ventas.map(v => v.id === validarId ? { ...v, estado: "VALIDADA", verificacion: true } : v));
+    if (validarId) await validarVenta(validarId);
     setShowValidarModal(false);
   };
 
@@ -649,12 +663,12 @@ export default function Ventas() {
                   </button>
                 ) : (
                   <>
-                    <button onClick={() => handleSave(false)} className="px-4 py-2 rounded text-sm font-medium text-white bg-slate-700 hover:bg-slate-800">
-                      Guardar (Borrador)
+                    <button onClick={() => handleSave(false)} disabled={savingVenta} className="px-4 py-2 rounded text-sm font-medium text-white bg-slate-700 hover:bg-slate-800 disabled:opacity-60">
+                      {savingVenta ? "Guardando..." : "Guardar (Borrador)"}
                     </button>
                     {form.estado !== "VALIDADA" && (
-                      <button onClick={() => handleSave(true)} className="px-4 py-2 rounded text-sm font-medium text-white flex items-center gap-2" style={{ background: "hsl(var(--primary))" }}>
-                        <Check size={15} /> Solicitar Verificación
+                      <button onClick={() => handleSave(true)} disabled={savingVenta} className="px-4 py-2 rounded text-sm font-medium text-white flex items-center gap-2 disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>
+                        <Check size={15} /> {savingVenta ? "Guardando..." : "Solicitar Verificación"}
                       </button>
                     )}
                   </>

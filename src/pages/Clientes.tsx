@@ -63,7 +63,8 @@ const nowStr = () => {
 };
 
 export default function Clientes() {
-  const { clientes, setClientes, usuarioActual } = useApp();
+  const { clientes, addCliente, updateCliente, deleteCliente, usuarioActual } = useApp();
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -90,12 +91,11 @@ export default function Clientes() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const wb = XLSX.read(ev.target?.result, { type: "binary" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
-      const nuevos: Cliente[] = rows.map((r, i) => ({
-        id: r["ID"] || String(Date.now() + i),
+      const nuevos: Omit<Cliente, "id">[] = rows.map((r) => ({
         nombres: r["Nombres"] || "",
         apellidos: r["Apellidos"] || "",
         telefono: r["Telefono"] || "",
@@ -108,7 +108,12 @@ export default function Clientes() {
         seguimientoComentario1: null, seguimientoComentario2: null, seguimientoComentario3: null,
         creadoPor: r["CreadoPor"] || null,
       }));
-      setClientes([...clientes, ...nuevos]);
+      // Insertar uno a uno en la DB (persistente, antes solo quedaban en memoria)
+      let okCount = 0;
+      for (const n of nuevos) {
+        if (await addCliente(n)) okCount++;
+      }
+      alert(`Importados ${okCount} de ${nuevos.length} clientes.`);
     };
     reader.readAsBinaryString(file);
     e.target.value = "";
@@ -117,8 +122,6 @@ export default function Clientes() {
   const filtered = clientes.filter(c =>
     `${c.nombres} ${c.apellidos} ${c.id} ${c.email} ${c.rut || ""}`.toLowerCase().includes(search.toLowerCase())
   );
-
-  const nextId = () => String(Math.max(...clientes.map(c => parseInt(c.id) || 100), 100) + 1);
 
   const openCreate = () => {
     const base = emptyForm();
@@ -154,8 +157,8 @@ export default function Clientes() {
     setShowModal(true);
   };
 
-  const doDelete = () => {
-    if (deleteId) setClientes(clientes.filter(c => c.id !== deleteId));
+  const doDelete = async () => {
+    if (deleteId) await deleteCliente(deleteId);
     setDeleteId(null);
   };
 
@@ -176,16 +179,16 @@ export default function Clientes() {
     setNuevoSeguimientoComentario("");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.nombres.trim() || !form.apellidos.trim()) return alert("Nombres y Apellidos son requeridos.");
     if (!form.telefono.trim()) return alert("El teléfono es obligatorio.");
     const { seguimientos, ...clienteData } = form;
-    if (editId) {
-      setClientes(clientes.map(c => c.id === editId ? { ...c, ...clienteData } : c));
-    } else {
-      setClientes([...clientes, { id: nextId(), ...clienteData }]);
-    }
-    setShowModal(false);
+    setSaving(true);
+    const ok = editId
+      ? await updateCliente({ ...clienteData, id: editId })
+      : (await addCliente(clienteData)) !== null;
+    setSaving(false);
+    if (ok) setShowModal(false);
   };
 
   const bd = { borderColor: "hsl(var(--border))" };
@@ -491,7 +494,7 @@ export default function Clientes() {
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={bd}>
               <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={bd}>Cancelar</button>
-              <button onClick={handleSave} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Guardar Cliente</button>
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>{saving ? "Guardando..." : "Guardar Cliente"}</button>
             </div>
           </div>
         </div>

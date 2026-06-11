@@ -276,11 +276,143 @@ function fromDb(row: Record<string, unknown>): Vehiculo {
   };
 }
 
+// ─── Mapeos Cliente / Venta (camelCase ⇄ snake_case) ─────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function clienteFromDb(row: any): Cliente {
+  return {
+    id: String(row.id ?? ""),
+    nombres: String(row.nombres ?? ""),
+    apellidos: String(row.apellidos ?? ""),
+    direccion: String(row.direccion ?? ""),
+    telefono: String(row.telefono ?? ""),
+    email: String(row.email ?? ""),
+    rut: row.rut ?? null,
+    comentario: row.comentario ?? null,
+    estadoCivil: row.estado_civil ?? null,
+    ciudad: row.ciudad ?? null,
+    casaHabita: row.casa_habita ?? null,
+    estudios: row.estudios ?? null,
+    seguimiento: row.seguimiento ?? null,
+    seguimientoComentario1: row.seguimiento_comentario_1 ?? null,
+    seguimientoComentario2: row.seguimiento_comentario_2 ?? null,
+    seguimientoComentario3: row.seguimiento_comentario_3 ?? null,
+    creadoPor: row.creado_por ?? null,
+  };
+}
+
+/** Payload de insert/update (sin id: lo genera la DB con gen_random_uuid). */
+function clienteToDb(c: Omit<Cliente, "id">) {
+  return {
+    nombres: c.nombres,
+    apellidos: c.apellidos,
+    direccion: c.direccion,
+    telefono: c.telefono,
+    email: c.email,
+    rut: c.rut,
+    comentario: c.comentario,
+    estado_civil: c.estadoCivil,
+    ciudad: c.ciudad,
+    casa_habita: c.casaHabita,
+    estudios: c.estudios,
+    seguimiento: c.seguimiento,
+    seguimiento_comentario_1: c.seguimientoComentario1,
+    seguimiento_comentario_2: c.seguimientoComentario2,
+    seguimiento_comentario_3: c.seguimientoComentario3,
+    creado_por: c.creadoPor,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ventaFromDb(row: any): Venta {
+  return {
+    id: String(row.id ?? ""),
+    ejecutiva: String(row.ejecutiva ?? ""),
+    fechaVenta: String(row.fecha_venta ?? ""),
+    sucursal: String(row.sucursal ?? ""),
+    clienteId: String(row.cliente_id ?? ""),
+    clienteNombre: String(row.cliente_nombre ?? ""),
+    informeTecnico: row.informe_tecnico ?? null,
+    informeTecnicoName: row.informe_tecnico_name ?? null,
+    patente: String(row.patente ?? ""),
+    marca: String(row.marca ?? ""),
+    modelo: String(row.modelo ?? ""),
+    anioVehiculo: String(row.anio_vehiculo ?? ""),
+    colorVehiculo: String(row.color_vehiculo ?? ""),
+    kilometrajeVehiculo: Number(row.kilometraje_vehiculo ?? 0),
+    precioRetoma: Number(row.precio_retoma ?? 0),
+    precioPublicado: Number(row.precio_publicado ?? 0),
+    precioVenta: Number(row.precio_venta ?? 0),
+    margenBruto: Number(row.margen_bruto ?? 0),
+    nCredito: String(row.n_credito ?? ""),
+    comisionCredito: Number(row.comision_credito ?? 0),
+    gastosAdmin: Number(row.gastos_admin ?? 0),
+    precioVtaFinal: Number(row.precio_vta_final ?? 0),
+    creditoFirmado: String(row.credito_firmado ?? ""),
+    creditoFirmadoDoc: row.credito_firmado_doc ?? null,
+    creditoFirmadoDocName: row.credito_firmado_doc_name ?? null,
+    montoPieCaja: Number(row.monto_pie_caja ?? 0),
+    prepago: String(row.prepago ?? ""),
+    prepagoDoc: row.prepago_doc ?? null,
+    prepagoDocName: row.prepago_doc_name ?? null,
+    documentacionVenta: row.documentacion_venta ?? null,
+    documentacionVentaName: row.documentacion_venta_name ?? null,
+    tipoVenta: (row.tipo_venta ?? "EFECTIVO") as Venta["tipoVenta"],
+    estado: (row.estado ?? "BORRADOR") as Venta["estado"],
+    verificacion: Boolean(row.verificacion ?? false),
+  };
+}
+
+/** Payload de insert/update (sin id). fecha_venta vacia → null (columna timestamp). */
+function ventaToDb(v: Omit<Venta, "id">) {
+  return {
+    ejecutiva: v.ejecutiva,
+    fecha_venta: v.fechaVenta || null,
+    sucursal: v.sucursal,
+    cliente_id: v.clienteId,
+    cliente_nombre: v.clienteNombre,
+    informe_tecnico: v.informeTecnico,
+    informe_tecnico_name: v.informeTecnicoName,
+    patente: v.patente,
+    marca: v.marca,
+    modelo: v.modelo,
+    anio_vehiculo: v.anioVehiculo,
+    color_vehiculo: v.colorVehiculo,
+    kilometraje_vehiculo: v.kilometrajeVehiculo,
+    precio_retoma: v.precioRetoma,
+    precio_publicado: v.precioPublicado,
+    precio_venta: v.precioVenta,
+    margen_bruto: v.margenBruto,
+    n_credito: v.nCredito,
+    comision_credito: v.comisionCredito,
+    gastos_admin: v.gastosAdmin,
+    precio_vta_final: v.precioVtaFinal,
+    credito_firmado: v.creditoFirmado,
+    credito_firmado_doc: v.creditoFirmadoDoc,
+    credito_firmado_doc_name: v.creditoFirmadoDocName,
+    monto_pie_caja: v.montoPieCaja,
+    prepago: v.prepago,
+    prepago_doc: v.prepagoDoc,
+    prepago_doc_name: v.prepagoDocName,
+    documentacion_venta: v.documentacionVenta,
+    documentacion_venta_name: v.documentacionVentaName,
+    tipo_venta: v.tipoVenta,
+    estado: v.estado,
+    verificacion: v.verificacion,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 interface AppState {
   clientes: Cliente[];
   setClientes: (c: Cliente[]) => void;
+  /** Crea el cliente en la DB; devuelve el cliente con su id real o null si fallo. */
+  addCliente: (c: Omit<Cliente, "id">) => Promise<Cliente | null>;
+  updateCliente: (c: Cliente) => Promise<boolean>;
+  deleteCliente: (id: string) => Promise<boolean>;
   vehiculos: Vehiculo[];
   setVehiculos: (v: Vehiculo[]) => void;
   addVehiculo: (v: Vehiculo) => Promise<void>;
@@ -291,6 +423,10 @@ interface AppState {
   setConsignatarios: (c: Consignatario[]) => void;
   ventas: Venta[];
   setVentas: (v: Venta[]) => void;
+  /** Crea la venta en la DB; devuelve la venta con su id real o null si fallo. */
+  addVenta: (v: Omit<Venta, "id">) => Promise<Venta | null>;
+  updateVenta: (v: Venta) => Promise<boolean>;
+  deleteVenta: (id: string) => Promise<boolean>;
   cuentasPagar: CuentaPagar[];
   setCuentasPagar: (c: CuentaPagar[]) => void;
   cuentasCobrar: CuentaCobrar[];
@@ -397,27 +533,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .range(from, to),
       );
       if (!data) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mapped: Cliente[] = data.map((row: any) => ({
-        id: String(row.id ?? ""),
-        nombres: String(row.nombres ?? ""),
-        apellidos: String(row.apellidos ?? ""),
-        direccion: String(row.direccion ?? ""),
-        telefono: String(row.telefono ?? ""),
-        email: String(row.email ?? ""),
-        rut: row.rut ?? null,
-        comentario: row.comentario ?? null,
-        estadoCivil: row.estado_civil ?? null,
-        ciudad: row.ciudad ?? null,
-        casaHabita: row.casa_habita ?? null,
-        estudios: row.estudios ?? null,
-        seguimiento: row.seguimiento ?? null,
-        seguimientoComentario1: row.seguimiento_comentario_1 ?? null,
-        seguimientoComentario2: row.seguimiento_comentario_2 ?? null,
-        seguimientoComentario3: row.seguimiento_comentario_3 ?? null,
-        creadoPor: row.creado_por ?? null,
-      }));
-      setClientes(mapped);
+      setClientes(data.map(clienteFromDb));
     };
     loadClientes();
   }, []);
@@ -464,44 +580,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .range(from, to),
       );
       if (!data) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mapped: Venta[] = data.map((row: any) => ({
-        id: String(row.id ?? ""),
-        ejecutiva: String(row.ejecutiva ?? ""),
-        fechaVenta: String(row.fecha_venta ?? ""),
-        sucursal: String(row.sucursal ?? ""),
-        clienteId: String(row.cliente_id ?? ""),
-        clienteNombre: String(row.cliente_nombre ?? ""),
-        informeTecnico: row.informe_tecnico ?? null,
-        informeTecnicoName: row.informe_tecnico_name ?? null,
-        patente: String(row.patente ?? ""),
-        marca: String(row.marca ?? ""),
-        modelo: String(row.modelo ?? ""),
-        anioVehiculo: String(row.anio_vehiculo ?? ""),
-        colorVehiculo: String(row.color_vehiculo ?? ""),
-        kilometrajeVehiculo: Number(row.kilometraje_vehiculo ?? 0),
-        precioRetoma: Number(row.precio_retoma ?? 0),
-        precioPublicado: Number(row.precio_publicado ?? 0),
-        precioVenta: Number(row.precio_venta ?? 0),
-        margenBruto: Number(row.margen_bruto ?? 0),
-        nCredito: String(row.n_credito ?? ""),
-        comisionCredito: Number(row.comision_credito ?? 0),
-        gastosAdmin: Number(row.gastos_admin ?? 0),
-        precioVtaFinal: Number(row.precio_vta_final ?? 0),
-        creditoFirmado: String(row.credito_firmado ?? ""),
-        creditoFirmadoDoc: row.credito_firmado_doc ?? null,
-        creditoFirmadoDocName: row.credito_firmado_doc_name ?? null,
-        montoPieCaja: Number(row.monto_pie_caja ?? 0),
-        prepago: String(row.prepago ?? ""),
-        prepagoDoc: row.prepago_doc ?? null,
-        prepagoDocName: row.prepago_doc_name ?? null,
-        documentacionVenta: row.documentacion_venta ?? null,
-        documentacionVentaName: row.documentacion_venta_name ?? null,
-        tipoVenta: (row.tipo_venta ?? "EFECTIVO") as Venta["tipoVenta"],
-        estado: (row.estado ?? "BORRADOR") as Venta["estado"],
-        verificacion: Boolean(row.verificacion ?? false),
-      }));
-      setVentas(mapped);
+      setVentas(data.map(ventaFromDb));
     };
     loadVentas();
   }, []);
@@ -539,14 +618,102 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Clientes: persistir en DB (antes solo se mutaba el estado local y los
+  // clientes creados desaparecian al recargar la pagina).
+  const addCliente = async (c: Omit<Cliente, "id">): Promise<Cliente | null> => {
+    const { data, error } = await supabase
+      .from("clientes")
+      .insert(clienteToDb(c))
+      .select()
+      .single();
+    if (error || !data) {
+      alert(`No se pudo guardar el cliente: ${error?.message ?? "error desconocido"}`);
+      return null;
+    }
+    const nuevo = clienteFromDb(data);
+    setClientes(prev => [nuevo, ...prev]);
+    return nuevo;
+  };
+
+  const updateCliente = async (c: Cliente): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from("clientes")
+      .update(clienteToDb(c))
+      .eq("id", c.id)
+      .select()
+      .single();
+    if (error || !data) {
+      alert(`No se pudo actualizar el cliente: ${error?.message ?? "error desconocido"}`);
+      return false;
+    }
+    const updated = clienteFromDb(data);
+    setClientes(prev => prev.map(x => (x.id === c.id ? updated : x)));
+    return true;
+  };
+
+  const deleteCliente = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from("clientes").delete().eq("id", id);
+    if (error) {
+      alert(`No se pudo eliminar el cliente: ${error.message}`);
+      return false;
+    }
+    setClientes(prev => prev.filter(x => x.id !== id));
+    return true;
+  };
+
+  // Ventas: persistir en DB (mismo problema que clientes — crear, editar y
+  // validar ventas solo vivia en memoria).
+  const addVenta = async (v: Omit<Venta, "id">): Promise<Venta | null> => {
+    const { data, error } = await supabase
+      .from("ventas")
+      .insert(ventaToDb(v))
+      .select()
+      .single();
+    if (error || !data) {
+      alert(`No se pudo guardar la venta: ${error?.message ?? "error desconocido"}`);
+      return null;
+    }
+    const nueva = ventaFromDb(data);
+    setVentas(prev => [nueva, ...prev]);
+    return nueva;
+  };
+
+  const updateVenta = async (v: Venta): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from("ventas")
+      .update(ventaToDb(v))
+      .eq("id", v.id)
+      .select()
+      .single();
+    if (error || !data) {
+      alert(`No se pudo actualizar la venta: ${error?.message ?? "error desconocido"}`);
+      return false;
+    }
+    const updated = ventaFromDb(data);
+    setVentas(prev => prev.map(x => (x.id === v.id ? updated : x)));
+    return true;
+  };
+
+  const deleteVenta = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from("ventas").delete().eq("id", id);
+    if (error) {
+      alert(`No se pudo eliminar la venta: ${error.message}`);
+      return false;
+    }
+    setVentas(prev => prev.filter(x => x.id !== id));
+    return true;
+  };
+
   return (
     <AppContext.Provider value={{
       clientes, setClientes,
+      addCliente, updateCliente, deleteCliente,
       vehiculos, setVehiculos,
       addVehiculo, updateVehiculo, deleteVehiculo,
       vehiculosLoading,
       consignatarios, setConsignatarios,
       ventas, setVentas,
+      addVenta, updateVenta, deleteVenta,
       cuentasPagar, setCuentasPagar,
       cuentasCobrar, setCuentasCobrar,
       adquisiciones, setAdquisiciones,
