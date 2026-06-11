@@ -527,6 +527,8 @@ interface AppState {
   addVehiculo: (v: Vehiculo) => Promise<void>;
   updateVehiculo: (v: Vehiculo) => Promise<void>;
   deleteVehiculo: (id: string) => Promise<void>;
+  /** Fotos de un vehiculo (la lista viaja sin fotos por peso). */
+  getVehiculoFotos: (id: string) => Promise<string[]>;
   vehiculosLoading: boolean;
   consignatarios: Consignatario[];
   setConsignatarios: (c: Consignatario[]) => void;
@@ -621,13 +623,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Load vehicles from DB on mount ─────────────────────────────────────────
+  // ⚠️ SIN la columna fotos: con 1237 vehiculos las fotos base64 hacian que la
+  // lista pesara ~14 MB y en conexiones lentas la consulta fallaba y la pagina
+  // quedaba vacia. Las fotos se cargan al abrir cada vehiculo (getVehiculoFotos).
+  const VEHICULO_LIST_COLS =
+    "id, folio, patente, tipo, marca, modelo, anio, estado, precio_venta, precio_piso, precio_costo, sucursal, usuario_asignado, combustible, n_motor, vin, color, kilometraje, ubicacion, comentarios, transmision, traccion, aire_acondicionado, equipamiento_extra, publicado_yapo, created_at, updated_at";
+
   useEffect(() => {
     const loadVehiculos = async () => {
       setVehiculosLoading(true);
       const rows = await fetchAllRows((from, to) =>
         supabase
           .from("vehiculos")
-          .select("*")
+          .select(VEHICULO_LIST_COLS)
           // Orden: ultima vez modificado (o creado si nunca se actualizo) primero
           .order("updated_at", { ascending: false, nullsFirst: false })
           .order("created_at", { ascending: false })
@@ -637,7 +645,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setVehiculosLoading(false);
     };
     loadVehiculos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Trae las fotos de un vehiculo (no viajan con la lista por peso). */
+  const getVehiculoFotos = async (id: string): Promise<string[]> => {
+    const { data, error } = await supabase
+      .from("vehiculos")
+      .select("fotos")
+      .eq("id", id)
+      .single();
+    if (error || !data) return [];
+    return ((data.fotos as string[] | null) ?? []).map(f => f || "");
+  };
 
   // ── Load clientes from DB on mount ─────────────────────────────────────────
   useEffect(() => {
@@ -902,6 +922,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addCliente, updateCliente, deleteCliente,
       vehiculos, setVehiculos,
       addVehiculo, updateVehiculo, deleteVehiculo,
+      getVehiculoFotos,
       vehiculosLoading,
       consignatarios, setConsignatarios,
       ventas, setVentas,

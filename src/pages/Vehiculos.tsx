@@ -150,7 +150,9 @@ function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel:
 }
 
 export default function Vehiculos() {
-  const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo, clientes, usuarioActual } = useApp();
+  const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo, getVehiculoFotos, clientes, usuarioActual } = useApp();
+  // Las fotos no viajan con la lista (peso): se cargan al abrir el vehiculo.
+  const [fotosLoading, setFotosLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("DISPONIBLE");
   const [showModal, setShowModal] = useState(false);
@@ -250,16 +252,22 @@ export default function Vehiculos() {
     setShowPisoModal(true); // al crear, el campo se escribe directo
   };
 
-  const openEdit = (v: Vehiculo) => {
+  const openEdit = async (v: Vehiculo) => {
     setForm({ ...v });
-    setFotoSlots(FOTO_SLOTS.map((label, i) => ({ label, file: null, preview: v.fotos[i] || null })));
+    setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
     setEditId(v.id); setTab("general"); setShowModal(true);
     setIsReadOnly(true); // editar arranca en modo lectura
     setShowPisoModal(false); // precio piso oculto por defecto
+    // Cargar las fotos en segundo plano (no viajan con la lista por peso)
+    setFotosLoading(true);
+    const fotos = await getVehiculoFotos(v.id);
+    setFotoSlots(FOTO_SLOTS.map((label, i) => ({ label, file: null, preview: fotos[i] || null })));
+    setFotosLoading(false);
   };
 
   const handleSave = async () => {
     if (!form.patente?.trim() || !form.marca?.trim()) return alert("Patente y Marca son requeridos.");
+    if (fotosLoading) return alert("Espera un momento: las fotos del vehículo aún se están cargando.");
     const fotos = fotoSlots.map(s => s.preview || "");
     const nextFolio = String(vehiculos.length + 1).padStart(5, "0");
     setSaving(true);
@@ -442,6 +450,10 @@ export default function Vehiculos() {
   const togglePublicarYapo = async (publicar: boolean) => {
     if (!editId) {
       alert("Primero guarda el vehículo, después publicalo en Yapo.");
+      return;
+    }
+    if (fotosLoading) {
+      alert("Espera un momento: las fotos del vehículo aún se están cargando.");
       return;
     }
     if (publicar) {
@@ -1006,8 +1018,9 @@ export default function Vehiculos() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium px-3 py-1 rounded-full bg-muted">
-                        {fotosCount} / {FOTO_SLOTS.length} fotos
+                      <span className="text-xs font-medium px-3 py-1 rounded-full bg-muted flex items-center gap-1.5">
+                        {fotosLoading && <Loader2 size={11} className="animate-spin" />}
+                        {fotosLoading ? "Cargando fotos…" : `${fotosCount} / ${FOTO_SLOTS.length} fotos`}
                       </span>
                       {/* Subir multiples */}
                       <button
