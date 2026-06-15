@@ -130,6 +130,7 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
   const CATEGORY_ID = "109";    // Vehiculos > Autos Usados (ID oficial Yapo)
   const AD_TYPE = "auto";       // tipo de aviso: "auto" (Carros) segun manual Yapo
   const EMAIL = Deno.env.get("YAPO_EMAIL") ?? "";
+  const PHONE = "982673927";    // telefono de contacto de la automotora (obligatorio en Yapo)
 
   // Lista oficial de marcas que acepta el campo "make" (del manual Yapo).
   // El feed las normaliza a la grafia exacta (ej: "MAXUS" -> "Maxus").
@@ -201,7 +202,7 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
         </ad>
         <contact>
           <email>${cdata(EMAIL)}</email>
-          <phone>${cdata("")}</phone>
+          <phone>${cdata(PHONE)}</phone>
           <contact>${cdata("EGANA AUTOMOTRIZ")}</contact>
           <city>${cdata("Puerto Montt")}</city>
         </contact>
