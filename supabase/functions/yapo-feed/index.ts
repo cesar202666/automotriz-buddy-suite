@@ -131,6 +131,44 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
   const AD_TYPE = "auto";       // tipo de aviso: "auto" (Carros) segun manual Yapo
   const EMAIL = Deno.env.get("YAPO_EMAIL") ?? "";
 
+  // Lista oficial de marcas que acepta el campo "make" (del manual Yapo).
+  // El feed las normaliza a la grafia exacta (ej: "MAXUS" -> "Maxus").
+  const MAKES = [
+    "Acadian","Acura","Alfa Romeo","AM General","Amc","American Motors","Argo","ARO","Asia Motors","ASIASTAR","Aston Martin","Audi","Austin","Autorrad","BAIC","Baoya","Bentley","Bestune","BMW","Brilliance","Buick","BYD","GAC Motors","Cadillac","Caterham","Changan","Changhe","Chery","Chevrolet","Chrysler","Citroen","CMC","Commer","Cupra","Dacia","Daewoo","Daihatsu","Datsun","Dayun","DFSK","DMC","Dodge","Dongfeng","DS","Eagle","Exeed","Faw","Ferrari","Fiat","Fisker","Ford","Forthing","Foton","F.S.O.","Fulu","Geely","Genesis","Geo","GMC","Gonow","Great Wall","Hafei","Haima","Haval","Hillman","Honda","Hummer","Hyundai","Infiniti","International","Isuzu","Jac","Jaecoo","Jaguar","Jeep","Jetour","Jiayuan","JMC","Jonway","Kaiyi","Karma","Karry","Kenbo","Kia","KYC","Lada","Lamborghini","Lancia","Land Rover","Landwind","Landking","Leapmotor","Lexus","Lifan","Lincoln","Lynk & Co","Livan","Lotus","Mahindra","Maserati","Maxus","Maybach","Mazda","McLaren","Mercedes Benz","Mercury","Merkur","MG","MINI","Mitsubishi","Morgan","Morris","Nissan","NSU","Oldsmobile","Omoda","Opel","Peugeot","Pininfarina","Plymouth","Polaris","Pontiac","Porsche","Proton","PUMA","Ram","Renault","Riddara","Rolls Royce","Rover","Saab","Saehan","Samsung","Saturn","Scion","Seat","SG","Shineray","Simca","Skoda","SMA","Smart","Soueast","SouthEast","SsangYong","Subaru","Surron","Suzuki","Tata","Tesla","Toyota","Triumph","UAZ","VGV","Volkswagen","Volvo","Willys","Wuling","Yugo","ZAP","Zastava","ZNA","Zotye","ZX Auto",
+  ];
+  const MAKE_BY_KEY: Record<string, string> = {};
+  for (const m of MAKES) MAKE_BY_KEY[m.toUpperCase().replace(/\s+/g, "")] = m;
+  // Alias frecuentes en la base que no coinciden literal con la lista Yapo
+  const MAKE_ALIASES: Record<string, string> = {
+    MERCEDESBENZ: "Mercedes Benz", "MERCEDES-BENZ": "Mercedes Benz", MB: "Mercedes Benz",
+    VW: "Volkswagen", CHEVY: "Chevrolet", VOLKSWAGEN: "Volkswagen",
+    GREATWALL: "Great Wall", LANDROVER: "Land Rover", ALFAROMEO: "Alfa Romeo",
+    SSANGYONG: "SsangYong", MINICOOPER: "MINI",
+  };
+  const normMake = (raw: string): string => {
+    const key = (raw || "").toUpperCase().replace(/[\s.-]+/g, "");
+    return MAKE_ALIASES[key] ?? MAKE_BY_KEY[key] ?? (raw || "");
+  };
+
+  // Combustible: valores exactos Bencina | Diesel | Hibrido | Electrico | Gas | Otros
+  const normFuel = (raw: string): string => {
+    const s = (raw || "").toLowerCase();
+    if (s.includes("diesel") || s.includes("diésel") || s.includes("petrol")) return "Diesel";
+    if (s.includes("hibrid") || s.includes("híbrid")) return "Híbrido";
+    if (s.includes("elect") || s.includes("eléct")) return "Eléctrico";
+    if (s.includes("gas")) return "Gas";
+    if (s.includes("benc") || s.includes("gasolin")) return "Bencina";
+    return "Bencina";
+  };
+
+  // Transmision: valores exactos Automatica | Manual | 5+ | Otros
+  const normTrans = (raw: string): string => {
+    const s = (raw || "").toLowerCase();
+    if (s.includes("auto")) return "Automática";
+    if (s.includes("manual") || s.includes("mecán") || s.includes("mecan")) return "Manual";
+    return "Manual";
+  };
+
   const itemsXml = (data ?? [])
     .filter((v) => v.marca && v.modelo && Number(v.precio_venta) > 0)
     .map((v) => {
@@ -152,15 +190,14 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
           <regionid>${cdata(REGION_ID)}</regionid>
           <type>${cdata(AD_TYPE)}</type>
           <title>${cdata(titulo)}</title>
-          <make>${cdata(v.marca)}</make>
+          <make>${cdata(normMake(String(v.marca ?? "")))}</make>
           <model>${cdata(v.modelo)}</model>
           <currency>${cdata("CLP")}</currency>
           <price>${cdata(String(Number(v.precio_venta ?? 0)))}</price>
           <year>${cdata(String(v.anio ?? ""))}</year>
-          <regdate>${cdata(String(v.anio ?? ""))}</regdate>
           <mileage>${cdata(String(Number(v.kilometraje ?? 0)))}</mileage>
-          <fuel>${cdata(String(v.combustible || "Bencina"))}</fuel>
-          <trans>${cdata(String(v.transmision || "Manual"))}</trans>
+          <fuel>${cdata(normFuel(String(v.combustible ?? "")))}</fuel>
+          <trans>${cdata(normTrans(String(v.transmision ?? "")))}</trans>
         </ad>
         <contact>
           <email>${cdata(EMAIL)}</email>
@@ -172,6 +209,7 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
       <optional>
         <ad>
           <descr>${cdata(buildBody(v))}</descr>
+          ${v.color ? `<extcolor>${cdata(String(v.color))}</extcolor>` : ""}
 ${pictures}
         </ad>
       </optional>
