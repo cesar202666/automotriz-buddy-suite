@@ -128,7 +128,7 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
   const COUNTRY_ID = "5247";   // Chile
   const REGION_ID = "12";       // Los Lagos
   const CATEGORY_ID = "2020";   // Autos, camionetas y 4x4
-  const AD_TYPE = "cars";       // tipo de aviso: vehiculos
+  const AD_TYPE = "auto";       // tipo de aviso: "auto" (Carros) segun manual Yapo
   const EMAIL = Deno.env.get("YAPO_EMAIL") ?? "";
 
   const itemsXml = (data ?? [])
