@@ -141,6 +141,8 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
         .join("\n");
       const titulo = `${v.marca} ${v.modelo} ${v.anio}`.trim().slice(0, 50);
       const sourceid = String(v.patente || v.id);
+      // Campos obligatorios del aviso de auto (vistos en el formulario demo):
+      // Marca, Modelo, Moneda, Precio, Año, Kilometros, Combustible, Transmision
       return `    <item>
       <required>
         <ad>
@@ -150,7 +152,15 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
           <regionid>${cdata(REGION_ID)}</regionid>
           <type>${cdata(AD_TYPE)}</type>
           <title>${cdata(titulo)}</title>
+          <brand>${cdata(v.marca)}</brand>
+          <model>${cdata(v.modelo)}</model>
+          <currency>${cdata("1")}</currency>
           <price>${cdata(String(Number(v.precio_venta ?? 0)))}</price>
+          <year>${cdata(String(v.anio ?? ""))}</year>
+          <regdate>${cdata(String(v.anio ?? ""))}</regdate>
+          <mileage>${cdata(String(Number(v.kilometraje ?? 0)))}</mileage>
+          <fuel>${cdata(String(v.combustible || "Bencina"))}</fuel>
+          <gearbox>${cdata(String(v.transmision || "Manual"))}</gearbox>
         </ad>
         <contact>
           <email>${cdata(EMAIL)}</email>
