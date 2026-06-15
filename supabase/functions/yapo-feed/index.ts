@@ -118,45 +118,66 @@ async function serveFeed(baseUrl: string): Promise<Response> {
     });
   }
 
+  // Codigo de combustible Yapo: 1=Bencina, 2=Diesel, 3=Gas, 4=Electrico/Hibrido
+  const fuelCode = (c: string) => {
+    const s = (c || "").toLowerCase();
+    if (s.includes("diesel") || s.includes("diésel")) return "2";
+    if (s.includes("gas")) return "3";
+    if (s.includes("elect") || s.includes("hibrid") || s.includes("híbrid")) return "4";
+    return "1";
+  };
+  // Caja Yapo: 1=Manual, 2=Automatica
+  const gearboxCode = (t: string) => (String(t ?? "").toLowerCase().includes("auto") ? "2" : "1");
+
   const adsXml = (data ?? [])
     .filter((v) => v.marca && v.modelo && Number(v.precio_venta) > 0)
     .map((v) => {
       const fotos = (v.fotos as string[] | null)?.filter(Boolean) ?? [];
       const imagenes = fotos
         .slice(0, 8)
-        .map((_f, i) => `      <image>${xmlEscape(`${baseUrl}?foto=${v.id}&n=${i}`)}</image>`)
+        .map((_f, i) => `        <image><url>${xmlEscape(`${baseUrl}?foto=${v.id}&n=${i}`)}</url></image>`)
         .join("\n");
       const titulo = `${v.marca} ${v.modelo} ${v.anio}`.trim();
-      const gearbox = String(v.transmision ?? "").toLowerCase().includes("auto") ? "Automático" : "Manual";
-      return `  <ad>
-    <external_id>${xmlEscape(String(v.patente || v.id))}</external_id>
-    <title>${cdata(titulo)}</title>
-    <description>${cdata(buildBody(v))}</description>
-    <category>2020</category>
-    <type>sell</type>
-    <price>${Number(v.precio_venta ?? 0)}</price>
-    <currency>CLP</currency>
-    <region>Los Lagos</region>
-    <commune>Puerto Montt</commune>
-    <brand>${cdata(v.marca)}</brand>
-    <model>${cdata(v.modelo)}</model>
-    <year>${xmlEscape(v.anio)}</year>
-    <mileage>${Number(v.kilometraje ?? 0)}</mileage>
-    <fuel>${cdata(v.combustible || "")}</fuel>
-    <gearbox>${cdata(gearbox)}</gearbox>
-    <color>${cdata(v.color || "")}</color>
-    <plate>${xmlEscape(v.patente || "")}</plate>
-    <images>
+      const sourceid = String(v.patente || v.id);
+      return `    <ad>
+      <sourceid>${xmlEscape(sourceid)}</sourceid>
+      <action>update</action>
+      <category>2020</category>
+      <type>s</type>
+      <subject>${cdata(titulo.slice(0, 50))}</subject>
+      <body>${cdata(buildBody(v))}</body>
+      <price>${Number(v.precio_venta ?? 0)}</price>
+      <currency>CLP</currency>
+      <region>Los Lagos</region>
+      <communes>Puerto Montt</communes>
+      <name>Egaña Automotriz</name>
+      <email>${xmlEscape(Deno.env.get("YAPO_EMAIL") ?? "")}</email>
+      <phone></phone>
+      <params>
+        <param name="brand">${cdata(v.marca)}</param>
+        <param name="model">${cdata(v.modelo)}</param>
+        <param name="regdate">${xmlEscape(v.anio)}</param>
+        <param name="mileage">${Number(v.kilometraje ?? 0)}</param>
+        <param name="fuel">${fuelCode(String(v.combustible ?? ""))}</param>
+        <param name="gearbox">${gearboxCode(String(v.transmision ?? ""))}</param>
+        <param name="cartype">2</param>
+      </params>
+      <images>
 ${imagenes}
-    </images>
-  </ad>`;
+      </images>
+    </ad>`;
     })
     .join("\n");
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<ads count="${(data ?? []).length}" generated="${new Date().toISOString()}">
+<import>
+  <settings>
+    <language>es</language>
+  </settings>
+  <ads>
 ${adsXml}
-</ads>`;
+  </ads>
+</import>`;
 
   return new Response(xml, {
     headers: { "Content-Type": "application/xml; charset=utf-8", ...corsHeaders },
