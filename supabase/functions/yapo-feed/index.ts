@@ -154,8 +154,8 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
       <body>${cdata(buildBody(v))}</body>
       <price>${Number(v.precio_venta ?? 0)}</price>
       <currency>CLP</currency>
-      <region>Los Lagos</region>
-      <communes>Puerto Montt</communes>
+      <region>12</region>
+      <communes>261</communes>
       <name>EGANA AUTOMOTRIZ</name>
       <email>${xmlEscape(Deno.env.get("YAPO_EMAIL") ?? "")}</email>
       <phone></phone>
