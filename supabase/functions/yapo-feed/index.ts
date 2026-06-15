@@ -42,28 +42,34 @@ function xmlEscape(s: unknown): string {
 const cdata = (s: unknown) =>
   `<![CDATA[${String(s ?? "").replace(/]]>/g, "]]]]><![CDATA[>")}]]>`;
 
-/** Cuerpo estandar del aviso — mismo formato siempre, datos segun el vehiculo. */
+/**
+ * Cuerpo estandar del aviso — texto plano (sin emojis). Los emojis son
+ * caracteres UTF-8 de 4 bytes que muchos importadores de avisos rechazan o
+ * muestran como basura; texto plano es 100% confiable y se ve profesional.
+ */
 function buildBody(v: Record<string, unknown>): string {
   const km = Number(v.kilometraje ?? 0).toLocaleString("es-CL");
   const precio = Number(v.precio_venta ?? 0).toLocaleString("es-CL");
-  const equip = Array.isArray(v.equipamiento_extra) && v.equipamiento_extra.length
-    ? `✅ Equipamiento extra: ${(v.equipamiento_extra as string[]).join(", ")}\n`
-    : "";
-  return `🚗 ${String(v.marca ?? "").toUpperCase()} ${String(v.modelo ?? "").toUpperCase()} ${v.anio ?? ""}
-
-✅ Kilometraje: ${km} km
-✅ Color: ${v.color || "—"}
-✅ Combustible: ${v.combustible || "—"}
-✅ Transmisión: ${v.transmision || "—"}
-✅ Tracción: ${v.traccion || "—"}
-${equip}
-💰 Valor: $ ${precio}
-
-📍 Disponible en EGAÑA AUTOMOTRIZ — Av Ferrocarriles km 4, Puerto Montt.
-📞 Atendemos todos los días. Recibimos tu auto en parte de pago.
-🔧 Vehículo revisado y al día con su documentación.
-
-¡Consúltanos sin compromiso!`;
+  const lineas: string[] = [];
+  lineas.push(`${String(v.marca ?? "").toUpperCase()} ${String(v.modelo ?? "").toUpperCase()} ${v.anio ?? ""}`.trim());
+  lineas.push("");
+  lineas.push(`- Kilometraje: ${km} km`);
+  if (v.color) lineas.push(`- Color: ${v.color}`);
+  if (v.combustible) lineas.push(`- Combustible: ${v.combustible}`);
+  if (v.transmision) lineas.push(`- Transmision: ${v.transmision}`);
+  if (v.traccion) lineas.push(`- Traccion: ${v.traccion}`);
+  if (Array.isArray(v.equipamiento_extra) && v.equipamiento_extra.length) {
+    lineas.push(`- Equipamiento extra: ${(v.equipamiento_extra as string[]).join(", ")}`);
+  }
+  lineas.push("");
+  lineas.push(`Valor: $ ${precio}`);
+  lineas.push("");
+  lineas.push("Disponible en EGANA AUTOMOTRIZ - Av Ferrocarriles km 4, Puerto Montt.");
+  lineas.push("Atendemos todos los dias. Recibimos tu auto en parte de pago.");
+  lineas.push("Vehiculo revisado y al dia con su documentacion.");
+  lineas.push("");
+  lineas.push("Consultanos sin compromiso!");
+  return lineas.join("\n");
 }
 
 /** Sirve la foto N (indice 0-based) de un vehiculo decodificando su base64. */
