@@ -124,63 +124,60 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
     });
   }
 
-  // Codigo de combustible Yapo: 1=Bencina, 2=Diesel, 3=Gas, 4=Electrico/Hibrido
-  const fuelCode = (c: string) => {
-    const s = (c || "").toLowerCase();
-    if (s.includes("diesel") || s.includes("diésel")) return "2";
-    if (s.includes("gas")) return "3";
-    if (s.includes("elect") || s.includes("hibrid") || s.includes("híbrid")) return "4";
-    return "1";
-  };
-  // Caja Yapo: 1=Manual, 2=Automatica
-  const gearboxCode = (t: string) => (String(t ?? "").toLowerCase().includes("auto") ? "2" : "1");
+  // Constantes Yapo Chile (del manual oficial de Importacion XML)
+  const COUNTRY_ID = "5247";   // Chile
+  const REGION_ID = "12";       // Los Lagos
+  const CATEGORY_ID = "2020";   // Autos, camionetas y 4x4
+  const AD_TYPE = "cars";       // tipo de aviso: vehiculos
+  const EMAIL = Deno.env.get("YAPO_EMAIL") ?? "";
 
-  const adsXml = (data ?? [])
+  const itemsXml = (data ?? [])
     .filter((v) => v.marca && v.modelo && Number(v.precio_venta) > 0)
     .map((v) => {
       const fotos = (v.fotos as string[] | null)?.filter(Boolean) ?? [];
-      const imagenes = fotos
+      const pictures = fotos
         .slice(0, 8)
-        .map((_f, i) => `        <image><url>${xmlEscape(`${baseUrl}?foto=${v.id}&n=${i}`)}</url></image>`)
+        .map((_f, i) => `          <picture>${cdata(`${baseUrl}?foto=${v.id}&n=${i}`)}</picture>`)
         .join("\n");
-      const titulo = `${v.marca} ${v.modelo} ${v.anio}`.trim();
+      const titulo = `${v.marca} ${v.modelo} ${v.anio}`.trim().slice(0, 50);
       const sourceid = String(v.patente || v.id);
-      return `    <ad>
-      <sourceid>${xmlEscape(sourceid)}</sourceid>
-      <action>update</action>
-      <category>2020</category>
-      <type>s</type>
-      <subject>${cdata(titulo.slice(0, 50))}</subject>
-      <body>${cdata(buildBody(v))}</body>
-      <price>${Number(v.precio_venta ?? 0)}</price>
-      <currency>CLP</currency>
-      <region>12</region>
-      <communes>261</communes>
-      <name>EGANA AUTOMOTRIZ</name>
-      <email>${xmlEscape(Deno.env.get("YAPO_EMAIL") ?? "")}</email>
-      <phone></phone>
-      <params>
-        <param name="brand">${cdata(v.marca)}</param>
-        <param name="model">${cdata(v.modelo)}</param>
-        <param name="regdate">${xmlEscape(v.anio)}</param>
-        <param name="mileage">${Number(v.kilometraje ?? 0)}</param>
-        <param name="fuel">${fuelCode(String(v.combustible ?? ""))}</param>
-        <param name="gearbox">${gearboxCode(String(v.transmision ?? ""))}</param>
-        <param name="cartype">2</param>
-      </params>
-      <images>
-${imagenes}
-      </images>
-    </ad>`;
+      return `    <item>
+      <required>
+        <ad>
+          <sourceid>${cdata(sourceid)}</sourceid>
+          <countryid>${cdata(COUNTRY_ID)}</countryid>
+          <categoryid>${cdata(CATEGORY_ID)}</categoryid>
+          <regionid>${cdata(REGION_ID)}</regionid>
+          <type>${cdata(AD_TYPE)}</type>
+          <title>${cdata(titulo)}</title>
+          <price>${cdata(String(Number(v.precio_venta ?? 0)))}</price>
+        </ad>
+        <contact>
+          <email>${cdata(EMAIL)}</email>
+          <phone>${cdata("")}</phone>
+          <contact>${cdata("EGANA AUTOMOTRIZ")}</contact>
+          <city>${cdata("Puerto Montt")}</city>
+        </contact>
+      </required>
+      <optional>
+        <ad>
+          <descr>${cdata(buildBody(v))}</descr>
+${pictures}
+        </ad>
+      </optional>
+    </item>`;
     })
     .join("\n");
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <import>
   <settings>
-    <language>es</language>
+    <type>${cdata(AD_TYPE)}</type>
+    <language>${cdata("es")}</language>
   </settings>
-${adsXml}
+  <items>
+${itemsXml}
+  </items>
 </import>`;
 
   // ?download=1 → fuerza descarga del archivo feed.xml (para importacion manual)
