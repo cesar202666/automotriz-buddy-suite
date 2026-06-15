@@ -364,11 +364,34 @@ function ventaFromDb(row: any): Venta {
   };
 }
 
-/** Payload de insert/update (sin id). fecha_venta vacia → null (columna timestamp). */
+/**
+ * Normaliza una fecha a ISO (YYYY-MM-DD) para columnas timestamp de Postgres.
+ * La app muestra/guarda fechas en formato chileno DD-MM-YYYY (o DD/MM/YYYY),
+ * que Postgres rechaza ("date/time field value out of range"). Acepta tambien
+ * fechas ya en ISO o timestamps completos. Vacio/invalido → null.
+ */
+function fechaParaDb(raw: string): string | null {
+  const s = (raw || "").trim();
+  if (!s) return null;
+  // DD-MM-YYYY o DD/MM/YYYY → YYYY-MM-DD
+  const m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (m) {
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  // Ya viene en ISO (YYYY-MM-DD...) → tal cual
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+  // Ultimo intento: parseo nativo
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) return dt.toISOString();
+  return null;
+}
+
+/** Payload de insert/update (sin id). fecha_venta normalizada a ISO o null. */
 function ventaToDb(v: Omit<Venta, "id">) {
   return {
     ejecutiva: v.ejecutiva,
-    fecha_venta: v.fechaVenta || null,
+    fecha_venta: fechaParaDb(v.fechaVenta),
     sucursal: v.sucursal,
     cliente_id: v.clienteId,
     cliente_nombre: v.clienteNombre,
