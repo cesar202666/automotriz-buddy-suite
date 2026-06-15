@@ -152,15 +152,15 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
           <regionid>${cdata(REGION_ID)}</regionid>
           <type>${cdata(AD_TYPE)}</type>
           <title>${cdata(titulo)}</title>
-          <brand>${cdata(v.marca)}</brand>
+          <make>${cdata(v.marca)}</make>
           <model>${cdata(v.modelo)}</model>
-          <currency>${cdata("1")}</currency>
+          <currency>${cdata("CLP")}</currency>
           <price>${cdata(String(Number(v.precio_venta ?? 0)))}</price>
           <year>${cdata(String(v.anio ?? ""))}</year>
           <regdate>${cdata(String(v.anio ?? ""))}</regdate>
           <mileage>${cdata(String(Number(v.kilometraje ?? 0)))}</mileage>
           <fuel>${cdata(String(v.combustible || "Bencina"))}</fuel>
-          <gearbox>${cdata(String(v.transmision || "Manual"))}</gearbox>
+          <trans>${cdata(String(v.transmision || "Manual"))}</trans>
         </ad>
         <contact>
           <email>${cdata(EMAIL)}</email>
