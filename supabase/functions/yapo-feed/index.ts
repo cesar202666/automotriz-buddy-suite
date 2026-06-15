@@ -126,7 +126,7 @@ async function serveFeed(baseUrl: string, forceDownload = false): Promise<Respon
 
   // Constantes Yapo Chile (del manual oficial de Importacion XML)
   const COUNTRY_ID = "5247";   // Chile
-  const REGION_ID = "12";       // Los Lagos
+  const REGION_ID = "5324";     // Los Lagos > Puerto Montt (ID oficial Yapo; comuna exacta)
   const CATEGORY_ID = "109";    // Vehiculos > Autos Usados (ID oficial Yapo)
   const AD_TYPE = "auto";       // tipo de aviso: "auto" (Carros) segun manual Yapo
   const EMAIL = Deno.env.get("YAPO_EMAIL") ?? "";
