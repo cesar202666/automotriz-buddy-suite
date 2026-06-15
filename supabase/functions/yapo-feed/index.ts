@@ -106,7 +106,7 @@ async function serveFoto(vehiculoId: string, n: number): Promise<Response> {
 }
 
 /** Genera el feed XML con todos los vehiculos disponibles. */
-async function serveFeed(baseUrl: string): Promise<Response> {
+async function serveFeed(baseUrl: string, forceDownload = false): Promise<Response> {
   const supabase = getSupabase();
   // Solo vehiculos que el usuario marco manualmente con "Publicar en Yapo"
   // (ademas de estar DISPONIBLES). Sin publicacion automatica de todo el stock.
@@ -156,7 +156,7 @@ async function serveFeed(baseUrl: string): Promise<Response> {
       <currency>CLP</currency>
       <region>Los Lagos</region>
       <communes>Puerto Montt</communes>
-      <name>Egaña Automotriz</name>
+      <name>EGANA AUTOMOTRIZ</name>
       <email>${xmlEscape(Deno.env.get("YAPO_EMAIL") ?? "")}</email>
       <phone></phone>
       <params>
@@ -185,9 +185,14 @@ ${adsXml}
   </ads>
 </import>`;
 
-  return new Response(xml, {
-    headers: { "Content-Type": "application/xml; charset=utf-8", ...corsHeaders },
-  });
+  // ?download=1 → fuerza descarga del archivo feed.xml (para importacion manual)
+  const headers: Record<string, string> = {
+    "Content-Type": "application/xml; charset=utf-8",
+    ...corsHeaders,
+  };
+  if (forceDownload) headers["Content-Disposition"] = 'attachment; filename="feed.xml"';
+
+  return new Response(xml, { headers });
 }
 
 serve(async (req) => {
@@ -210,5 +215,6 @@ serve(async (req) => {
 
   // URL publica real de esta funcion (url.origin dentro del runtime no incluye /functions/v1)
   const baseUrl = `${Deno.env.get("SUPABASE_URL") ?? url.origin}/functions/v1/yapo-feed`;
-  return await serveFeed(baseUrl);
+  const forceDownload = url.searchParams.get("download") === "1";
+  return await serveFeed(baseUrl, forceDownload);
 });
