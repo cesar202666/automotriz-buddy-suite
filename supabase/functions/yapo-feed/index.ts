@@ -190,12 +190,15 @@ ${itemsXml}
   </items>
 </import>`;
 
-  // ?download=1 → fuerza descarga del archivo feed.xml (para importacion manual)
-  const headers: Record<string, string> = {
-    "Content-Type": "application/xml; charset=utf-8",
-    ...corsHeaders,
-  };
-  if (forceDownload) headers["Content-Disposition"] = 'attachment; filename="feed.xml"';
+  // ?download=1 → fuerza descarga del archivo feed.xml (para importacion manual).
+  // octet-stream + attachment hace que TODO navegador lo baje en vez de mostrarlo.
+  const headers: Record<string, string> = forceDownload
+    ? {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": 'attachment; filename="feed.xml"',
+        ...corsHeaders,
+      }
+    : { "Content-Type": "application/xml; charset=utf-8", ...corsHeaders };
 
   return new Response(xml, { headers });
 }
