@@ -180,9 +180,7 @@ ${imagenes}
   <settings>
     <language>es</language>
   </settings>
-  <ads>
 ${adsXml}
-  </ads>
 </import>`;
 
   // ?download=1 → fuerza descarga del archivo feed.xml (para importacion manual)
