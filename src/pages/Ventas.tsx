@@ -16,7 +16,9 @@ const TIPO_VENTA_OPTIONS: { value: TipoVenta; label: string }[] = [
   { value: "APP", label: "APP" },
 ];
 
-const calcComision = (precioVenta: number) => Math.round(precioVenta * 0.015) + 80000;
+const calcComision = (precioVenta: number) => Math.round(precioVenta * 0.015) + 100000;
+
+const FINANCIERAS = ["Global", "Autofin", "Unidad", "Falabella"];
 
 interface DocField {
   dataUrl: string | null;
@@ -32,7 +34,7 @@ const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
   ejecutiva, fechaVenta: todayStr(), sucursal: "", clienteId: "", clienteNombre: "",
   informeTecnico: null, informeTecnicoName: null, patente: "", marca: "", modelo: "",
   anioVehiculo: "", colorVehiculo: "", kilometrajeVehiculo: 0,
-  precioRetoma: 0, precioPublicado: 0, precioVenta: 0, margenBruto: 0, nCredito: "", comisionCredito: 0,
+  precioRetoma: 0, precioPublicado: 0, precioVenta: 0, margenBruto: 0, nCredito: "", financiera: "", comisionCredito: 0,
   gastosAdmin: 0, precioVtaFinal: 0, creditoFirmado: "NO", creditoFirmadoDoc: null, creditoFirmadoDocName: null,
   montoPieCaja: 0, prepago: "NO", prepagoDoc: null, prepagoDocName: null,
   documentacionVenta: null, documentacionVentaName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false,
@@ -604,11 +606,19 @@ export default function Ventas() {
                       <input className={inp} style={bd} value={form.nCredito} onChange={e => setForm(f => ({ ...f, nCredito: e.target.value }))} />
                     </div>
                     <div>
+                      <label className="block text-xs font-medium mb-1">Financiera</label>
+                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={bd}
+                        value={form.financiera || ""} onChange={e => setForm(f => ({ ...f, financiera: e.target.value }))}>
+                        <option value="">— Seleccionar —</option>
+                        {FINANCIERAS.map(fin => <option key={fin} value={fin}>{fin}</option>)}
+                      </select>
+                    </div>
+                    <div>
                       <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
                       <NumberInput value={form.gastosAdmin ?? 0} onChange={(n) => updatePrecio("gastosAdmin", n)} currency placeholder="Ej: 200.000" className={inp} style={bd} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$80k)</label>
+                      <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$100k)</label>
                       <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(form.comisionCredito)} />
                     </div>
                     <div className="col-span-2">
