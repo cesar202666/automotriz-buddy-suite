@@ -30,6 +30,18 @@ const todayStr = () => {
   return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
 };
 
+/** Muestra solo la fecha (DD-MM-YYYY), sin la hora. Acepta ISO o DD-MM-YYYY. */
+const soloFecha = (raw: string): string => {
+  if (!raw) return "—";
+  // Ya viene como DD-MM-YYYY (del form)
+  const m = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (m) return `${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}-${m[3]}`;
+  // ISO YYYY-MM-DD... → DD-MM-YYYY
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
+  return raw.split(/[ T]/)[0];
+};
+
 const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
   ejecutiva, fechaVenta: todayStr(), sucursal: "", clienteId: "", clienteNombre: "",
   informeTecnico: null, informeTecnicoName: null, patente: "", marca: "", modelo: "",
@@ -317,7 +329,7 @@ export default function Ventas() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
-              {["ID","Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","Color","Km","P. Publicado","P. Venta","Margen","N° Crédito","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación"].map(h => (
+              {["Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","Color","Km","P. Publicado","P. Venta","Margen","N° Crédito","Financiera","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación"].map(h => (
                 <th key={h} className="px-3 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -326,7 +338,6 @@ export default function Ventas() {
             {filtered.map((v) => (
               <tr key={v.id} className={`border-b table-row-hover cursor-pointer ${rowBg(v)}`}
                 style={bd} onClick={() => openEdit(v)}>
-                <td className="px-3 py-2 font-semibold" style={{ color: "hsl(var(--primary))" }}>#{v.id.slice(-6)}</td>
                 <td className="px-3 py-2 capitalize">{v.tipoVenta?.replace(/_/g, " ").toLowerCase()}</td>
                 <td className="px-3 py-2">
                   {v.prepago === "SI" ? (
@@ -334,7 +345,7 @@ export default function Ventas() {
                       : <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Sí (Falta Doc)</span>
                   ) : <span style={{ color: "hsl(var(--muted-foreground))" }}>—</span>}
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap">{v.fechaVenta}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{soloFecha(v.fechaVenta)}</td>
                 <td className="px-3 py-2 font-medium">{v.ejecutiva}</td>
                 <td className="px-3 py-2">{v.sucursal}</td>
                 <td className="px-3 py-2" style={{ color: "hsl(var(--primary))" }}>{v.clienteNombre || "—"}</td>
@@ -351,6 +362,7 @@ export default function Ventas() {
                 <td className="px-3 py-2 font-semibold">{fmt(v.precioVenta)}</td>
                 <td className="px-3 py-2" style={{ color: "hsl(var(--chart-2))" }}>{fmt(v.margenBruto)}</td>
                 <td className="px-3 py-2">{v.nCredito || "—"}</td>
+                <td className="px-3 py-2">{v.financiera || "—"}</td>
                 <td className="px-3 py-2">{fmt(v.gastosAdmin)}</td>
                 <td className="px-3 py-2">{fmt(v.comisionCredito)}</td>
                 <td className="px-3 py-2 font-semibold">{fmt(v.precioVtaFinal)}</td>

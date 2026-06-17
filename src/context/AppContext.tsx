@@ -770,9 +770,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .insert(toDb(v))
       .select()
       .single();
-    if (!error && data) {
-      setVehiculos(prev => [fromDb(data as Record<string, unknown>), ...prev]);
+    if (error || !data) {
+      alert(`No se pudo guardar el vehículo: ${error?.message ?? "error desconocido"}`);
+      return;
     }
+    setVehiculos(prev => [fromDb(data as Record<string, unknown>), ...prev]);
   };
 
   const updateVehiculo = async (v: Vehiculo) => {
@@ -782,11 +784,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .eq("id", v.id)
       .select()
       .single();
-    if (!error && data) {
-      const updated = fromDb(data as Record<string, unknown>);
-      // Mover el vehiculo actualizado al inicio (ordenado por ultima modificacion)
-      setVehiculos(prev => [updated, ...prev.filter(x => x.id !== v.id)]);
+    if (error || !data) {
+      alert(`No se pudo actualizar el vehículo: ${error?.message ?? "error desconocido"}`);
+      return;
     }
+    const updated = fromDb(data as Record<string, unknown>);
+    // Mover el vehiculo actualizado al inicio (ordenado por ultima modificacion)
+    setVehiculos(prev => [updated, ...prev.filter(x => x.id !== v.id)]);
   };
 
   const deleteVehiculo = async (id: string) => {

@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
+import { subirFotosAStorage } from "@/lib/fotoUpload";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
@@ -153,6 +154,7 @@ export default function Vehiculos() {
   const { vehiculos, vehiculosLoading, addVehiculo, updateVehiculo, deleteVehiculo, getVehiculoFotos, clientes, usuarioActual } = useApp();
   // Las fotos no viajan con la lista (peso): se cargan al abrir el vehiculo.
   const [fotosLoading, setFotosLoading] = useState(false);
+  const [subiendoFotos, setSubiendoFotos] = useState(false);
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("DISPONIBLE");
   const [showModal, setShowModal] = useState(false);
@@ -268,17 +270,33 @@ export default function Vehiculos() {
   const handleSave = async () => {
     if (!form.patente?.trim() || !form.marca?.trim()) return alert("Patente y Marca son requeridos.");
     if (fotosLoading) return alert("Espera un momento: las fotos del vehículo aún se están cargando.");
-    const fotos = fotoSlots.map(s => s.preview || "");
     const nextFolio = String(vehiculos.length + 1).padStart(5, "0");
     setSaving(true);
-    if (editId) {
-      await updateVehiculo({ ...form, fotos, id: editId } as Vehiculo);
-    } else {
-      const newV: Vehiculo = { id: crypto.randomUUID(), folio: nextFolio, ...(form as Vehiculo), fotos };
-      await addVehiculo(newV);
+    try {
+      // Subir las fotos base64 a Storage (comprimidas) y guardar solo las URLs.
+      // Asi el guardado es liviano y confiable (antes 15 fotos base64 pesaban
+      // ~100MB y el guardado fallaba en silencio).
+      const slotsFotos = fotoSlots.map(s => s.preview || "");
+      const tieneBase64 = slotsFotos.some(f => f.startsWith("data:"));
+      if (tieneBase64) setSubiendoFotos(true);
+      const { fotos, errores } = await subirFotosAStorage(slotsFotos, form.patente || "");
+      setSubiendoFotos(false);
+      if (editId) {
+        await updateVehiculo({ ...form, fotos, id: editId } as Vehiculo);
+      } else {
+        const newV: Vehiculo = { id: crypto.randomUUID(), folio: nextFolio, ...(form as Vehiculo), fotos };
+        await addVehiculo(newV);
+      }
+      if (errores.length > 0) {
+        alert(`Vehículo guardado, pero ${errores.length} foto(s) no se pudieron subir:\n` + errores.slice(0, 5).join("\n"));
+      }
+      setShowModal(false);
+    } catch (e) {
+      alert("Error al guardar: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setSaving(false);
+      setSubiendoFotos(false);
     }
-    setSaving(false);
-    setShowModal(false);
   };
 
   const confirmDelete = (id: string) => setDeleteId(id);
@@ -1630,7 +1648,7 @@ export default function Vehiculos() {
               </button>
               {!isReadOnly && (
                 <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>
-                  {saving ? "Guardando..." : "Guardar"}
+                  {subiendoFotos ? "Subiendo fotos..." : saving ? "Guardando..." : "Guardar"}
                 </button>
               )}
             </div>
