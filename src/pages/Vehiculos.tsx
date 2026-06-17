@@ -1014,7 +1014,7 @@ export default function Vehiculos() {
                     <div className="min-w-[200px]">
                       <h3 className="text-sm font-bold">📷 Registro Fotográfico</h3>
                       <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
-                        Haz clic en cada cuadrante o usa "Subir múltiples" para cargar varias a la vez.
+                        Usá "Subir múltiples" para cargar varias fotos a la vez, o hacé clic en un cuadrante para una sola.
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1022,13 +1022,17 @@ export default function Vehiculos() {
                         {fotosLoading && <Loader2 size={11} className="animate-spin" />}
                         {fotosLoading ? "Cargando fotos…" : `${fotosCount} / ${FOTO_SLOTS.length} fotos`}
                       </span>
-                      {/* Subir multiples */}
+                      {/* Subir multiples: si el vehiculo esta en modo lectura, lo pasa
+                          a edicion automaticamente y abre el selector de varias fotos. */}
                       <button
-                        onClick={() => multiUploadRef.current?.click()}
-                        disabled={batchUploading || fotosCount >= FOTO_SLOTS.length || isReadOnly}
+                        onClick={() => {
+                          if (isReadOnly) setIsReadOnly(false);
+                          multiUploadRef.current?.click();
+                        }}
+                        disabled={batchUploading || fotosLoading || fotosCount >= FOTO_SLOTS.length}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
                         style={{ background: "hsl(var(--primary))" }}
-                        title={isReadOnly ? "Activa el modo Editar para subir fotos" : fotosCount >= FOTO_SLOTS.length ? "Todos los slots ocupados" : "Selecciona varias fotos a la vez"}
+                        title={fotosCount >= FOTO_SLOTS.length ? "Todos los slots ocupados" : "Selecciona varias fotos a la vez"}
                       >
                         {batchUploading ? <Loader2 size={13} className="animate-spin" /> : <Images size={13} />}
                         Subir múltiples
