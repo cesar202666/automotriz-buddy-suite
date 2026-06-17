@@ -1313,16 +1313,21 @@ export default function Vehiculos() {
                               title="Descargar foto">
                               <Download size={11} className="text-white" />
                             </button>
-                            {/* X eliminar — solo en modo edicion */}
-                            {!isReadOnly && (
-                              <button
-                                onClick={e => { e.stopPropagation(); if (confirm("¿Quitar esta foto?")) removeFoto(i); }}
-                                className="p-1.5 rounded-lg shadow-lg"
-                                style={{ background: "#dc2626" }}
-                                title="Quitar foto">
-                                <X size={11} className="text-white" />
-                              </button>
-                            )}
+                            {/* X eliminar — siempre disponible; entra a edicion solo
+                                para que aparezca "Guardar" y el cambio persista. */}
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                if (confirm("¿Quitar esta foto? Acordate de apretar Guardar para que el cambio quede.")) {
+                                  if (isReadOnly) setIsReadOnly(false);
+                                  removeFoto(i);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg shadow-lg"
+                              style={{ background: "#dc2626" }}
+                              title="Quitar foto">
+                              <X size={11} className="text-white" />
+                            </button>
                           </div>
                         )}
 
