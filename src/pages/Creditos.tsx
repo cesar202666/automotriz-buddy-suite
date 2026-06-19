@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, ChevronDown, X } from "lucide-react";
 import { NumberInput } from "@/components/NumberInput";
 
@@ -84,6 +84,12 @@ export default function Creditos() {
     const matchSearch = `${c.financiera} ${c.cotizacion}`.toLowerCase().includes(search.toLowerCase());
     return matchFiltro && matchSearch;
   });
+
+  // Render por tramos: primeros 20 + "Cargar mas".
+  const PAGE = 20;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => { setVisibleCount(PAGE); }, [filtro, search]);
+  const visibles = filtered.slice(0, visibleCount);
 
   const openCreate = () => { setForm(emptyCredito()); setEditId(null); setSection("oferta"); setShowModal(true); };
   const openEdit = (c: Credito) => { setForm({ ...c }); setEditId(c.id); setSection("oferta"); setShowModal(true); };
@@ -171,7 +177,7 @@ export default function Creditos() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
+            {visibles.map(c => (
               <tr key={c.id} className="table-row-hover border-b cursor-pointer" style={{ borderColor: "hsl(var(--border))" }} onClick={() => openEdit(c)}>
                 <td className="px-4 py-3"><input type="checkbox" className="w-4 h-4" onClick={e => e.stopPropagation()} /></td>
                 <td className="px-4 py-3 font-medium" style={{ color: "hsl(var(--primary))" }}>{c.financiera}</td>
@@ -187,6 +193,13 @@ export default function Creditos() {
             )}
           </tbody>
         </table>
+        {visibleCount < filtered.length && (
+          <div className="flex items-center justify-center gap-3 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+            <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Mostrando {visibles.length} de {filtered.length}</span>
+            <button onClick={() => setVisibleCount(c => c + 40)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "hsl(var(--primary))" }}>Cargar más</button>
+            <button onClick={() => setVisibleCount(filtered.length)} className="px-3 py-2 rounded-lg text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Ver todos</button>
+          </div>
+        )}
       </div>
 
       {/* Modal */}

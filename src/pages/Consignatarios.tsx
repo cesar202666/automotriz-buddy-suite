@@ -525,6 +525,12 @@ export default function Consignatarios() {
     return matchFiltro && matchSearch;
   });
 
+  // Render por tramos: primeros 20 (mas recientes) + "Cargar mas".
+  const PAGE = 20;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => { setVisibleCount(PAGE); }, [filtro, search]);
+  const visibles = filtered.slice(0, visibleCount);
+
   const openCreate = () => {
     const nextFolio = String(consignatarios.length + 1).padStart(5, "0");
     setForm({ ...emptyForm(), folio: nextFolio });
@@ -651,7 +657,7 @@ export default function Consignatarios() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
+            {visibles.map(c => (
               <tr key={c.id} className="table-row-hover border-b" style={{ borderColor: "hsl(var(--border))" }}>
                 <td className="px-4 py-3 font-medium" style={{ color: "hsl(var(--primary))" }}>
                   <button onClick={() => openEdit(c)} className="hover:underline">{c.folio}</button>
@@ -679,6 +685,13 @@ export default function Consignatarios() {
             )}
           </tbody>
         </table>
+        {visibleCount < filtered.length && (
+          <div className="flex items-center justify-center gap-3 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+            <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Mostrando {visibles.length} de {filtered.length}</span>
+            <button onClick={() => setVisibleCount(c => c + 40)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "hsl(var(--primary))" }}>Cargar más</button>
+            <button onClick={() => setVisibleCount(filtered.length)} className="px-3 py-2 rounded-lg text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Ver todos</button>
+          </div>
+        )}
       </div>
 
       {/* Modal */}

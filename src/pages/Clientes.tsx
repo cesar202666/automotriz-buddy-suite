@@ -123,6 +123,13 @@ export default function Clientes() {
     `${c.nombres} ${c.apellidos} ${c.id} ${c.email} ${c.rut || ""}`.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Render por tramos: muestra los primeros 20 (los mas recientes) y suma con
+  // "Cargar mas", para que la lista aparezca rapido aunque haya miles.
+  const PAGE = 20;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => { setVisibleCount(PAGE); }, [search]);
+  const visibles = filtered.slice(0, visibleCount);
+
   const openCreate = () => {
     const base = emptyForm();
     base.creadoPor = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : null;
@@ -245,7 +252,7 @@ export default function Clientes() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c) => {
+            {visibles.map((c) => {
               const segCount = [c.seguimientoComentario1, c.seguimientoComentario2, c.seguimientoComentario3].filter(Boolean).length;
               return (
                 <tr key={c.id} className="table-row-hover border-b" style={{ borderColor: "hsl(var(--border))" }}>
@@ -283,6 +290,13 @@ export default function Clientes() {
             )}
           </tbody>
         </table>
+        {visibleCount < filtered.length && (
+          <div className="flex items-center justify-center gap-3 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+            <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Mostrando {visibles.length} de {filtered.length}</span>
+            <button onClick={() => setVisibleCount(c => c + 40)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "hsl(var(--primary))" }}>Cargar más</button>
+            <button onClick={() => setVisibleCount(filtered.length)} className="px-3 py-2 rounded-lg text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Ver todos</button>
+          </div>
+        )}
       </div>
 
       {showModal && (
