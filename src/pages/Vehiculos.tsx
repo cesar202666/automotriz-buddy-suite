@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff, Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo } from "@/context/AppContext";
 import * as XLSX from "xlsx";
@@ -114,36 +114,21 @@ const statusBadge = (estado: string) => {
   return <span className="badge-muted">{estado}</span>;
 };
 
-// --- Delete password modal ---
-function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  const { usuarioActual } = useApp();
-  const [pass, setPass] = useState("");
-  const [err, setErr] = useState(false);
-  const isMaster = usuarioActual?.rol === "master";
-
-  useEffect(() => {
-    if (isMaster) onConfirm();
-  }, [isMaster, onConfirm]);
-
-  if (isMaster) return null;
-
-  const submit = () => {
-    if (pass === MASTER_PASS) { onConfirm(); }
-    else { setErr(true); setPass(""); }
-  };
+// --- Modal de confirmacion al eliminar vehiculo ---
+function DeleteModal({ vehiculoNombre, onConfirm, onCancel }: { vehiculoNombre?: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
-      <div className="bg-card rounded-xl shadow-2xl p-7 w-80 animate-fade-in" style={{ border: "1px solid hsl(var(--border))" }}>
-        <h3 className="font-bold text-sm mb-1" style={{ color: "hsl(var(--destructive))" }}>Eliminar Vehículo</h3>
-        <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Ingresa la clave de Administrador Master para confirmar.</p>
-        <input type="password" className={`w-full border rounded px-3 py-2 text-sm bg-background mb-2 ${err ? "border-destructive" : ""}`}
-          style={{ borderColor: err ? "hsl(var(--destructive))" : "hsl(var(--border))" }}
-          placeholder="Clave master" value={pass} onChange={e => { setPass(e.target.value); setErr(false); }}
-          onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
-        {err && <p className="text-xs mb-2" style={{ color: "hsl(var(--destructive))" }}>Clave incorrecta</p>}
+      <div className="bg-card rounded-xl shadow-2xl p-7 w-[22rem] animate-fade-in" style={{ border: "1px solid hsl(var(--border))" }}>
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle size={18} style={{ color: "hsl(var(--destructive))" }} />
+          <h3 className="font-bold text-sm" style={{ color: "hsl(var(--destructive))" }}>Eliminar vehículo</h3>
+        </div>
+        <p className="text-sm mb-1">¿Estás seguro que quieres eliminar este auto?</p>
+        {vehiculoNombre && <p className="text-sm font-semibold mb-2">{vehiculoNombre}</p>}
+        <p className="text-xs mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>Esta acción no se puede deshacer.</p>
         <div className="flex gap-2 justify-end mt-3">
-          <button onClick={onCancel} className="px-3 py-1.5 rounded border text-sm hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
-          <button onClick={submit} className="px-3 py-1.5 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--destructive))" }}>Eliminar</button>
+          <button onClick={onCancel} className="px-4 py-2 rounded border text-sm hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--destructive))" }} autoFocus>Sí, eliminar</button>
         </div>
       </div>
     </div>
@@ -167,6 +152,8 @@ export default function Vehiculos() {
   const multiUploadRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // Solo perfiles de administracion (master/administracion) pueden eliminar autos.
+  const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
   const [saving, setSaving] = useState(false);
   const [batchUploading, setBatchUploading] = useState(false);
   const [zipDownloading, setZipDownloading] = useState(false);
@@ -187,6 +174,10 @@ export default function Vehiculos() {
 
   // AI bg state
   const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
+  // El editor de fondo IA queda oculto por defecto (para no molestar a vendedores).
+  const [showAIEditor, setShowAIEditor] = useState(false);
+  // Visor de imagen grande (lightbox) para exhibir el auto en pantalla.
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [processingAI, setProcessingAI] = useState<number | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -244,6 +235,14 @@ export default function Vehiculos() {
     const matchSearch = `${v.marca} ${v.modelo} ${v.patente} ${v.folio}`.toLowerCase().includes(search.toLowerCase());
     return matchEstado && matchSearch;
   });
+
+  // Render por tramos para que la tabla aparezca rapido (no renderiza 1200 filas
+  // de golpe). Muestra los primeros PAGE y suma con "Cargar mas".
+  const PAGE = 20;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  // Al cambiar filtro/busqueda, volver a mostrar solo el primer tramo.
+  useEffect(() => { setVisibleCount(PAGE); }, [filtroEstado, search]);
+  const visibles = filtered.slice(0, visibleCount);
 
   const openCreate = () => {
     const ua = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
@@ -747,9 +746,50 @@ export default function Vehiculos() {
 
   return (
     <div>
-      {deleteId && (
-        <DeleteModal onConfirm={doDelete} onCancel={() => setDeleteId(null)} />
-      )}
+      {deleteId && (() => {
+        const dv = vehiculos.find(x => x.id === deleteId);
+        const nombre = dv ? `${dv.patente || "S/P"} — ${dv.marca} ${dv.modelo} ${dv.anio}`.trim() : undefined;
+        return <DeleteModal vehiculoNombre={nombre} onConfirm={doDelete} onCancel={() => setDeleteId(null)} />;
+      })()}
+
+      {/* Visor de imagen grande (lightbox) para exhibir el auto en pantalla */}
+      {lightboxIdx !== null && fotoSlots[lightboxIdx]?.preview && (() => {
+        const conImg = fotoSlots.map((s, i) => (s.preview ? i : -1)).filter(i => i >= 0);
+        const pos = conImg.indexOf(lightboxIdx);
+        const ir = (delta: number) => setLightboxIdx(conImg[(pos + delta + conImg.length) % conImg.length]);
+        return (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.92)" }}
+            onClick={() => setLightboxIdx(null)}
+          >
+            <button onClick={() => setLightboxIdx(null)} className="absolute top-4 right-4 p-2 rounded-full text-white hover:bg-white/15" title="Cerrar">
+              <X size={26} />
+            </button>
+            {conImg.length > 1 && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); ir(-1); }} className="absolute left-3 md:left-6 p-3 rounded-full text-white hover:bg-white/15" title="Anterior">
+                  <ChevronLeft size={34} />
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); ir(1); }} className="absolute right-3 md:right-6 p-3 rounded-full text-white hover:bg-white/15" title="Siguiente">
+                  <ChevronRight size={34} />
+                </button>
+              </>
+            )}
+            <img
+              src={fotoSlots[lightboxIdx].preview!}
+              alt={fotoSlots[lightboxIdx].label}
+              className="max-h-[90vh] max-w-[92vw] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="absolute bottom-5 left-0 right-0 flex justify-center">
+              <span className="px-4 py-1.5 rounded-full text-white text-sm font-medium" style={{ background: "rgba(0,0,0,0.6)" }}>
+                {fotoSlots[lightboxIdx].label} · {pos + 1} / {conImg.length}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="page-header">
         <div>
@@ -801,7 +841,7 @@ export default function Vehiculos() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(v => (
+            {visibles.map(v => (
               <tr key={v.id} className="table-row-hover border-b" style={{ borderColor: "hsl(var(--border))" }}>
                 <td className="px-4 py-3 font-medium cursor-pointer" style={{ color: "hsl(var(--primary))" }} onClick={() => openEdit(v)}>
                   <div className="flex items-center gap-2">
@@ -838,7 +878,9 @@ export default function Vehiculos() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button onClick={() => openEdit(v)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={14} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); confirmDelete(v.id); }} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
+                    {isAdmin && (
+                      <button onClick={(e) => { e.stopPropagation(); confirmDelete(v.id); }} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={14} /></button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -848,6 +890,27 @@ export default function Vehiculos() {
             )}
           </tbody>
         </table>
+        {visibleCount < filtered.length && (
+          <div className="flex items-center justify-center gap-3 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+            <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+              Mostrando {visibles.length} de {filtered.length}
+            </span>
+            <button
+              onClick={() => setVisibleCount(c => c + 40)}
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+              style={{ background: "hsl(var(--primary))" }}
+            >
+              Cargar más
+            </button>
+            <button
+              onClick={() => setVisibleCount(filtered.length)}
+              className="px-3 py-2 rounded-lg text-sm font-medium border hover:bg-muted"
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
+              Ver todos
+            </button>
+          </div>
+        )}
       </div>
 
       {showModal && (
@@ -870,7 +933,7 @@ export default function Vehiculos() {
                     <Edit2 size={13} /> Editar
                   </button>
                 )}
-                {editId && !isReadOnly && (
+                {editId && !isReadOnly && isAdmin && (
                   <button onClick={() => confirmDelete(editId)} className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium" style={{ color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
                     <Trash2 size={13} /> Eliminar
                   </button>
@@ -1176,22 +1239,23 @@ export default function Vehiculos() {
                     </div>
                   </div>
 
-                  {/* ── AI Background panel ─────────────────────────────── */}
+                  {/* ── AI Background panel (oculto por defecto) ──────────── */}
                   <div className="mb-4 rounded-xl border overflow-hidden" style={{ borderColor: "hsl(var(--primary)/0.25)" }}>
-                    {/* Header */}
-                    <div className="flex items-center gap-2 px-4 py-3" style={{ background: "hsl(var(--primary)/0.06)" }}>
+                    {/* Header — clickeable para mostrar/ocultar el editor */}
+                    <button
+                      type="button"
+                      onClick={() => setShowAIEditor(v => !v)}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-left"
+                      style={{ background: "hsl(var(--primary)/0.06)" }}
+                    >
                       <Sparkles size={15} style={{ color: "hsl(var(--primary))" }} />
                       <span className="text-sm font-bold" style={{ color: "hsl(var(--primary))" }}>Editor de Fondo con IA</span>
-                      <span className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={{
-                          background: hasAiConfig() ? "#dcfce7" : "hsl(var(--muted))",
-                          color: hasAiConfig() ? "#16a34a" : "hsl(var(--muted-foreground))"
-                        }}>
-                        {hasAiConfig() ? "✓ Gemini conectado" : "Configura API Key en Configuración"}
-                      </span>
-                    </div>
+                      <span className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>(opcional)</span>
+                      <ChevronDown size={15} className="ml-auto" style={{ color: "hsl(var(--primary))", transform: showAIEditor ? "rotate(180deg)" : "" }} />
+                    </button>
 
-                    {/* Body */}
+                    {/* Body — solo si esta expandido */}
+                    {showAIEditor && (
                     <div className="px-4 pb-4 pt-3">
                       <p className="text-xs mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>
                         Sube una foto, pasa el cursor sobre ella y haz clic en <strong>✨ IA</strong> para reemplazar el fondo automáticamente por un estudio profesional.
@@ -1221,6 +1285,7 @@ export default function Vehiculos() {
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
 
                   {/* ── Photo grid ──────────────────────────────────────── */}
@@ -1248,7 +1313,12 @@ export default function Vehiculos() {
                         onDragEnd={() => setDragSrcIdx(null)}
                       >
                         <div
-                          onClick={() => !isReadOnly && processingAI !== i && fotoRefs.current[i]?.click()}
+                          onClick={() => {
+                            if (processingAI === i) return;
+                            // Con foto: abrir visor grande. Vacio en edicion: subir.
+                            if (slot.preview) setLightboxIdx(i);
+                            else if (!isReadOnly) fotoRefs.current[i]?.click();
+                          }}
                           className="border-2 border-dashed rounded-xl aspect-square flex flex-col items-center justify-center transition-colors relative overflow-hidden"
                           style={{
                             borderColor: dragSrcIdx === i ? "hsl(var(--primary))" :
@@ -1306,6 +1376,14 @@ export default function Vehiculos() {
                               </button>
                             )}
                             {/* Download — SIEMPRE activo (es solo lectura) */}
+                            {/* Agrandar — ver la foto grande (exhibir en pantalla) */}
+                            <button
+                              onClick={e => { e.stopPropagation(); setLightboxIdx(i); }}
+                              className="p-1.5 rounded-lg shadow-lg"
+                              style={{ background: "rgba(0,0,0,0.7)" }}
+                              title="Ver grande">
+                              <Maximize2 size={11} className="text-white" />
+                            </button>
                             <button
                               onClick={e => { e.stopPropagation(); downloadFoto(slot.preview!, slot.label); }}
                               className="p-1.5 rounded-lg shadow-lg"
