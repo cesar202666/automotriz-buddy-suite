@@ -86,7 +86,7 @@ export default function Creditos() {
   });
 
   // Render por tramos: primeros 20 + "Cargar mas".
-  const PAGE = 20;
+  const PAGE = 15;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   useEffect(() => { setVisibleCount(PAGE); }, [filtro, search]);
   const visibles = filtered.slice(0, visibleCount);

@@ -238,7 +238,7 @@ export default function Vehiculos() {
 
   // Render por tramos para que la tabla aparezca rapido (no renderiza 1200 filas
   // de golpe). Muestra los primeros PAGE y suma con "Cargar mas".
-  const PAGE = 20;
+  const PAGE = 15;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   // Al cambiar filtro/busqueda, volver a mostrar solo el primer tramo.
   useEffect(() => { setVisibleCount(PAGE); }, [filtroEstado, search]);

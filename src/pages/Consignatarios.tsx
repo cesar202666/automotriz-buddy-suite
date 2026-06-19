@@ -526,7 +526,7 @@ export default function Consignatarios() {
   });
 
   // Render por tramos: primeros 20 (mas recientes) + "Cargar mas".
-  const PAGE = 20;
+  const PAGE = 15;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   useEffect(() => { setVisibleCount(PAGE); }, [filtro, search]);
   const visibles = filtered.slice(0, visibleCount);

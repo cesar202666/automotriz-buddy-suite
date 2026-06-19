@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Plus, Search, Check, X, Upload, FileText, Download, AlertTriangle, Lock, ChevronRight, ChevronLeft } from "lucide-react";
 import { useApp, Venta, TipoVenta, Cliente } from "@/context/AppContext";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -131,6 +131,12 @@ export default function Ventas() {
     const matchFiltro = filtro === "TODOS" || v.estado === filtro;
     return matchSearch && matchFiltro;
   });
+
+  // Render por tramos: primeras 15 (mas recientes) + "Cargar mas".
+  const PAGE = 15;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => { setVisibleCount(PAGE); }, [filtro, search]);
+  const visibles = filtered.slice(0, visibleCount);
 
   const pendientes = ventas.filter(v => v.estado === "PENDIENTE_VALIDACION").length;
 
@@ -335,7 +341,7 @@ export default function Ventas() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((v) => (
+            {visibles.map((v) => (
               <tr key={v.id} className={`border-b table-row-hover cursor-pointer ${rowBg(v)}`}
                 style={bd} onClick={() => openEdit(v)}>
                 <td className="px-3 py-2 capitalize">{v.tipoVenta?.replace(/_/g, " ").toLowerCase()}</td>
@@ -391,6 +397,13 @@ export default function Ventas() {
             )}
           </tbody>
         </table>
+        {visibleCount < filtered.length && (
+          <div className="flex items-center justify-center gap-3 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+            <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Mostrando {visibles.length} de {filtered.length}</span>
+            <button onClick={() => setVisibleCount(c => c + 30)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "hsl(var(--primary))" }}>Cargar más</button>
+            <button onClick={() => setVisibleCount(filtered.length)} className="px-3 py-2 rounded-lg text-sm font-medium border hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Ver todos</button>
+          </div>
+        )}
       </div>
 
       {/* Modal Wizard */}

@@ -125,7 +125,7 @@ export default function Clientes() {
 
   // Render por tramos: muestra los primeros 20 (los mas recientes) y suma con
   // "Cargar mas", para que la lista aparezca rapido aunque haya miles.
-  const PAGE = 20;
+  const PAGE = 15;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   useEffect(() => { setVisibleCount(PAGE); }, [search]);
   const visibles = filtered.slice(0, visibleCount);
