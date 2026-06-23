@@ -46,7 +46,7 @@ const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
   ejecutiva, fechaVenta: todayStr(), sucursal: "", clienteId: "", clienteNombre: "",
   informeTecnico: null, informeTecnicoName: null, patente: "", marca: "", modelo: "",
   anioVehiculo: "", colorVehiculo: "", kilometrajeVehiculo: 0,
-  precioRetoma: 0, precioPublicado: 0, precioVenta: 0, margenBruto: 0, nCredito: "", financiera: "", comisionCredito: 0,
+  precioRetoma: 0, precioPublicado: 0, precioVenta: 0, margenBruto: 0, nCredito: "", financiera: "", saldoPrecio: 0, comisionCredito: 0,
   gastosAdmin: 0, precioVtaFinal: 0, creditoFirmado: "NO", creditoFirmadoDoc: null, creditoFirmadoDocName: null,
   montoPieCaja: 0, prepago: "NO", prepagoDoc: null, prepagoDocName: null,
   documentacionVenta: null, documentacionVentaName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false,
@@ -618,17 +618,17 @@ export default function Ventas() {
                       <NumberInput value={form.precioVenta ?? 0} onChange={(n) => updatePrecio("precioVenta", n)} currency placeholder="Ej: 10.500.000" className={inp} style={bd} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Margen Bruto (auto)</label>
+                      <label className="block text-xs font-medium mb-1">Monto Transferencia de Dominio (auto 1.5%+$100k)</label>
+                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(calcComision(form.precioVenta || 0))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Precio Retoma</label>
+                      <NumberInput value={form.precioRetoma ?? 0} onChange={(n) => updatePrecio("precioRetoma", n)} currency placeholder="Ej: 8.000.000" className={inp} style={bd} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Margen Bruto (auto = Venta − Retoma)</label>
                       <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50 font-semibold" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--chart-2))" }}
                         value={fmt(form.margenBruto)} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Monto Pie Caja</label>
-                      <NumberInput value={form.montoPieCaja ?? 0} onChange={(n) => setForm(f => ({ ...f, montoPieCaja: n }))} currency placeholder="Ej: 1.500.000" className={inp} style={bd} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">N° Crédito</label>
-                      <input className={inp} style={bd} value={form.nCredito} onChange={e => setForm(f => ({ ...f, nCredito: e.target.value }))} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Financiera</label>
@@ -639,12 +639,24 @@ export default function Ventas() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
-                      <NumberInput value={form.gastosAdmin ?? 0} onChange={(n) => updatePrecio("gastosAdmin", n)} currency placeholder="Ej: 200.000" className={inp} style={bd} />
+                      <label className="block text-xs font-medium mb-1">N° Crédito</label>
+                      <input className={inp} style={bd} value={form.nCredito} onChange={e => setForm(f => ({ ...f, nCredito: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Saldo Precio (monto crédito que pide el cliente)</label>
+                      <NumberInput value={form.saldoPrecio ?? 0} onChange={(n) => setForm(f => ({ ...f, saldoPrecio: n }))} currency placeholder="Ej: 6.000.000" className={inp} style={bd} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$100k)</label>
                       <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(form.comisionCredito)} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Monto Pie Caja</label>
+                      <NumberInput value={form.montoPieCaja ?? 0} onChange={(n) => setForm(f => ({ ...f, montoPieCaja: n }))} currency placeholder="Ej: 1.500.000" className={inp} style={bd} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
+                      <NumberInput value={form.gastosAdmin ?? 0} onChange={(n) => updatePrecio("gastosAdmin", n)} currency placeholder="Ej: 200.000" className={inp} style={bd} />
                     </div>
                     <div className="col-span-2">
                       <label className="block text-xs font-medium mb-1">Precio Vta Final (auto)</label>

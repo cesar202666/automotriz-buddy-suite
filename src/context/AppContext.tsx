@@ -94,6 +94,7 @@ export interface Venta {
   margenBruto: number;
   nCredito: string;
   financiera: string;
+  saldoPrecio: number;
   comisionCredito: number;
   gastosAdmin: number;
   precioVtaFinal: number;
@@ -348,6 +349,7 @@ function ventaFromDb(row: any): Venta {
     margenBruto: Number(row.margen_bruto ?? 0),
     nCredito: String(row.n_credito ?? ""),
     financiera: String(row.financiera ?? ""),
+    saldoPrecio: Number(row.saldo_precio ?? 0),
     comisionCredito: Number(row.comision_credito ?? 0),
     gastosAdmin: Number(row.gastos_admin ?? 0),
     precioVtaFinal: Number(row.precio_vta_final ?? 0),
@@ -411,6 +413,7 @@ function ventaToDb(v: Omit<Venta, "id">) {
     margen_bruto: v.margenBruto,
     n_credito: v.nCredito,
     financiera: v.financiera,
+    saldo_precio: v.saldoPrecio,
     comision_credito: v.comisionCredito,
     gastos_admin: v.gastosAdmin,
     precio_vta_final: v.precioVtaFinal,
