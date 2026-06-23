@@ -96,6 +96,12 @@ export interface Venta {
   financiera: string;
   saldoPrecio: number;
   comisionCredito: number;
+  valorPiso: number;
+  vppModelo: string;
+  vppPatente: string;
+  montoEfectivo: number;
+  montoTransferenciaPago: number;
+  clientePagoTransferencia: number;
   gastosAdmin: number;
   precioVtaFinal: number;
   creditoFirmado: string;
@@ -351,6 +357,12 @@ function ventaFromDb(row: any): Venta {
     financiera: String(row.financiera ?? ""),
     saldoPrecio: Number(row.saldo_precio ?? 0),
     comisionCredito: Number(row.comision_credito ?? 0),
+    valorPiso: Number(row.valor_piso ?? 0),
+    vppModelo: String(row.vpp_modelo ?? ""),
+    vppPatente: String(row.vpp_patente ?? ""),
+    montoEfectivo: Number(row.monto_efectivo ?? 0),
+    montoTransferenciaPago: Number(row.monto_transferencia_pago ?? 0),
+    clientePagoTransferencia: Number(row.cliente_pago_transferencia ?? 0),
     gastosAdmin: Number(row.gastos_admin ?? 0),
     precioVtaFinal: Number(row.precio_vta_final ?? 0),
     creditoFirmado: String(row.credito_firmado ?? ""),
@@ -415,6 +427,12 @@ function ventaToDb(v: Omit<Venta, "id">) {
     financiera: v.financiera,
     saldo_precio: v.saldoPrecio,
     comision_credito: v.comisionCredito,
+    valor_piso: v.valorPiso,
+    vpp_modelo: v.vppModelo,
+    vpp_patente: v.vppPatente,
+    monto_efectivo: v.montoEfectivo,
+    monto_transferencia_pago: v.montoTransferenciaPago,
+    cliente_pago_transferencia: v.clientePagoTransferencia,
     gastos_admin: v.gastosAdmin,
     precio_vta_final: v.precioVtaFinal,
     credito_firmado: v.creditoFirmado,

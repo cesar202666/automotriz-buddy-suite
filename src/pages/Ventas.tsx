@@ -47,6 +47,7 @@ const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
   informeTecnico: null, informeTecnicoName: null, patente: "", marca: "", modelo: "",
   anioVehiculo: "", colorVehiculo: "", kilometrajeVehiculo: 0,
   precioRetoma: 0, precioPublicado: 0, precioVenta: 0, margenBruto: 0, nCredito: "", financiera: "", saldoPrecio: 0, comisionCredito: 0,
+  valorPiso: 0, vppModelo: "", vppPatente: "", montoEfectivo: 0, montoTransferenciaPago: 0, clientePagoTransferencia: 0,
   gastosAdmin: 0, precioVtaFinal: 0, creditoFirmado: "NO", creditoFirmadoDoc: null, creditoFirmadoDocName: null,
   montoPieCaja: 0, prepago: "NO", prepagoDoc: null, prepagoDocName: null,
   documentacionVenta: null, documentacionVentaName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false,
@@ -152,18 +153,19 @@ export default function Ventas() {
     const a = document.createElement("a"); a.href = dataUrl; a.download = name; a.click();
   };
 
-  const calcFields = (pVenta: number, pRetoma: number, gastosAdm: number) => {
-    const margen = pVenta - pRetoma;
+  // Margen = Valor Venta − Valor Piso (segun planilla). Comision Credito auto 1.5%+100K.
+  const calcFields = (pVenta: number, vPiso: number, gastosAdm: number) => {
+    const margen = pVenta - vPiso;
     const comision = calcComision(pVenta);
     const final = pVenta + comision - gastosAdm;
     return { margenBruto: margen, comisionCredito: comision, precioVtaFinal: final };
   };
 
-  const updatePrecio = (field: "precioVenta" | "precioRetoma" | "gastosAdmin", val: number) => {
+  const updatePrecio = (field: "precioVenta" | "valorPiso" | "gastosAdmin", val: number) => {
     const pVenta = field === "precioVenta" ? val : form.precioVenta;
-    const pRetoma = field === "precioRetoma" ? val : form.precioRetoma;
+    const vPiso = field === "valorPiso" ? val : (form.valorPiso ?? 0);
     const gastosAdm = field === "gastosAdmin" ? val : form.gastosAdmin;
-    const calc = calcFields(pVenta, pRetoma, gastosAdm);
+    const calc = calcFields(pVenta, vPiso, gastosAdm);
     setForm(f => ({ ...f, [field]: val, ...calc }));
   };
 
@@ -216,10 +218,13 @@ export default function Ventas() {
     setSelectedVehiculoId(id);
     const v = vehiculos.find(x => x.id === id);
     if (v) {
-      const calc = calcFields(v.precioVenta, v.precioCosto, form.gastosAdmin);
+      // Valor Piso = precio piso del vehiculo (para el margen). Margen = Venta − Piso.
+      const vPiso = v.precioPiso || v.precioCosto || 0;
+      const calc = calcFields(v.precioVenta, vPiso, form.gastosAdmin);
       setForm(f => ({
         ...f, patente: v.patente, marca: v.marca, modelo: v.modelo,
         precioRetoma: v.precioCosto, precioVenta: v.precioVenta, precioPublicado: v.precioVenta,
+        valorPiso: vPiso,
         sucursal: v.sucursal, anioVehiculo: v.anio, colorVehiculo: v.color,
         kilometrajeVehiculo: v.kilometraje, ...calc
       }));
@@ -612,24 +617,32 @@ export default function Ventas() {
               {wizardStep === "valores" && (
                 <div>
                   <div className="text-xs font-bold uppercase tracking-wide mb-4" style={{ color: "hsl(var(--muted-foreground))" }}>VALORES Y FINANCIAMIENTO COMERCIAL</div>
-                  <div className="grid grid-cols-2 gap-3">
+
+                  {/* ── Vehículo y precios ── */}
+                  <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "hsl(var(--primary))" }}>Vehículo y precios</div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs font-medium mb-1">Precio Venta *</label>
-                      <NumberInput value={form.precioVenta ?? 0} onChange={(n) => updatePrecio("precioVenta", n)} currency placeholder="Ej: 10.500.000" className={inp} style={bd} />
+                      <label className="block text-xs font-medium mb-1">Valor Piso</label>
+                      <NumberInput value={form.valorPiso ?? 0} onChange={(n) => updatePrecio("valorPiso", n)} currency placeholder="Ej: 13.000.000" className={inp} style={bd} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Monto Transferencia de Dominio (auto 1.5%+$100k)</label>
-                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(calcComision(form.precioVenta || 0))} />
+                      <label className="block text-xs font-medium mb-1">Valor Venta *</label>
+                      <NumberInput value={form.precioVenta ?? 0} onChange={(n) => updatePrecio("precioVenta", n)} currency placeholder="Ej: 14.320.000" className={inp} style={bd} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Precio Retoma</label>
-                      <NumberInput value={form.precioRetoma ?? 0} onChange={(n) => updatePrecio("precioRetoma", n)} currency placeholder="Ej: 8.000.000" className={inp} style={bd} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Margen Bruto (auto = Venta − Retoma)</label>
+                      <label className="block text-xs font-medium mb-1">Margen (auto = Venta − Piso)</label>
                       <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50 font-semibold" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--chart-2))" }}
                         value={fmt(form.margenBruto)} />
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Gastos Asociados</label>
+                      <NumberInput value={form.gastosAdmin ?? 0} onChange={(n) => updatePrecio("gastosAdmin", n)} currency placeholder="Ej: 109.801" className={inp} style={bd} />
+                    </div>
+                  </div>
+
+                  {/* ── Crédito ── */}
+                  <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "hsl(var(--primary))" }}>Crédito</div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div>
                       <label className="block text-xs font-medium mb-1">Financiera</label>
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={bd}
@@ -643,20 +656,54 @@ export default function Ventas() {
                       <input className={inp} style={bd} value={form.nCredito} onChange={e => setForm(f => ({ ...f, nCredito: e.target.value }))} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Saldo Precio (monto crédito que pide el cliente)</label>
-                      <NumberInput value={form.saldoPrecio ?? 0} onChange={(n) => setForm(f => ({ ...f, saldoPrecio: n }))} currency placeholder="Ej: 6.000.000" className={inp} style={bd} />
+                      <label className="block text-xs font-medium mb-1">Monto Crédito (lo que pide el cliente)</label>
+                      <NumberInput value={form.saldoPrecio ?? 0} onChange={(n) => setForm(f => ({ ...f, saldoPrecio: n }))} currency placeholder="Ej: 8.590.000" className={inp} style={bd} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$100k)</label>
                       <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(form.comisionCredito)} />
                     </div>
+                  </div>
+
+                  {/* ── Vehículo Parte de Pago (VPP) ── */}
+                  <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "hsl(var(--primary))" }}>Vehículo Parte de Pago (VPP)</div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Modelo VPP</label>
+                      <input className={inp} style={bd} value={form.vppModelo || ""} onChange={e => setForm(f => ({ ...f, vppModelo: e.target.value }))} placeholder="Modelo del auto en parte de pago" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Patente VPP</label>
+                      <input className={inp} style={bd} value={form.vppPatente || ""} onChange={e => setForm(f => ({ ...f, vppPatente: e.target.value }))} placeholder="Patente" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Valor VPP (retoma)</label>
+                      <NumberInput value={form.precioRetoma ?? 0} onChange={(n) => setForm(f => ({ ...f, precioRetoma: n }))} currency placeholder="Ej: 5.000.000" className={inp} style={bd} />
+                    </div>
+                  </div>
+
+                  {/* ── Pagos ── */}
+                  <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "hsl(var(--primary))" }}>Pagos</div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Efectivo</label>
+                      <NumberInput value={form.montoEfectivo ?? 0} onChange={(n) => setForm(f => ({ ...f, montoEfectivo: n }))} currency placeholder="Ej: 250.000" className={inp} style={bd} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Transferencia</label>
+                      <NumberInput value={form.montoTransferenciaPago ?? 0} onChange={(n) => setForm(f => ({ ...f, montoTransferenciaPago: n }))} currency placeholder="Ej: 5.480.000" className={inp} style={bd} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Monto Transferencia de Dominio (auto 1.5%+$100k)</label>
+                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(calcComision(form.precioVenta || 0))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Cliente Pagó Transferencia</label>
+                      <NumberInput value={form.clientePagoTransferencia ?? 0} onChange={(n) => setForm(f => ({ ...f, clientePagoTransferencia: n }))} currency placeholder="Ej: 294.800" className={inp} style={bd} />
+                    </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Monto Pie Caja</label>
                       <NumberInput value={form.montoPieCaja ?? 0} onChange={(n) => setForm(f => ({ ...f, montoPieCaja: n }))} currency placeholder="Ej: 1.500.000" className={inp} style={bd} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Gastos Administrativos</label>
-                      <NumberInput value={form.gastosAdmin ?? 0} onChange={(n) => updatePrecio("gastosAdmin", n)} currency placeholder="Ej: 200.000" className={inp} style={bd} />
                     </div>
                     <div className="col-span-2">
                       <label className="block text-xs font-medium mb-1">Precio Vta Final (auto)</label>
