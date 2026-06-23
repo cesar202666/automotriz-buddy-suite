@@ -9,11 +9,11 @@ const fmt = (n: number) => n ? "$" + n.toLocaleString("es-CL") : "—";
 const TIPO_VENTA_OPTIONS: { value: TipoVenta; label: string }[] = [
   { value: "CREDITO", label: "Crédito" },
   { value: "CREDITO_PIE", label: "Crédito + Pie" },
-  { value: "CREDITO_APP", label: "Crédito más APP" },
-  { value: "CREDITO_PIE_APP", label: "Crédito + Pie + APP" },
-  { value: "APP_PIE", label: "APP + Pie" },
+  { value: "CREDITO_APP", label: "Crédito + VPP" },
+  { value: "CREDITO_PIE_APP", label: "Crédito + Pie + VPP" },
+  { value: "APP_PIE", label: "VPP + Pie" },
   { value: "EFECTIVO", label: "Efectivo" },
-  { value: "APP", label: "APP" },
+  { value: "APP", label: "VPP (Vehículo Parte de Pago)" },
 ];
 
 const calcComision = (precioVenta: number) => Math.round(precioVenta * 0.015) + 100000;
@@ -344,7 +344,7 @@ export default function Ventas() {
             {visibles.map((v) => (
               <tr key={v.id} className={`border-b table-row-hover cursor-pointer ${rowBg(v)}`}
                 style={bd} onClick={() => openEdit(v)}>
-                <td className="px-3 py-2 capitalize">{v.tipoVenta?.replace(/_/g, " ").toLowerCase()}</td>
+                <td className="px-3 py-2">{TIPO_VENTA_OPTIONS.find(t => t.value === v.tipoVenta)?.label ?? v.tipoVenta}</td>
                 <td className="px-3 py-2">
                   {v.prepago === "SI" ? (
                     v.prepagoDoc ? <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Sí ✓</span>
