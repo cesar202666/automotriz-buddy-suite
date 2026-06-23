@@ -102,7 +102,7 @@ const WIZARD_STEPS = [
 type WizardStep = typeof WIZARD_STEPS[number]["key"];
 
 export default function Ventas() {
-  const { ventas, addVenta, updateVenta, clientes, vehiculos, addCuentaCobrar, usuarioActual } = useApp();
+  const { ventas, addVenta, updateVenta, getVentaDocs, clientes, vehiculos, addCuentaCobrar, usuarioActual } = useApp();
   const [savingVenta, setSavingVenta] = useState(false);
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
@@ -189,6 +189,8 @@ export default function Ventas() {
 
   const openEdit = (v: Venta) => {
     setForm({ ...v });
+    // Los documentos (base64) NO viajan con la lista por peso. Mostramos el
+    // nombre de inmediato y cargamos el contenido bajo demanda (getVentaDocs).
     setInfTecDoc({ dataUrl: v.informeTecnico, name: v.informeTecnicoName });
     setPrepagoDoc({ dataUrl: v.prepagoDoc, name: v.prepagoDocName });
     setCreditoFirmDoc({ dataUrl: v.creditoFirmadoDoc, name: v.creditoFirmadoDocName });
@@ -199,6 +201,20 @@ export default function Ventas() {
     setWizardStep("identificacion");
     setShowCreateCliente(false);
     setShowModal(true);
+    // Traer los documentos adjuntos completos en segundo plano.
+    getVentaDocs(v.id).then(docs => {
+      if (docs.informeTecnico) setInfTecDoc(d => ({ ...d, dataUrl: docs.informeTecnico! }));
+      if (docs.prepagoDoc) setPrepagoDoc(d => ({ ...d, dataUrl: docs.prepagoDoc! }));
+      if (docs.creditoFirmadoDoc) setCreditoFirmDoc(d => ({ ...d, dataUrl: docs.creditoFirmadoDoc! }));
+      if (docs.documentacionVenta) setDocVentaDoc(d => ({ ...d, dataUrl: docs.documentacionVenta! }));
+      setForm(f => ({
+        ...f,
+        informeTecnico: docs.informeTecnico ?? f.informeTecnico,
+        prepagoDoc: docs.prepagoDoc ?? f.prepagoDoc,
+        creditoFirmadoDoc: docs.creditoFirmadoDoc ?? f.creditoFirmadoDoc,
+        documentacionVenta: docs.documentacionVenta ?? f.documentacionVenta,
+      }));
+    });
   };
 
   const selectCliente = (clienteId: string) => {
@@ -361,7 +377,7 @@ export default function Ventas() {
                 <td className="px-3 py-2">{v.sucursal}</td>
                 <td className="px-3 py-2" style={{ color: "hsl(var(--primary))" }}>{v.clienteNombre || "—"}</td>
                 <td className="px-3 py-2">
-                  {v.informeTecnico ? <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">✓ Ok</span>
+                  {(v.informeTecnico || v.informeTecnicoName) ? <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">✓ Ok</span>
                     : <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Pendiente</span>}
                 </td>
                 <td className="px-3 py-2 font-semibold">{v.patente}</td>

@@ -332,6 +332,14 @@ function clienteToDb(c: Omit<Cliente, "id">) {
   };
 }
 
+/** Documentos pesados (base64) que se cargan bajo demanda, no con la lista. */
+export type VentaDocs = {
+  informeTecnico?: string | null;
+  creditoFirmadoDoc?: string | null;
+  prepagoDoc?: string | null;
+  documentacionVenta?: string | null;
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ventaFromDb(row: any): Venta {
   return {
@@ -585,6 +593,8 @@ interface AppState {
   addVenta: (v: Omit<Venta, "id">) => Promise<Venta | null>;
   updateVenta: (v: Venta) => Promise<boolean>;
   deleteVenta: (id: string) => Promise<boolean>;
+  /** Documentos adjuntos de una venta (la lista viaja sin ellos por peso). */
+  getVentaDocs: (id: string) => Promise<VentaDocs>;
   cuentasPagar: CuentaPagar[];
   setCuentasPagar: (c: CuentaPagar[]) => void;
   addCuentaPagar: (c: Omit<CuentaPagar, "id">) => Promise<CuentaPagar | null>;
@@ -754,12 +764,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Load ventas from DB on mount ───────────────────────────────────────────
+  // ⚠️ SIN las columnas de documentos en base64 (informe_tecnico,
+  // credito_firmado_doc, prepago_doc, documentacion_venta): con cientos de
+  // ventas esos adjuntos hacian que la lista pesara ~9.6 MB y la consulta
+  // fallaba/tardaba, dejando la pagina vacia ("No hay ventas registradas").
+  // Los documentos se cargan al abrir cada venta (getVentaDocs). Si se agrega
+  // se mantienen los *_name (livianos) para mostrar el estado del adjunto.
+  const VENTA_LIST_COLS =
+    "id, ejecutiva, fecha_venta, sucursal, cliente_id, cliente_nombre, informe_tecnico_name, patente, marca, modelo, anio_vehiculo, color_vehiculo, kilometraje_vehiculo, precio_retoma, precio_publicado, precio_venta, margen_bruto, n_credito, financiera, saldo_precio, comision_credito, valor_piso, vpp_modelo, vpp_patente, monto_efectivo, monto_transferencia_pago, cliente_pago_transferencia, gastos_admin, precio_vta_final, credito_firmado, credito_firmado_doc_name, monto_pie_caja, prepago, prepago_doc_name, documentacion_venta_name, tipo_venta, estado, verificacion";
+
   useEffect(() => {
     const loadVentas = async () => {
       const data = await fetchAllRows((from, to) =>
         supabase
           .from("ventas")
-          .select("*")
+          .select(VENTA_LIST_COLS)
           .order("fecha_venta", { ascending: false })
           .range(from, to),
       );
@@ -767,7 +786,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setVentas(data.map(ventaFromDb));
     };
     loadVentas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Trae los documentos adjuntos de una venta (no viajan con la lista por peso). */
+  const getVentaDocs = async (id: string): Promise<VentaDocs> => {
+    const { data, error } = await supabase
+      .from("ventas")
+      .select("informe_tecnico, credito_firmado_doc, prepago_doc, documentacion_venta")
+      .eq("id", id)
+      .single();
+    if (error || !data) return {};
+    return {
+      informeTecnico: data.informe_tecnico ?? null,
+      creditoFirmadoDoc: data.credito_firmado_doc ?? null,
+      prepagoDoc: data.prepago_doc ?? null,
+      documentacionVenta: data.documentacion_venta ?? null,
+    };
+  };
 
   // ── Load cuentas y adquisiciones from DB on mount ──────────────────────────
   useEffect(() => {
@@ -977,7 +1013,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       vehiculosLoading,
       consignatarios, setConsignatarios,
       ventas, setVentas,
-      addVenta, updateVenta, deleteVenta,
+      addVenta, updateVenta, deleteVenta, getVentaDocs,
       cuentasPagar, setCuentasPagar,
       addCuentaPagar, updateCuentaPagar, deleteCuentaPagar,
       cuentasCobrar, setCuentasCobrar,
