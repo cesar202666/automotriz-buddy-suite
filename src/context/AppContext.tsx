@@ -59,6 +59,8 @@ export interface Vehiculo {
   documentos: VehiculoDoc[];
   /** True si el usuario lo publico en Yapo (aparece en el feed XML). */
   publicadoYapo?: boolean;
+  /** True si el usuario lo publico en la pagina web (Auto Path). */
+  publicadoWeb?: boolean;
   /** ISO timestamp de creacion (para badge "Nueva unidad" en lista). */
   createdAt?: string;
   /** ISO timestamp de ultima modificacion. */
@@ -279,6 +281,7 @@ function toDb(v: Vehiculo) {
     fotos: v.fotos,
     documentos: v.documentos ?? [],
     publicado_yapo: v.publicadoYapo ?? false,
+    publicado_web: v.publicadoWeb ?? false,
     updated_at: new Date().toISOString(),
   };
 }
@@ -333,6 +336,7 @@ function fromDb(row: Record<string, unknown>): Vehiculo {
     fotos: (row.fotos as string[]) ?? [],
     documentos: (row.documentos as VehiculoDoc[]) ?? [],
     publicadoYapo: Boolean(row.publicado_yapo ?? false),
+    publicadoWeb: Boolean(row.publicado_web ?? false),
     createdAt: row.created_at ? String(row.created_at) : undefined,
     updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   };
@@ -828,7 +832,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // lista pesara ~14 MB y en conexiones lentas la consulta fallaba y la pagina
   // quedaba vacia. Las fotos se cargan al abrir cada vehiculo (getVehiculoFotos).
   const VEHICULO_LIST_COLS =
-    "id, folio, patente, tipo, marca, modelo, anio, estado, precio_venta, precio_piso, precio_costo, sucursal, usuario_asignado, combustible, n_motor, vin, color, kilometraje, ubicacion, comentarios, transmision, traccion, aire_acondicionado, equipamiento_extra, documentos, publicado_yapo, created_at, updated_at";
+    "id, folio, patente, tipo, marca, modelo, anio, estado, precio_venta, precio_piso, precio_costo, sucursal, usuario_asignado, combustible, n_motor, vin, color, kilometraje, ubicacion, comentarios, transmision, traccion, aire_acondicionado, equipamiento_extra, documentos, publicado_yapo, publicado_web, created_at, updated_at";
 
   useEffect(() => {
     const loadVehiculos = async () => {

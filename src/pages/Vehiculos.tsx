@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff, Maximize2, ChevronLeft, ChevronRight, FileText, Paperclip } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff, Maximize2, ChevronLeft, ChevronRight, FileText, Paperclip, Globe } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo, VehiculoDoc } from "@/context/AppContext";
 import * as XLSX from "xlsx";
@@ -52,7 +52,7 @@ const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: 
   combustible: "Bencina", nMotor: "", vin: "", color: "", kilometraje: 0,
   ubicacion: DEFAULT_UBICACION,
   comentarios: "", transmision: "", traccion: "", aireAcondicionado: false,
-  equipamientoExtra: [], fotos: [], documentos: [],
+  equipamientoExtra: [], fotos: [], documentos: [], publicadoWeb: false,
   procedencia: "Propio", consignatarioId: "",
 });
 
@@ -228,7 +228,7 @@ export default function Vehiculos() {
         ubicacion: "", comentarios: "",
         transmision: String(r["Transmision"] || ""),
         traccion: String(r["Traccion"] || ""),
-        aireAcondicionado: false, equipamientoExtra: [], fotos: [], documentos: [],
+        aireAcondicionado: false, equipamientoExtra: [], fotos: [], documentos: [], publicadoWeb: false,
       }));
       for (const v of nuevos) await addVehiculo(v);
     };
@@ -1071,6 +1071,28 @@ export default function Vehiculos() {
               <fieldset disabled={isReadOnly} className="contents">
               {tab === "general" && (
                 <div>
+                  {/* Publicar en la web (Auto Path) — botón independiente del estado */}
+                  <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border p-3"
+                    style={{ borderColor: form.publicadoWeb ? "rgb(34 197 94)" : "hsl(var(--border))", background: form.publicadoWeb ? "rgb(34 197 94 / 0.07)" : "transparent" }}>
+                    <div className="flex items-center gap-2.5">
+                      <Globe size={20} style={{ color: form.publicadoWeb ? "rgb(22 163 74)" : "hsl(var(--muted-foreground))" }} />
+                      <div>
+                        <div className="text-sm font-semibold">Publicar en la página web</div>
+                        <div className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                          {form.publicadoWeb ? "Visible en la web pública de Egaña" : "No aparece en la web pública"}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, publicadoWeb: !form.publicadoWeb })}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
+                      style={{ background: form.publicadoWeb ? "rgb(34 197 94)" : "hsl(var(--primary))" }}
+                    >
+                      {form.publicadoWeb ? <><CheckSquare size={15} /> Publicado</> : <><Globe size={15} /> Publicar</>}
+                    </button>
+                  </div>
+
                   <div className="section-divider mb-4">DATOS PRINCIPALES</div>
                   <div className="grid grid-cols-4 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Patente/STK *</label>
