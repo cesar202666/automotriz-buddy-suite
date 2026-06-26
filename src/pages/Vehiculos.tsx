@@ -1614,19 +1614,17 @@ export default function Vehiculos() {
                           )}
                         </div>
 
-                        {/* Hover action buttons — esquina superior derecha */}
+                        {/* Botones de acción — SIEMPRE visibles (también en celular) */}
                         {slot.preview && processingAI !== i && (
-                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 transition-opacity z-10">
-                            {/* IA — solo en modo edicion */}
-                            {!isReadOnly && (
-                              <button
-                                onClick={e => { e.stopPropagation(); applyAIBackground(i); }}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
-                                style={{ background: "hsl(var(--primary))" }}
-                                title="Aplicar IA — cambiar fondo">
-                                <Sparkles size={11} /> IA
-                              </button>
-                            )}
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-95 transition-opacity z-10">
+                            {/* IA — transformar fondo. En solo lectura entra a edición. */}
+                            <button
+                              onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); applyAIBackground(i); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
+                              style={{ background: "hsl(var(--primary))" }}
+                              title="Transformar fondo con IA (estudio blanco)">
+                              <Sparkles size={11} /> IA
+                            </button>
                             {/* Download — SIEMPRE activo (es solo lectura) */}
                             {/* Agrandar — ver la foto grande (exhibir en pantalla) */}
                             <button
