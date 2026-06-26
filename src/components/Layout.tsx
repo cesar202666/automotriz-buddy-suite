@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Car, UserCheck, CreditCard,
   ShoppingCart, Settings2, TrendingUp, Wrench, MessageSquare, Lock, LogOut, BarChart3,
-  Eye, EyeOff, Globe2,
+  Eye, EyeOff, Globe2, Menu, X,
 } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import { useApp, type Usuario } from "@/context/AppContext";
@@ -151,6 +151,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { usuarioActual, setUsuarioActual, usuarios, setUsuarios } = useApp();
   const [newLeadsCount, setNewLeadsCount] = useState(0);
+  // En móvil el menú lateral está oculto y se abre como cajón con el botón ☰.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Cerrar el cajón al cambiar de página.
+  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
   // ── Poll for new unassigned/new leads as notification badge ────────────────
   useEffect(() => {
@@ -259,60 +264,92 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return true;
   });
 
-  return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-44 flex-shrink-0 flex flex-col" style={{ background: "hsl(var(--sidebar-background))" }}>
-        {/* Logo */}
-        <div className="px-3 py-4 border-b" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
-          <div className="flex items-center gap-2">
-            <img src={logoEa} alt="Egaña Automotriz" className="w-9 h-9 rounded-md object-cover" />
-            <div>
-              <div className="text-sm font-bold leading-tight text-white">Egaña</div>
-              <div className="text-xs leading-tight" style={{ color: "hsl(var(--sidebar-foreground))" }}>Automotriz</div>
-            </div>
+  // Contenido del menú lateral (se reutiliza en desktop fijo y en cajón móvil).
+  const sidebarInner = (
+    <>
+      {/* Logo + cerrar (móvil) */}
+      <div className="px-3 py-4 border-b" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
+        <div className="flex items-center gap-2">
+          <img src={logoEa} alt="Egaña Automotriz" className="w-9 h-9 rounded-md object-cover" />
+          <div className="flex-1">
+            <div className="text-sm font-bold leading-tight text-white">Egaña</div>
+            <div className="text-xs leading-tight" style={{ color: "hsl(var(--sidebar-foreground))" }}>Automotriz</div>
           </div>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-0.5">
-          {visibleNavItems.map((item) => {
-            const Icon = item.icon;
-            const active = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
-            const isCRM = item.path === "/conversaciones";
-            return (
-              <Link key={item.path} to={item.path} className={`sidebar-link${active ? " active" : ""}`}>
-                <Icon size={15} />
-                <span className="flex-1">{item.label}</span>
-                {isCRM && newLeadsCount > 0 && (
-                  <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full text-white text-xs flex items-center justify-center font-bold px-1"
-                    style={{ background: "#ef4444", fontSize: 10 }}>
-                    {newLeadsCount > 9 ? "9+" : newLeadsCount}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Footer - user info + logout */}
-        <div className="px-3 py-3 border-t" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
-          <div className="text-xs font-semibold text-white truncate">{usuarioActual.nombre} {usuarioActual.apellido}</div>
-          <div className="text-xs mb-2" style={{ color: "hsl(var(--sidebar-foreground))" }}>
-            {rolUsuario === "master" ? "Admin Master" : rolUsuario === "administracion" ? "Administración" : "Vendedor"}
-          </div>
-          <button
-            onClick={() => setUsuarioActual(null)}
-            className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded w-full hover:bg-white/10 transition-colors"
-            style={{ color: "hsl(var(--sidebar-foreground))" }}>
-            <LogOut size={12} /> Cerrar sesión
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 rounded hover:bg-white/10 text-white" aria-label="Cerrar menú">
+            <X size={18} />
           </button>
         </div>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-0.5">
+        {visibleNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
+          const isCRM = item.path === "/conversaciones";
+          return (
+            <Link key={item.path} to={item.path} onClick={() => setSidebarOpen(false)} className={`sidebar-link${active ? " active" : ""}`}>
+              <Icon size={15} />
+              <span className="flex-1">{item.label}</span>
+              {isCRM && newLeadsCount > 0 && (
+                <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full text-white text-xs flex items-center justify-center font-bold px-1"
+                  style={{ background: "#ef4444", fontSize: 10 }}>
+                  {newLeadsCount > 9 ? "9+" : newLeadsCount}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Footer - user info + logout */}
+      <div className="px-3 py-3 border-t" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
+        <div className="text-xs font-semibold text-white truncate">{usuarioActual.nombre} {usuarioActual.apellido}</div>
+        <div className="text-xs mb-2" style={{ color: "hsl(var(--sidebar-foreground))" }}>
+          {rolUsuario === "master" ? "Admin Master" : rolUsuario === "administracion" ? "Administración" : "Vendedor"}
+        </div>
+        <button
+          onClick={() => setUsuarioActual(null)}
+          className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded w-full hover:bg-white/10 transition-colors"
+          style={{ color: "hsl(var(--sidebar-foreground))" }}>
+          <LogOut size={12} /> Cerrar sesión
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      {/* Barra superior solo en móvil: botón ☰ para abrir el menú */}
+      <header
+        className="md:hidden fixed top-0 left-0 right-0 z-30 flex items-center gap-3 px-4 h-14 border-b"
+        style={{ background: "hsl(var(--sidebar-background))", borderColor: "hsl(var(--sidebar-border))" }}
+      >
+        <button onClick={() => setSidebarOpen(true)} className="p-1.5 rounded hover:bg-white/10 text-white" aria-label="Abrir menú">
+          <Menu size={22} />
+        </button>
+        <img src={logoEa} alt="Egaña" className="w-8 h-8 rounded-md object-cover" />
+        <span className="text-sm font-bold text-white">Egaña Automotriz</span>
+      </header>
+
+      {/* Sidebar fijo en desktop */}
+      <aside className="hidden md:flex w-44 flex-shrink-0 flex-col" style={{ background: "hsl(var(--sidebar-background))" }}>
+        {sidebarInner}
       </aside>
 
-      {/* Main content */}
+      {/* Cajón móvil: se monta solo cuando está abierto (sin transform → sin glitches) */}
+      {sidebarOpen && (
+        <>
+          <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />
+          <aside className="md:hidden fixed inset-y-0 left-0 w-60 flex flex-col z-50 animate-fade-in" style={{ background: "hsl(var(--sidebar-background))" }}>
+            {sidebarInner}
+          </aside>
+        </>
+      )}
+
+      {/* Main content — pantalla completa en móvil, con espacio para la barra superior */}
       <main className="flex-1 overflow-y-auto bg-background">
-        <div className="p-6 animate-fade-in">
+        <div className="p-4 pt-[4.5rem] md:p-6 md:pt-6 animate-fade-in">
           {children}
         </div>
       </main>
