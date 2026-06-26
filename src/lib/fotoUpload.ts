@@ -67,3 +67,36 @@ export async function subirFotosAStorage(
   }
   return { fotos: out, errores };
 }
+
+/**
+ * Sube un archivo arbitrario (documento del auto: PDF, imagen, etc) a Storage
+ * bajo la carpeta docs/<patente>/ y devuelve su URL publica. Las imagenes se
+ * comprimen; el resto (PDF, etc) se sube tal cual conservando su tipo.
+ */
+export async function subirDocAStorage(
+  file: File,
+  patente: string,
+): Promise<string> {
+  const safeId = (patente || "veh").replace(/[^a-zA-Z0-9_-]/g, "") || "veh";
+  const baseName = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_") || "doc";
+  const esImagen = file.type.startsWith("image/");
+  let blob: Blob = file;
+  let ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+  if (esImagen) {
+    const dataUrl = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = () => rej(new Error("no se pudo leer la imagen"));
+      r.readAsDataURL(file);
+    });
+    blob = await comprimir(dataUrl);
+    ext = "jpg";
+  }
+  const path = `docs/${safeId}/${Date.now()}_${baseName}.${ext}`;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, blob, { contentType: blob.type || file.type || "application/octet-stream", upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  return data?.publicUrl || "";
+}

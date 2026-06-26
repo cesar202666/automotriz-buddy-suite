@@ -21,6 +21,14 @@ export interface Cliente {
   creadoPor: string | null;
 }
 
+/** Adjunto de un vehiculo (foto o documento). url apunta a Storage. */
+export interface VehiculoDoc {
+  name: string;
+  url: string;
+  /** "imagen" para fotos visualizables; "documento" para PDF/otros. */
+  tipo: "imagen" | "documento";
+}
+
 export interface Vehiculo {
   id: string;
   folio: string;
@@ -47,6 +55,8 @@ export interface Vehiculo {
   aireAcondicionado: boolean;
   equipamientoExtra: string[];
   fotos: string[];
+  /** Documentos/fotos adjuntos del auto (padron, permiso, etc). URLs de Storage. */
+  documentos: VehiculoDoc[];
   /** True si el usuario lo publico en Yapo (aparece en el feed XML). */
   publicadoYapo?: boolean;
   /** ISO timestamp de creacion (para badge "Nueva unidad" en lista). */
@@ -225,6 +235,7 @@ function toDb(v: Vehiculo) {
     aire_acondicionado: v.aireAcondicionado,
     equipamiento_extra: v.equipamientoExtra,
     fotos: v.fotos,
+    documentos: v.documentos ?? [],
     publicado_yapo: v.publicadoYapo ?? false,
     updated_at: new Date().toISOString(),
   };
@@ -278,6 +289,7 @@ function fromDb(row: Record<string, unknown>): Vehiculo {
     aireAcondicionado: Boolean(row.aire_acondicionado ?? false),
     equipamientoExtra: (row.equipamiento_extra as string[]) ?? [],
     fotos: (row.fotos as string[]) ?? [],
+    documentos: (row.documentos as VehiculoDoc[]) ?? [],
     publicadoYapo: Boolean(row.publicado_yapo ?? false),
     createdAt: row.created_at ? String(row.created_at) : undefined,
     updatedAt: row.updated_at ? String(row.updated_at) : undefined,
@@ -684,7 +696,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // lista pesara ~14 MB y en conexiones lentas la consulta fallaba y la pagina
   // quedaba vacia. Las fotos se cargan al abrir cada vehiculo (getVehiculoFotos).
   const VEHICULO_LIST_COLS =
-    "id, folio, patente, tipo, marca, modelo, anio, estado, precio_venta, precio_piso, precio_costo, sucursal, usuario_asignado, combustible, n_motor, vin, color, kilometraje, ubicacion, comentarios, transmision, traccion, aire_acondicionado, equipamiento_extra, publicado_yapo, created_at, updated_at";
+    "id, folio, patente, tipo, marca, modelo, anio, estado, precio_venta, precio_piso, precio_costo, sucursal, usuario_asignado, combustible, n_motor, vin, color, kilometraje, ubicacion, comentarios, transmision, traccion, aire_acondicionado, equipamiento_extra, documentos, publicado_yapo, created_at, updated_at";
 
   useEffect(() => {
     const loadVehiculos = async () => {

@@ -1,12 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff, Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff, Maximize2, ChevronLeft, ChevronRight, FileText, Paperclip } from "lucide-react";
 import JSZip from "jszip";
-import { useApp, Vehiculo } from "@/context/AppContext";
+import { useApp, Vehiculo, VehiculoDoc } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
-import { subirFotosAStorage } from "@/lib/fotoUpload";
+import { subirFotosAStorage, subirDocAStorage } from "@/lib/fotoUpload";
 
 type VehiculoEstado = "DISPONIBLE" | "VENDIDO" | "RESERVADO" | "RETIRADO";
 
@@ -53,7 +53,7 @@ const emptyVehiculo = (usuarioAsignado = ""): Partial<Vehiculo & { procedencia: 
   combustible: "Bencina", nMotor: "", vin: "", color: "", kilometraje: 0,
   ubicacion: DEFAULT_UBICACION,
   comentarios: "", transmision: "", traccion: "", aireAcondicionado: false,
-  equipamientoExtra: [], fotos: [],
+  equipamientoExtra: [], fotos: [], documentos: [],
   procedencia: "Propio", consignatarioId: "",
 });
 
@@ -148,6 +148,10 @@ export default function Vehiculos() {
   const [form, setForm] = useState<Partial<Vehiculo & { procedencia: string; consignatarioId: string }>>(emptyVehiculo(usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : ""));
   const [fotoSlots, setFotoSlots] = useState<FotoSlot[]>(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
   const [nuevoEquipamiento, setNuevoEquipamiento] = useState("");
+  // Documentos del auto pendientes de subir (se suben a Storage al guardar).
+  const [docsPendientes, setDocsPendientes] = useState<{ name: string; file: File; tipo: "imagen" | "documento" }[]>([]);
+  const [subiendoDocs, setSubiendoDocs] = useState(false);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
   const multiUploadRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
@@ -222,7 +226,7 @@ export default function Vehiculos() {
         ubicacion: "", comentarios: "",
         transmision: String(r["Transmision"] || ""),
         traccion: String(r["Traccion"] || ""),
-        aireAcondicionado: false, equipamientoExtra: [], fotos: [],
+        aireAcondicionado: false, equipamientoExtra: [], fotos: [], documentos: [],
       }));
       for (const v of nuevos) await addVehiculo(v);
     };
@@ -248,14 +252,16 @@ export default function Vehiculos() {
     const ua = usuarioActual ? `${usuarioActual.nombre} ${usuarioActual.apellido}`.trim() : "";
     setForm(emptyVehiculo(ua));
     setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
+    setDocsPendientes([]);
     setEditId(null); setTab("general"); setShowModal(true);
     setIsReadOnly(false); // crear siempre editable
     setShowPisoModal(true); // al crear, el campo se escribe directo
   };
 
   const openEdit = async (v: Vehiculo) => {
-    setForm({ ...v });
+    setForm({ ...v, documentos: v.documentos ?? [] });
     setFotoSlots(FOTO_SLOTS.map(label => ({ label, file: null, preview: null })));
+    setDocsPendientes([]);
     setEditId(v.id); setTab("general"); setShowModal(true);
     setIsReadOnly(true); // editar arranca en modo lectura
     setShowPisoModal(false); // precio piso oculto por defecto
@@ -280,14 +286,36 @@ export default function Vehiculos() {
       if (tieneBase64) setSubiendoFotos(true);
       const { fotos, errores } = await subirFotosAStorage(slotsFotos, form.patente || "");
       setSubiendoFotos(false);
+
+      // Subir documentos pendientes a Storage y juntarlos con los ya guardados.
+      let documentos: VehiculoDoc[] = [...(form.documentos || [])];
+      const erroresDocs: string[] = [];
+      if (docsPendientes.length > 0) {
+        setSubiendoDocs(true);
+        for (const d of docsPendientes) {
+          try {
+            const url = await subirDocAStorage(d.file, form.patente || "");
+            if (url) documentos.push({ name: d.name, url, tipo: d.tipo });
+          } catch (err) {
+            erroresDocs.push(`${d.name}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+        setSubiendoDocs(false);
+      }
+
       if (editId) {
-        await updateVehiculo({ ...form, fotos, id: editId } as Vehiculo);
+        await updateVehiculo({ ...form, fotos, documentos, id: editId } as Vehiculo);
       } else {
-        const newV: Vehiculo = { id: crypto.randomUUID(), folio: nextFolio, ...(form as Vehiculo), fotos };
+        const newV: Vehiculo = { id: crypto.randomUUID(), folio: nextFolio, ...(form as Vehiculo), fotos, documentos };
         await addVehiculo(newV);
       }
-      if (errores.length > 0) {
-        alert(`Vehículo guardado, pero ${errores.length} foto(s) no se pudieron subir:\n` + errores.slice(0, 5).join("\n"));
+      setDocsPendientes([]);
+      if (errores.length > 0 || erroresDocs.length > 0) {
+        alert(
+          `Vehículo guardado` +
+          (errores.length ? `, pero ${errores.length} foto(s) no se subieron:\n` + errores.slice(0, 5).join("\n") : "") +
+          (erroresDocs.length ? `\n${erroresDocs.length} documento(s) no se subieron:\n` + erroresDocs.slice(0, 5).join("\n") : "")
+        );
       }
       setShowModal(false);
     } catch (e) {
@@ -357,6 +385,32 @@ export default function Vehiculos() {
   const downloadFoto = (dataUrl: string, label: string) => {
     const a = document.createElement("a"); a.href = dataUrl; a.download = label + ".jpg"; a.click();
   };
+
+  /** Agrega archivos (fotos o documentos del auto) a la cola pendiente. */
+  const handleDocsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const nuevos = files.map(file => ({
+      name: file.name,
+      file,
+      tipo: (file.type.startsWith("image/") ? "imagen" : "documento") as "imagen" | "documento",
+    }));
+    setDocsPendientes(prev => [...prev, ...nuevos]);
+    e.target.value = "";
+  };
+
+  /** Quita un documento ya guardado (URL de Storage). */
+  const removeDocGuardado = (url: string) => {
+    setForm(f => ({ ...f, documentos: (f.documentos || []).filter(d => d.url !== url) }));
+  };
+
+  /** Quita un documento pendiente (aun no subido). */
+  const removeDocPendiente = (idx: number) => {
+    setDocsPendientes(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  /** Abre/descarga un documento ya guardado. */
+  const abrirDoc = (url: string) => { window.open(url, "_blank", "noopener,noreferrer"); };
 
   /** Intercambia el contenido (file + preview) de dos slots. Los labels NO se mueven. */
   const swapSlots = (i: number, j: number) => {
@@ -506,8 +560,8 @@ export default function Vehiculos() {
     }
   };
 
-  const TABS = ["general", "equipamiento", "datos_adicionales", "galeria", "publicar_yapo"];
-  const TAB_LABELS: Record<string, string> = { general: "General", equipamiento: "Equipamiento", datos_adicionales: "Datos Adicionales", galeria: "Galería", publicar_yapo: "Publicar Yapo" };
+  const TABS = ["general", "datos_adicionales", "galeria", "publicar_yapo"];
+  const TAB_LABELS: Record<string, string> = { general: "General", datos_adicionales: "Datos Adicionales", galeria: "Galería", publicar_yapo: "Publicar Yapo" };
 
   /** Genera el prefijo de nombre de archivo: PATENTE_MARCA */
   const filePrefix = (): string => {
@@ -1046,9 +1100,17 @@ export default function Vehiculos() {
                         <option value="">— Seleccionar —</option>
                         {TRANSMISIONES.map(o => <option key={o}>{o}</option>)}
                       </select></div>
+                    <div><label className="block text-xs font-medium mb-1">Tracción</label>
+                      <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        value={form.traccion || ""} onChange={e => setForm({ ...form, traccion: e.target.value })}>
+                        <option value="">— Seleccionar —</option>
+                        {TRACCIONES.map(o => <option key={o}>{o}</option>)}
+                      </select></div>
                     <div><label className="block text-xs font-medium mb-1">Usuario Asignado</label>
                       <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/40" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.usuarioAsignado || ""} /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Procedencia</label>
                       <select className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={(form as any).procedencia || "Propio"} onChange={e => setForm({ ...form, procedencia: e.target.value, consignatarioId: e.target.value === "Propio" ? "" : (form as any).consignatarioId || "" } as any)}>
@@ -1076,11 +1138,107 @@ export default function Vehiculos() {
               )}
 
               {tab === "datos_adicionales" && (
-                <div>
-                  <label className="block text-xs font-medium mb-2">Comentarios / Notas del Vehículo</label>
-                  <textarea rows={8} className="w-full border rounded px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }}
-                    placeholder="Ingrese comentarios adicionales sobre el vehículo..."
-                    value={form.comentarios || ""} onChange={e => setForm({ ...form, comentarios: e.target.value })} />
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-medium mb-2">Comentarios / Notas del Vehículo</label>
+                    <textarea rows={5} className="w-full border rounded px-3 py-2 text-sm bg-background resize-none" style={{ borderColor: "hsl(var(--border))" }}
+                      placeholder="Ingrese comentarios adicionales sobre el vehículo..."
+                      value={form.comentarios || ""} onChange={e => setForm({ ...form, comentarios: e.target.value })} />
+                  </div>
+
+                  {/* Aire acondicionado + equipamiento adicional (antes en la pestaña Equipamiento) */}
+                  <div>
+                    <button onClick={() => setForm({ ...form, aireAcondicionado: !form.aireAcondicionado })}
+                      className={`flex items-center gap-2 px-3 py-2 rounded border text-sm transition-colors ${form.aireAcondicionado ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40"}`}>
+                      {form.aireAcondicionado ? <CheckSquare size={15} style={{ color: "hsl(var(--primary))" }} /> : <Square size={15} style={{ color: "hsl(var(--muted-foreground))" }} />}
+                      Aire Acondicionado
+                    </button>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>Equipamiento Adicional</label>
+                    <div className="flex gap-2 mb-3">
+                      <input className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                        placeholder="Agregar equipamiento..." value={nuevoEquipamiento} onChange={e => setNuevoEquipamiento(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && addEquipamiento()} />
+                      <button onClick={addEquipamiento} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Agregar</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(form.equipamientoExtra || []).map(item => (
+                        <span key={item} className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border"
+                          style={{ borderColor: "hsl(var(--primary))", color: "hsl(var(--primary))", background: "hsl(var(--primary)/0.08)" }}>
+                          {item}
+                          <button onClick={() => toggleEquipExtra(item)}><X size={12} /></button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Documentos del auto (fotos o PDF: padron, permiso, etc) ── */}
+                  <div className="rounded-xl border p-4" style={{ borderColor: "hsl(var(--border))" }}>
+                    <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                      <div>
+                        <h3 className="text-sm font-bold flex items-center gap-1.5"><Paperclip size={14} /> Documentos del Vehículo</h3>
+                        <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                          Adjunta fotos o documentos del auto (padrón, permiso de circulación, revisión técnica, etc). Se pueden ver y descargar.
+                        </p>
+                      </div>
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => docInputRef.current?.click()}
+                          disabled={subiendoDocs}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                          style={{ background: "hsl(var(--primary))" }}
+                        >
+                          {subiendoDocs ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                          Adjuntar archivo
+                        </button>
+                      )}
+                      <input
+                        ref={docInputRef}
+                        type="file"
+                        accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+                        multiple
+                        className="hidden"
+                        onChange={handleDocsChange}
+                      />
+                    </div>
+
+                    {(form.documentos || []).length === 0 && docsPendientes.length === 0 ? (
+                      <p className="text-xs text-center py-4" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Sin documentos adjuntos.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Documentos ya guardados */}
+                        {(form.documentos || []).map((doc) => (
+                          <div key={doc.url} className="flex items-center gap-3 p-2 rounded-lg border" style={{ borderColor: "hsl(var(--border))" }}>
+                            {doc.tipo === "imagen" ? (
+                              <img src={doc.url} alt={doc.name} className="w-12 h-12 object-cover rounded cursor-pointer" onClick={() => abrirDoc(doc.url)} />
+                            ) : (
+                              <div className="w-12 h-12 rounded flex items-center justify-center bg-muted shrink-0"><FileText size={20} style={{ color: "hsl(var(--primary))" }} /></div>
+                            )}
+                            <span className="flex-1 text-sm truncate" title={doc.name}>{doc.name}</span>
+                            <button onClick={() => abrirDoc(doc.url)} className="p-2 rounded hover:bg-muted" title="Ver / abrir"><Eye size={15} /></button>
+                            <a href={doc.url} download={doc.name} target="_blank" rel="noreferrer" className="p-2 rounded hover:bg-muted" title="Descargar"><Download size={15} /></a>
+                            {!isReadOnly && (
+                              <button onClick={() => removeDocGuardado(doc.url)} className="p-2 rounded hover:bg-muted text-red-600" title="Eliminar"><Trash2 size={15} /></button>
+                            )}
+                          </div>
+                        ))}
+                        {/* Documentos pendientes de guardar */}
+                        {docsPendientes.map((d, i) => (
+                          <div key={`pend-${i}`} className="flex items-center gap-3 p-2 rounded-lg border border-dashed" style={{ borderColor: "hsl(var(--primary))" }}>
+                            <div className="w-12 h-12 rounded flex items-center justify-center bg-muted shrink-0">
+                              {d.tipo === "imagen" ? <Images size={20} style={{ color: "hsl(var(--primary))" }} /> : <FileText size={20} style={{ color: "hsl(var(--primary))" }} />}
+                            </div>
+                            <span className="flex-1 text-sm truncate" title={d.name}>{d.name}</span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "hsl(var(--primary)/0.12)", color: "hsl(var(--primary))" }}>Se guarda al guardar</span>
+                            <button onClick={() => removeDocPendiente(i)} className="p-2 rounded hover:bg-muted text-red-600" title="Quitar"><X size={15} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               </fieldset>
@@ -1126,27 +1284,22 @@ export default function Vehiculos() {
                         className="hidden"
                         onChange={handleMultiFotoChange}
                       />
-                      {/* Boton principal: en CELULAR usa Share API (menu nativo del SO,
-                          guarda en Fotos/Marketplace/etc directo). En DESKTOP usa ZIP
-                          que funciona en todos los navegadores sin permisos extra. */}
+                      {/* Boton principal: ZIP en TODOS los dispositivos. Es la unica
+                          forma 100% confiable de bajar TODAS las fotos de una vez
+                          (en celular el share nativo o la descarga suelta a veces solo
+                          guardaba la primera). El share queda como opcion secundaria. */}
                       <div className="relative flex">
                         <button
-                          onClick={SUPPORTS_SHARE_FILES ? downloadAllViaShare : downloadAllAsZip}
+                          onClick={downloadAllAsZip}
                           disabled={zipDownloading || fotosCount === 0}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border text-xs font-semibold hover:bg-muted disabled:opacity-50"
                           style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--primary))" }}
-                          title={
-                            SUPPORTS_SHARE_FILES
-                              ? "Abre el menú compartir del celular: guarda en tu galería, Marketplace, WhatsApp, etc."
-                              : "Descarga 1 archivo .zip con todas las fotos. Lo abres como una carpeta."
-                          }
+                          title="Descarga 1 archivo .zip con TODAS las fotos del vehículo."
                         >
                           {zipDownloading
                             ? <Loader2 size={13} className="animate-spin" />
-                            : SUPPORTS_SHARE_FILES ? <Share2 size={13} /> : <Archive size={13} />}
-                          {zipDownloading
-                            ? (SUPPORTS_SHARE_FILES ? "Preparando…" : "Empacando…")
-                            : (SUPPORTS_SHARE_FILES ? "Compartir todas" : "Descargar todas")}
+                            : <Archive size={13} />}
+                          {zipDownloading ? "Empacando…" : "Descargar todas"}
                         </button>
                         <button
                           onClick={() => setShowDownloadMenu(v => !v)}
@@ -1167,7 +1320,7 @@ export default function Vehiculos() {
                               <div className="px-3 py-2 text-[10px] uppercase tracking-wider border-b" style={{ color: "hsl(var(--muted-foreground))", borderColor: "hsl(var(--border))" }}>
                                 Otras opciones
                               </div>
-                              {/* En desktop con Share API: ofrecerlo tambien como secundario */}
+                              {/* Compartir con app (WhatsApp, Fotos, Marketplace…): util en celular */}
                               {SUPPORTS_SHARE_FILES && (
                                 <>
                                   <button
@@ -1178,25 +1331,7 @@ export default function Vehiculos() {
                                     <div>
                                       <div className="text-xs font-semibold">Compartir con app</div>
                                       <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                        Abre el menú compartir del sistema (WhatsApp, Mail, Drive, etc.).
-                                      </div>
-                                    </div>
-                                  </button>
-                                  <div className="border-t" style={{ borderColor: "hsl(var(--border))" }} />
-                                </>
-                              )}
-                              {/* En mobile el principal es Share — ofrecer ZIP como alternativa */}
-                              {SUPPORTS_SHARE_FILES && (
-                                <>
-                                  <button
-                                    onClick={downloadAllAsZip}
-                                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-start gap-2"
-                                  >
-                                    <Archive size={15} className="mt-0.5 flex-shrink-0" />
-                                    <div>
-                                      <div className="text-xs font-semibold">Como archivo .zip</div>
-                                      <div className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                        1 solo archivo. En móvil necesitarás una app para abrirlo.
+                                        Abre el menú compartir del sistema (WhatsApp, Mail, Fotos, etc.).
                                       </div>
                                     </div>
                                   </button>
@@ -1664,65 +1799,6 @@ export default function Vehiculos() {
                 </div>
               )}
 
-              {tab === "equipamiento" && (
-                <div className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>Transmisión</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {TRANSMISIONES.map(t => {
-                        const sel = form.transmision === t;
-                        return (
-                          <button key={t} onClick={() => setForm({ ...form, transmision: sel ? "" : t })}
-                            className={`flex items-center gap-2 px-3 py-2 rounded border text-sm text-left transition-colors ${sel ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40"}`}>
-                            {sel ? <CheckSquare size={15} style={{ color: "hsl(var(--primary))", flexShrink: 0 }} /> : <Square size={15} style={{ color: "hsl(var(--muted-foreground))", flexShrink: 0 }} />}
-                            {t}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>Tipo de Tracción</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {TRACCIONES.map(t => {
-                        const sel = form.traccion === t;
-                        return (
-                          <button key={t} onClick={() => setForm({ ...form, traccion: sel ? "" : t })}
-                            className={`flex items-center gap-2 px-3 py-2 rounded border text-sm text-left transition-colors ${sel ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40"}`}>
-                            {sel ? <CheckSquare size={15} style={{ color: "hsl(var(--primary))", flexShrink: 0 }} /> : <Square size={15} style={{ color: "hsl(var(--muted-foreground))", flexShrink: 0 }} />}
-                            {t}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div>
-                    <button onClick={() => setForm({ ...form, aireAcondicionado: !form.aireAcondicionado })}
-                      className={`flex items-center gap-2 px-3 py-2 rounded border text-sm transition-colors ${form.aireAcondicionado ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40"}`}>
-                      {form.aireAcondicionado ? <CheckSquare size={15} style={{ color: "hsl(var(--primary))" }} /> : <Square size={15} style={{ color: "hsl(var(--muted-foreground))" }} />}
-                      Aire Acondicionado
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>Equipamiento Adicional</label>
-                    <div className="flex gap-2 mb-3">
-                      <input className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
-                        placeholder="Agregar equipamiento..." value={nuevoEquipamiento} onChange={e => setNuevoEquipamiento(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && addEquipamiento()} />
-                      <button onClick={addEquipamiento} className="px-4 py-2 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Agregar</button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(form.equipamientoExtra || []).map(item => (
-                        <span key={item} className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border"
-                          style={{ borderColor: "hsl(var(--primary))", color: "hsl(var(--primary))", background: "hsl(var(--primary)/0.08)" }}>
-                          {item}
-                          <button onClick={() => toggleEquipExtra(item)}><X size={12} /></button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
