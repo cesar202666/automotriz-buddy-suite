@@ -28,11 +28,12 @@ const TIMEOUT_MS = 45_000;
 const BASE_BACKOFF_MS = 1500;
 const MIN_VALID_BASE64_LEN = 1000; // imagen menor a 1KB → sospechosa
 
-// Modelos de imagen Gemini en orden de preferencia (con fallback)
+// Modelos de imagen Gemini que EXISTEN hoy, en orden de preferencia.
+// (gemini-2.5-flash-image-preview y gemini-2.0-flash-exp daban 404).
 const GEMINI_IMAGE_MODELS = [
   "gemini-2.5-flash-image",
-  "gemini-2.5-flash-image-preview",
-  "gemini-2.0-flash-exp",
+  "gemini-3.1-flash-image",
+  "gemini-3-pro-image",
 ];
 
 // ─── Config desde localStorage ────────────────────────────────────
@@ -74,10 +75,14 @@ function sleep(ms: number): Promise<void> {
 
 function classifyError(status: number, body: string): { retryable: boolean; userMsg: string } {
   if (status === 429) {
+    // El "tope de gasto mensual" NO se arregla reintentando → mensaje claro.
+    if (/spending cap|exceeded its monthly|billing/i.test(body)) {
+      return { retryable: false, userMsg: "Límite de gasto de Gemini alcanzado. Entra a https://ai.studio/spend con tu cuenta de Google y sube el tope de gasto (o espera el reinicio del mes)." };
+    }
     return { retryable: true, userMsg: "Demasiadas solicitudes. Reintentando..." };
   }
   if (status === 402 || body.toLowerCase().includes("quota") || body.toLowerCase().includes("billing")) {
-    return { retryable: false, userMsg: "Cuota de IA agotada. Verifica tu plan en Google AI Studio." };
+    return { retryable: false, userMsg: "Cuota/tope de gasto de Gemini agotado. Revisa https://ai.studio/spend (o tu plan en Google AI Studio)." };
   }
   if (status === 401 || status === 403) {
     return { retryable: false, userMsg: "API Key inválida o sin permisos. Revisa Configuración." };
@@ -196,9 +201,12 @@ async function processWithGemini(
   }
   console.log(`[aiImageService] Iniciando edición — mimeType: ${mimeType}, input base64: ${base64.length} chars`);
 
-  // Modelos a probar: el del usuario primero, luego fallbacks
-  const modelsToTry = userModel
-    ? [userModel, ...GEMINI_IMAGE_MODELS.filter(m => m !== userModel)]
+  // Para editar imágenes el modelo DEBE ser de imagen. Si el guardado en
+  // Configuración es de texto (ej. gemini-2.5-pro), lo ignoramos y vamos
+  // directo a los modelos de imagen (evita un intento fallido inútil).
+  const userIsImageModel = userModel && /image/i.test(userModel);
+  const modelsToTry = userIsImageModel
+    ? [userModel as string, ...GEMINI_IMAGE_MODELS.filter(m => m !== userModel)]
     : GEMINI_IMAGE_MODELS;
 
   let lastError = "";
@@ -255,6 +263,28 @@ async function processWithGemini(
 
 // ─── API pública ──────────────────────────────────────────────────
 
+/**
+ * Si la imagen es una URL (http/https) — caso de fotos ya guardadas en
+ * Storage — la descarga y la convierte a data URL base64. Si ya es un data
+ * URL, la deja igual. Sin esto, se enviaba la URL como si fuera base64 y
+ * Gemini respondía "Base64 decoding failed for 'ht...'" (el inicio de https).
+ */
+async function ensureDataUrl(src: string): Promise<string> {
+  if (src.startsWith("data:")) return src;
+  if (/^https?:\/\//i.test(src)) {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(`No se pudo descargar la foto (${res.status})`);
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(r.result as string);
+      r.onerror = () => reject(new Error("No se pudo leer la foto descargada"));
+      r.readAsDataURL(blob);
+    });
+  }
+  return src;
+}
+
 export async function applyVehicleBackground(
   dataUrl: string,
   prompt: string,
@@ -274,8 +304,11 @@ export async function applyVehicleBackground(
   console.log(`[aiImageService] Usando: ${config.provider} | key: ${config.apiKey.slice(0, 12)}...`);
 
   try {
+    // Las fotos guardadas son URLs de Storage; hay que bajarlas y convertirlas
+    // a base64 antes de mandarlas a la IA.
+    const realDataUrl = await ensureDataUrl(dataUrl);
     if (config.provider === "gemini") {
-      return await processWithGemini(dataUrl, prompt, config.apiKey, config.model);
+      return await processWithGemini(realDataUrl, prompt, config.apiKey, config.model);
     }
     return {
       ok: false,
