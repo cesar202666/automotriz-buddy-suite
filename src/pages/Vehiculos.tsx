@@ -365,7 +365,7 @@ export default function Vehiculos() {
   const runAI = useCallback(async (dataUrl: string, slotIndex: number, prompt: string) => {
     console.log("[Vehiculos] runAI llamado, slot:", slotIndex, "hasConfig:", hasAiConfig());
     if (!hasAiConfig()) {
-      setAiError("❌ No hay API Key guardada. Ve a Configuración → ingresa tu clave de Gemini o OpenAI → presiona 'Guardar Configuración'.");
+      setAiError("❌ No hay API Key guardada. Ve a Configuración → pega tu clave de Gemini en 'Google Gemini' → presiona el botón 'Guardar APIs'.");
       setProcessingAI(null);
       return;
     }

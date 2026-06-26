@@ -13,7 +13,7 @@ const MASTER_PASS = "ankker2026$$";
 
 const PROVIDERS = [
   { id: "openai", label: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"] },
-  { id: "gemini", label: "Google Gemini", models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"] },
+  { id: "gemini", label: "Google Gemini", models: ["gemini-2.5-flash-image", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"] },
 ];
 
 const META_FIELDS = [
