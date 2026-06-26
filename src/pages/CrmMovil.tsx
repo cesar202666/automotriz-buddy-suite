@@ -1,11 +1,23 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useApp, type Usuario } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock } from "lucide-react";
+import { Lock, LayoutGrid, Car, ShoppingCart, Users, UserCheck, CreditCard, LayoutDashboard, BarChart3, X } from "lucide-react";
 import logoEa from "@/assets/logo-ea.jpg";
 import Conversaciones from "@/pages/Conversaciones";
 import InstallPWAButton from "@/components/InstallPWAButton";
 import MobileNotifications from "@/components/MobileNotifications";
+
+// Modulos accesibles desde el menu del CRM movil. Se filtran por rol.
+const MOBILE_MODULES = [
+  { label: "Vehículos", icon: Car, path: "/vehiculos" },
+  { label: "Ventas", icon: ShoppingCart, path: "/ventas" },
+  { label: "Clientes", icon: Users, path: "/clientes" },
+  { label: "Consignatarios", icon: UserCheck, path: "/consignatarios" },
+  { label: "Créditos", icon: CreditCard, path: "/creditos" },
+  { label: "AutoRed", icon: BarChart3, path: "/autored" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+];
 
 type BackendLoginRow = {
   id: string;
@@ -93,6 +105,12 @@ function MobileLogin({ onLogin }: { onLogin: (clave: string) => Promise<boolean>
 
 export default function CrmMovil() {
   const { usuarioActual, setUsuarioActual, usuarios, setUsuarios } = useApp();
+  const navigate = useNavigate();
+  const [showMenu, setShowMenu] = useState(false);
+
+  // Vendedor no ve Global/Administración/Gerencia/Configuración (igual que el sidebar).
+  // De los modulos del menu movil, todos son accesibles para vendedor salvo ninguno extra.
+  const modulosVisibles = MOBILE_MODULES;
 
   const handleLogin = async (clave: string): Promise<boolean> => {
     const c = clave.trim();
@@ -146,6 +164,51 @@ export default function CrmMovil() {
       <div className="crm-movil-wrap">
         <Conversaciones />
       </div>
+
+      {/* Botón flotante: abre el menú para ir a Vehículos, Ventas, etc. */}
+      <button
+        onClick={() => setShowMenu(true)}
+        className="fixed bottom-4 left-4 z-40 flex items-center gap-2 px-4 py-3 rounded-full shadow-lg text-white font-semibold text-sm"
+        style={{ background: "hsl(var(--primary))" }}
+        aria-label="Abrir menú de módulos"
+      >
+        <LayoutGrid size={18} /> Menú
+      </button>
+
+      {/* Hoja inferior con los módulos del ERP */}
+      {showMenu && (
+        <div className="fixed inset-0 z-50 flex items-end" onClick={() => setShowMenu(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div
+            className="relative w-full bg-card rounded-t-2xl p-4 pb-6 animate-fade-in"
+            style={{ borderTop: "1px solid hsl(var(--border))" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-bold">Ir a un módulo</div>
+              <button onClick={() => setShowMenu(false)} className="p-1.5 rounded-full hover:bg-muted" aria-label="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {modulosVisibles.map((m) => {
+                const Icon = m.icon;
+                return (
+                  <button
+                    key={m.path}
+                    onClick={() => { setShowMenu(false); navigate(m.path); }}
+                    className="flex flex-col items-center gap-2 p-3 rounded-xl border active:bg-muted/50"
+                    style={{ borderColor: "hsl(var(--border))" }}
+                  >
+                    <Icon size={24} style={{ color: "hsl(var(--primary))" }} />
+                    <span className="text-xs font-medium text-center">{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
