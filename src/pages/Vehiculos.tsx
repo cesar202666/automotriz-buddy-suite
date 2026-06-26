@@ -907,7 +907,9 @@ export default function Vehiculos() {
       </div>
 
       <div className="bg-card rounded-lg border overflow-hidden" style={{ borderColor: "hsl(var(--border))" }}>
-        <table className="w-full text-sm">
+        {/* Desktop: tabla completa. En movil es demasiado ancha, asi que abajo
+            se muestra una vista de tarjetas (md:hidden). */}
+        <table className="hidden md:table w-full text-sm">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
               <th className="px-4 py-3 text-left font-semibold">Patente</th>
@@ -972,6 +974,39 @@ export default function Vehiculos() {
             )}
           </tbody>
         </table>
+
+        {/* ── Vista MOVIL: tarjetas tappables (la tabla es muy ancha para telefono) ── */}
+        <div className="md:hidden divide-y" style={{ borderColor: "hsl(var(--border))" }}>
+          {visibles.map(v => (
+            <button
+              key={v.id}
+              onClick={() => openEdit(v)}
+              className="w-full text-left px-4 py-3 active:bg-muted/50 flex items-start justify-between gap-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold" style={{ color: "hsl(var(--primary))" }}>{v.patente || "—"}</span>
+                  {esVehiculoNuevo(v) && (
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full" style={{ background: "#16a34a", color: "white", letterSpacing: 0.3 }}>★ Nueva</span>
+                  )}
+                  {v.publicadoYapo && (
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full" style={{ background: "#f97316", color: "white", letterSpacing: 0.3 }}>Yapo</span>
+                  )}
+                </div>
+                <div className="text-sm font-medium mt-0.5 truncate">{v.marca} {v.modelo}</div>
+                <div className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>{v.anio || "—"} · {v.sucursal || "—"}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-sm font-bold whitespace-nowrap">{fmt(v.precioVenta)}</div>
+                <div className="mt-1 flex justify-end">{statusBadge(v.estado)}</div>
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>No hay vehículos</div>
+          )}
+        </div>
+
         {visibleCount < filtered.length && (
           <div className="flex items-center justify-center gap-3 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
             <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
