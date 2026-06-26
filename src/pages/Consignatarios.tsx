@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, FileText, Eye, Upload, Download, Table, Link2 } from "lucide-react";
+import { Plus, Search, FileText, Eye, Upload, Download, Table, Link2, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
@@ -330,6 +330,9 @@ function DeleteConsigModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
 }
 
 export default function Consignatarios() {
+  const { usuarioActual } = useApp();
+  // Solo master/administracion pueden borrar.
+  const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
   const [consignatarios, setConsignatarios] = useState<Consignatario[]>(initialConsignatarios);
 
   // Cargar consignatarios desde Supabase al montar
@@ -570,6 +573,15 @@ export default function Consignatarios() {
     setShowModal(false);
   };
 
+  // Borrado directo desde la fila (papelera), solo master/administracion.
+  const handleDeleteRow = async (e: React.MouseEvent, c: Consignatario) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar este consignatario?\n\n${c.nombre} ${c.apellidos} · ${c.patente || c.vehiculo || ""}\n\nEsta acción no se puede deshacer.`)) return;
+    const { error } = await supabase.from("consignatarios").delete().eq("id", c.id);
+    if (error) { alert(`No se pudo eliminar: ${error.message}`); return; }
+    setConsignatarios(prev => prev.filter(x => x.id !== c.id));
+  };
+
   const handleGenerarContrato = (c: Consignatario) => {
     generateContratoPDF(c);
   };
@@ -654,6 +666,7 @@ export default function Consignatarios() {
               <th className="px-4 py-3 text-left font-semibold">Valor Consig.</th>
               <th className="px-4 py-3 text-left font-semibold">Disponibilidad</th>
               <th className="px-4 py-3 text-left font-semibold">Contrato</th>
+              {isAdmin && <th className="px-4 py-3 text-left font-semibold">Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -678,10 +691,17 @@ export default function Consignatarios() {
                     <FileText size={13} /> PDF
                   </button>
                 </td>
+                {isAdmin && (
+                  <td className="px-4 py-3">
+                    <button onClick={(e) => handleDeleteRow(e, c)} className="p-1.5 rounded hover:bg-red-50 text-red-600" title="Eliminar consignatario">
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={12} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay consignatarios</td></tr>
+              <tr><td colSpan={isAdmin ? 13 : 12} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay consignatarios</td></tr>
             )}
           </tbody>
         </table>

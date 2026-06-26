@@ -112,6 +112,8 @@ export interface Venta {
   montoEfectivo: number;
   montoTransferenciaPago: number;
   clientePagoTransferencia: number;
+  /** Monto pagado por el cliente (ingreso manual). */
+  montoPagadoCliente: number;
   gastosAdmin: number;
   precioVtaFinal: number;
   creditoFirmado: string;
@@ -383,6 +385,7 @@ function ventaFromDb(row: any): Venta {
     montoEfectivo: Number(row.monto_efectivo ?? 0),
     montoTransferenciaPago: Number(row.monto_transferencia_pago ?? 0),
     clientePagoTransferencia: Number(row.cliente_pago_transferencia ?? 0),
+    montoPagadoCliente: Number(row.monto_pagado_cliente ?? 0),
     gastosAdmin: Number(row.gastos_admin ?? 0),
     precioVtaFinal: Number(row.precio_vta_final ?? 0),
     creditoFirmado: String(row.credito_firmado ?? ""),
@@ -453,6 +456,7 @@ function ventaToDb(v: Omit<Venta, "id">) {
     monto_efectivo: v.montoEfectivo,
     monto_transferencia_pago: v.montoTransferenciaPago,
     cliente_pago_transferencia: v.clientePagoTransferencia,
+    monto_pagado_cliente: v.montoPagadoCliente ?? 0,
     gastos_admin: v.gastosAdmin,
     precio_vta_final: v.precioVtaFinal,
     credito_firmado: v.creditoFirmado,
@@ -599,6 +603,7 @@ interface AppState {
   vehiculosLoading: boolean;
   consignatarios: Consignatario[];
   setConsignatarios: (c: Consignatario[]) => void;
+  deleteConsignatario: (id: string) => Promise<boolean>;
   ventas: Venta[];
   setVentas: (v: Venta[]) => void;
   /** Crea la venta en la DB; devuelve la venta con su id real o null si fallo. */
@@ -783,7 +788,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Los documentos se cargan al abrir cada venta (getVentaDocs). Si se agrega
   // se mantienen los *_name (livianos) para mostrar el estado del adjunto.
   const VENTA_LIST_COLS =
-    "id, ejecutiva, fecha_venta, sucursal, cliente_id, cliente_nombre, informe_tecnico_name, patente, marca, modelo, anio_vehiculo, color_vehiculo, kilometraje_vehiculo, precio_retoma, precio_publicado, precio_venta, margen_bruto, n_credito, financiera, saldo_precio, comision_credito, valor_piso, vpp_modelo, vpp_patente, monto_efectivo, monto_transferencia_pago, cliente_pago_transferencia, gastos_admin, precio_vta_final, credito_firmado, credito_firmado_doc_name, monto_pie_caja, prepago, prepago_doc_name, documentacion_venta_name, tipo_venta, estado, verificacion";
+    "id, ejecutiva, fecha_venta, sucursal, cliente_id, cliente_nombre, informe_tecnico_name, patente, marca, modelo, anio_vehiculo, color_vehiculo, kilometraje_vehiculo, precio_retoma, precio_publicado, precio_venta, margen_bruto, n_credito, financiera, saldo_precio, comision_credito, valor_piso, vpp_modelo, vpp_patente, monto_efectivo, monto_transferencia_pago, cliente_pago_transferencia, monto_pagado_cliente, gastos_admin, precio_vta_final, credito_firmado, credito_firmado_doc_name, monto_pie_caja, prepago, prepago_doc_name, documentacion_venta_name, tipo_venta, estado, verificacion";
 
   useEffect(() => {
     const loadVentas = async () => {
@@ -912,6 +917,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  const deleteConsignatario = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from("consignatarios").delete().eq("id", id);
+    if (error) {
+      alert(`No se pudo eliminar el consignatario: ${error.message}`);
+      return false;
+    }
+    setConsignatarios(prev => prev.filter(x => x.id !== id));
+    return true;
+  };
+
   // Ventas: persistir en DB (mismo problema que clientes — crear, editar y
   // validar ventas solo vivia en memoria).
   const addVenta = async (v: Omit<Venta, "id">): Promise<Venta | null> => {
@@ -1023,7 +1038,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addVehiculo, updateVehiculo, deleteVehiculo,
       getVehiculoFotos,
       vehiculosLoading,
-      consignatarios, setConsignatarios,
+      consignatarios, setConsignatarios, deleteConsignatario,
       ventas, setVentas,
       addVenta, updateVenta, deleteVenta, getVentaDocs,
       cuentasPagar, setCuentasPagar,

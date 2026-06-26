@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, ChevronDown, X } from "lucide-react";
+import { Plus, Search, ChevronDown, X, Trash2 } from "lucide-react";
+import { useApp } from "@/context/AppContext";
 import { NumberInput } from "@/components/NumberInput";
 
 type EstadoSolicitud = "EN EVALUACIÓN" | "APROBADA" | "NEGOCIO CERRADO" | "SIN RESPUESTA" | "RECHAZADA";
@@ -71,6 +72,9 @@ const estadoBadge = (estado: EstadoSolicitud) => {
 };
 
 export default function Creditos() {
+  const { usuarioActual } = useApp();
+  // Solo master/administracion pueden borrar.
+  const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
   const [creditos, setCreditos] = useState<Credito[]>(initialCreditos);
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("Todos");
@@ -174,6 +178,7 @@ export default function Creditos() {
               <th className="px-4 py-3 text-left font-semibold">Estado de Solicitud</th>
               <th className="px-4 py-3 text-left font-semibold">Tiempo de respuesta</th>
               <th className="px-4 py-3 text-left font-semibold">Comentario</th>
+              {isAdmin && <th className="px-4 py-3 text-left font-semibold">Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -186,10 +191,19 @@ export default function Creditos() {
                 <td className="px-4 py-3">{estadoBadge(c.estado)}</td>
                 <td className="px-4 py-3" style={{ color: "hsl(var(--muted-foreground))" }}>{c.tiempoRespuesta || "—"}</td>
                 <td className="px-4 py-3" style={{ color: "hsl(var(--muted-foreground))" }}>{c.comentario || "—"}</td>
+                {isAdmin && (
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => { if (window.confirm(`¿Eliminar este crédito?\n\n${c.financiera} · ${c.cotizacion || ""}\n\nEsta acción no se puede deshacer.`)) setCreditos(prev => prev.filter(x => x.id !== c.id)); }}
+                      className="p-1.5 rounded hover:bg-red-50 text-red-600" title="Eliminar crédito">
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay créditos</td></tr>
+              <tr><td colSpan={isAdmin ? 8 : 7} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay créditos</td></tr>
             )}
           </tbody>
         </table>

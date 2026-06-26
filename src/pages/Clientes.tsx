@@ -64,6 +64,8 @@ const nowStr = () => {
 
 export default function Clientes() {
   const { clientes, addCliente, updateCliente, deleteCliente, usuarioActual } = useApp();
+  // Solo master/administracion pueden borrar.
+  const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -279,7 +281,9 @@ export default function Clientes() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <button onClick={() => openEdit(c)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--primary))" }}><Edit2 size={15} /></button>
-                      <button onClick={() => setDeleteId(c.id)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }}><Trash2 size={15} /></button>
+                      {isAdmin && (
+                        <button onClick={() => setDeleteId(c.id)} className="p-1 rounded hover:bg-muted" style={{ color: "hsl(var(--destructive))" }} title="Eliminar cliente"><Trash2 size={15} /></button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -307,7 +311,7 @@ export default function Clientes() {
                 {editId ? "Editar Cliente" : "Nuevo Registro de Cliente"}
               </h2>
               <div className="flex items-center gap-2">
-                {editId && (
+                {editId && isAdmin && (
                   <button onClick={() => { setShowModal(false); setDeleteId(editId); }}
                     className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium"
                     style={{ color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, Check, X, Upload, FileText, Download, AlertTriangle, Lock, ChevronRight, ChevronLeft } from "lucide-react";
+import { Plus, Search, Check, X, Upload, FileText, Download, AlertTriangle, Lock, ChevronRight, ChevronLeft, Trash2 } from "lucide-react";
 import { useApp, Venta, TipoVenta, Cliente } from "@/context/AppContext";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
@@ -47,7 +47,7 @@ const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
   informeTecnico: null, informeTecnicoName: null, patente: "", marca: "", modelo: "",
   anioVehiculo: "", colorVehiculo: "", kilometrajeVehiculo: 0,
   precioRetoma: 0, precioPublicado: 0, precioVenta: 0, margenBruto: 0, nCredito: "", financiera: "", saldoPrecio: 0, comisionCredito: 0,
-  valorPiso: 0, vppModelo: "", vppPatente: "", montoEfectivo: 0, montoTransferenciaPago: 0, clientePagoTransferencia: 0,
+  valorPiso: 0, vppModelo: "", vppPatente: "", montoEfectivo: 0, montoTransferenciaPago: 0, clientePagoTransferencia: 0, montoPagadoCliente: 0,
   gastosAdmin: 0, precioVtaFinal: 0, creditoFirmado: "NO", creditoFirmadoDoc: null, creditoFirmadoDocName: null,
   montoPieCaja: 0, prepago: "NO", prepagoDoc: null, prepagoDocName: null,
   documentacionVenta: null, documentacionVentaName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false,
@@ -102,7 +102,14 @@ const WIZARD_STEPS = [
 type WizardStep = typeof WIZARD_STEPS[number]["key"];
 
 export default function Ventas() {
-  const { ventas, addVenta, updateVenta, getVentaDocs, clientes, vehiculos, addCuentaCobrar, usuarioActual } = useApp();
+  const { ventas, addVenta, updateVenta, deleteVenta, getVentaDocs, clientes, vehiculos, addCuentaCobrar, usuarioActual } = useApp();
+  // Solo master/administracion pueden borrar filas.
+  const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
+  const handleDeleteVenta = async (e: React.MouseEvent, v: Venta) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar esta venta?\n\n${v.marca} ${v.modelo} · ${v.patente}\nCliente: ${v.clienteNombre || "—"}\n\nEsta acción no se puede deshacer.`)) return;
+    await deleteVenta(v.id);
+  };
   const [savingVenta, setSavingVenta] = useState(false);
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
@@ -153,12 +160,13 @@ export default function Ventas() {
     const a = document.createElement("a"); a.href = dataUrl; a.download = name; a.click();
   };
 
-  // Margen = Valor Venta − Valor Piso (segun planilla). Comision Credito auto 1.5%+100K.
+  // Margen = Valor Venta − Valor Piso (segun planilla).
+  // Precio Vta Final = Valor Venta − Gastos (NO suma transferencia de dominio
+  // ni comision de credito). La comision de credito ahora se ingresa manual.
   const calcFields = (pVenta: number, vPiso: number, gastosAdm: number) => {
     const margen = pVenta - vPiso;
-    const comision = calcComision(pVenta);
-    const final = pVenta + comision - gastosAdm;
-    return { margenBruto: margen, comisionCredito: comision, precioVtaFinal: final };
+    const final = pVenta - gastosAdm;
+    return { margenBruto: margen, precioVtaFinal: final };
   };
 
   const updatePrecio = (field: "precioVenta" | "valorPiso" | "gastosAdmin", val: number) => {
@@ -188,7 +196,10 @@ export default function Ventas() {
   };
 
   const openEdit = (v: Venta) => {
-    setForm({ ...v });
+    // Recalcular margen y precio vta final con la formula vigente (sin sumar la
+    // transferencia de dominio), por si la venta se guardo con la formula anterior.
+    const recalc = calcFields(v.precioVenta, v.valorPiso ?? 0, v.gastosAdmin ?? 0);
+    setForm({ ...v, ...recalc });
     // Los documentos (base64) NO viajan con la lista por peso. Mostramos el
     // nombre de inmediato y cargamos el contenido bajo demanda (getVentaDocs).
     setInfTecDoc({ dataUrl: v.informeTecnico, name: v.informeTecnicoName });
@@ -356,7 +367,7 @@ export default function Ventas() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
-              {["Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","Color","Km","P. Publicado","P. Venta","Margen","N° Crédito","Financiera","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación"].map(h => (
+              {["Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","Color","Km","P. Publicado","P. Venta","Margen","N° Crédito","Financiera","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación", ...(isAdmin ? ["Acciones"] : [])].map(h => (
                 <th key={h} className="px-3 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -411,10 +422,17 @@ export default function Ventas() {
                     </button>
                   )}
                 </td>
+                {isAdmin && (
+                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                    <button onClick={(e) => handleDeleteVenta(e, v)} className="p-1.5 rounded hover:bg-red-50 text-red-600" title="Eliminar venta">
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={23} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay ventas registradas</td></tr>
+              <tr><td colSpan={isAdmin ? 24 : 23} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay ventas registradas</td></tr>
             )}
           </tbody>
         </table>
@@ -676,8 +694,8 @@ export default function Ventas() {
                       <NumberInput value={form.saldoPrecio ?? 0} onChange={(n) => setForm(f => ({ ...f, saldoPrecio: n }))} currency placeholder="Ej: 8.590.000" className={inp} style={bd} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Comisión Crédito (auto 1.5%+$100k)</label>
-                      <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(form.comisionCredito)} />
+                      <label className="block text-xs font-medium mb-1">Comisión del Crédito (manual)</label>
+                      <NumberInput value={form.comisionCredito ?? 0} onChange={(n) => setForm(f => ({ ...f, comisionCredito: n }))} currency placeholder="Ej: 250.000" className={inp} style={bd} />
                     </div>
                   </div>
 
@@ -710,8 +728,12 @@ export default function Ventas() {
                       <NumberInput value={form.montoTransferenciaPago ?? 0} onChange={(n) => setForm(f => ({ ...f, montoTransferenciaPago: n }))} currency placeholder="Ej: 5.480.000" className={inp} style={bd} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Monto Transferencia de Dominio (auto 1.5%+$100k)</label>
+                      <label className="block text-xs font-medium mb-1">Valor Transferencia Dominio (auto 1.5%+$100k)</label>
                       <input readOnly className="w-full border rounded px-3 py-2 text-sm bg-muted/50" style={bd} value={fmt(calcComision(form.precioVenta || 0))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Monto Pagado por Cliente</label>
+                      <NumberInput value={form.montoPagadoCliente ?? 0} onChange={(n) => setForm(f => ({ ...f, montoPagadoCliente: n }))} currency placeholder="Ej: 1.000.000" className={inp} style={bd} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Cliente Pagó Transferencia</label>
