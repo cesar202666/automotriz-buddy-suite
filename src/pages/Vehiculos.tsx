@@ -28,19 +28,18 @@ const PROCEDENCIAS = ["Propio", "Consignado"];
 const MASTER_PASS = "ankker2026$$";
 
 const DEFAULT_BG_PROMPT = `CRITICAL RULES — DO NOT VIOLATE:
-1. PRESERVE the vehicle EXACTLY as it appears: same model, exact color, exact body shape, exact wheels/rims, exact license plate, exact angle and proportions. DO NOT change, recolor, restyle, or "improve" the car in any way.
-2. KEEP the same camera angle, perspective and framing of the original photo.
+1. PRESERVE the vehicle EXACTLY as it appears: same model, exact color, exact body shape, exact wheels/rims, exact license plate, exact angle and proportions. DO NOT change, recolor, restyle, rotate, or "improve" the car in any way.
+2. KEEP the same camera angle, perspective and framing of the original photo. Do NOT try to change the car to a different angle.
 3. KEEP the lighting direction on the vehicle consistent with the original.
 
-TASK:
-Replace ONLY the background with a clean professional automotive studio setting:
-- Floor: light grey polished concrete with subtle, natural reflection of the car underneath
-- Wall: clean white-to-light-grey seamless backdrop, no patterns, no objects
-- Soft, even, diffused studio lighting (key + fill), no harsh shadows on the vehicle
-- Photorealistic, high-resolution dealership quality photo
-- Car should occupy ~70% of the frame, centered, with visible floor space below and to both sides
+TASK — clean WHITE studio catalog photo (like a professional dealership listing):
+- Background: pure seamless WHITE studio backdrop (infinity cove / cyclorama), bright, no patterns, no objects, no horizon line.
+- Floor: smooth very light, almost white surface with a soft, subtle, realistic shadow and gentle reflection directly under the car.
+- Lighting: bright, soft, even, diffused studio lighting (key + fill), no harsh shadows on the vehicle, no color casts.
+- Photorealistic, high-resolution, professional catalog quality.
+- Car centered, occupying ~70% of the frame, with clean white space around it.
 
-OUTPUT FORMAT: high-quality photo of the SAME vehicle on the new background. No text overlays, no logos, no watermarks, no people, no other cars.`;
+OUTPUT FORMAT: high-quality photo of the SAME vehicle on a clean pure-white studio background. No text overlays, no logos, no watermarks, no people, no other cars.`;
 
 /** Defaults Egaña: La Vara / Av Ferrocarriles km 4, Puerto Montt */
 const DEFAULT_SUCURSAL = "La Vara";
