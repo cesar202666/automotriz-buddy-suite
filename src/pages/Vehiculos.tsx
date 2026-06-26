@@ -1669,12 +1669,13 @@ export default function Vehiculos() {
                           </span>
                         )}
 
-                        {/* Botones reordenar — solo en modo edicion */}
-                        {slot.preview && processingAI !== i && !isReadOnly && (
+                        {/* Botones reordenar — SIEMPRE visibles. Si está en solo
+                            lectura, al usarlos entra a edición para poder Guardar. */}
+                        {slot.preview && processingAI !== i && (
                           <>
                             {i > 0 && (
                               <button
-                                onClick={e => { e.stopPropagation(); swapSlots(i, i - 1); }}
+                                onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); swapSlots(i, i - 1); }}
                                 className="absolute left-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-80 hover:opacity-100 active:opacity-100 z-10"
                                 style={{ background: "rgba(0,0,0,0.65)" }}
                                 title="Mover a la posición anterior">
@@ -1683,17 +1684,17 @@ export default function Vehiculos() {
                             )}
                             {i < fotoSlots.length - 1 && (
                               <button
-                                onClick={e => { e.stopPropagation(); swapSlots(i, i + 1); }}
+                                onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); swapSlots(i, i + 1); }}
                                 className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-80 hover:opacity-100 active:opacity-100 z-10"
                                 style={{ background: "rgba(0,0,0,0.65)" }}
                                 title="Mover a la posición siguiente">
                                 <ArrowRight size={12} className="text-white" />
                               </button>
                             )}
-                            {/* Hacer principal (portada) en un clic — siempre visible */}
+                            {/* Hacer principal (portada) en un clic */}
                             {i > 0 && (
                               <button
-                                onClick={e => { e.stopPropagation(); moveToFirst(i); }}
+                                onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); moveToFirst(i); }}
                                 className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-full shadow-lg text-[10px] font-bold text-white opacity-90 hover:opacity-100 active:opacity-100 z-10"
                                 style={{ background: "hsl(var(--primary))" }}
                                 title="Poner esta foto de primera (portada)">
