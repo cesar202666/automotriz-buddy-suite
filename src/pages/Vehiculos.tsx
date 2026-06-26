@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff, Maximize2, ChevronLeft, ChevronRight, FileText, Paperclip, Globe } from "lucide-react";
+import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, Edit2, Sparkles, AlertTriangle, Images, Loader2, ArrowLeft, ArrowRight, Archive, ChevronDown, FolderOpen, Share2, Send, Copy, ExternalLink, Eye, EyeOff, Maximize2, ChevronLeft, ChevronRight, FileText, Paperclip, Globe, Star } from "lucide-react";
 import JSZip from "jszip";
 import { useApp, Vehiculo, VehiculoDoc } from "@/context/AppContext";
 import * as XLSX from "xlsx";
@@ -448,6 +448,22 @@ export default function Vehiculos() {
       const b = arr[j];
       arr[i] = { ...a, file: b.file, preview: b.preview };
       arr[j] = { ...b, file: a.file, preview: a.preview };
+      return arr;
+    });
+  };
+
+  /** Mueve el contenido del slot i a la posición 0 (portada), corriendo el resto. */
+  const moveToFirst = (i: number) => {
+    if (i <= 0 || i >= fotoSlots.length) return;
+    setFotoSlots((prev) => {
+      const arr = prev.map((s) => ({ ...s }));
+      const movedFile = arr[i].file;
+      const movedPreview = arr[i].preview;
+      // Correr 0..i-1 una posición hacia abajo (los labels NO se mueven).
+      for (let k = i; k > 0; k--) {
+        arr[k] = { ...arr[k], file: arr[k - 1].file, preview: arr[k - 1].preview };
+      }
+      arr[0] = { ...arr[0], file: movedFile, preview: movedPreview };
       return arr;
     });
   };
@@ -1645,13 +1661,21 @@ export default function Vehiculos() {
                           </div>
                         )}
 
+                        {/* Insignia PORTADA en la primera foto (siempre visible) */}
+                        {slot.preview && i === 0 && (
+                          <span className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow"
+                            style={{ background: "rgb(34 197 94)" }}>
+                            <Star size={10} className="fill-white" /> PORTADA
+                          </span>
+                        )}
+
                         {/* Botones reordenar — solo en modo edicion */}
                         {slot.preview && processingAI !== i && !isReadOnly && (
                           <>
                             {i > 0 && (
                               <button
                                 onClick={e => { e.stopPropagation(); swapSlots(i, i - 1); }}
-                                className="absolute left-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-70 hover:opacity-100 active:opacity-100 z-10"
+                                className="absolute left-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-80 hover:opacity-100 active:opacity-100 z-10"
                                 style={{ background: "rgba(0,0,0,0.65)" }}
                                 title="Mover a la posición anterior">
                                 <ArrowLeft size={12} className="text-white" />
@@ -1660,10 +1684,20 @@ export default function Vehiculos() {
                             {i < fotoSlots.length - 1 && (
                               <button
                                 onClick={e => { e.stopPropagation(); swapSlots(i, i + 1); }}
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-70 hover:opacity-100 active:opacity-100 z-10"
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg opacity-80 hover:opacity-100 active:opacity-100 z-10"
                                 style={{ background: "rgba(0,0,0,0.65)" }}
                                 title="Mover a la posición siguiente">
                                 <ArrowRight size={12} className="text-white" />
+                              </button>
+                            )}
+                            {/* Hacer principal (portada) en un clic — siempre visible */}
+                            {i > 0 && (
+                              <button
+                                onClick={e => { e.stopPropagation(); moveToFirst(i); }}
+                                className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-full shadow-lg text-[10px] font-bold text-white opacity-90 hover:opacity-100 active:opacity-100 z-10"
+                                style={{ background: "hsl(var(--primary))" }}
+                                title="Poner esta foto de primera (portada)">
+                                <Star size={10} /> Hacer principal
                               </button>
                             )}
                           </>
