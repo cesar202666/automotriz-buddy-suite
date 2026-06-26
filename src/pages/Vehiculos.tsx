@@ -152,12 +152,15 @@ export default function Vehiculos() {
   const [docsPendientes, setDocsPendientes] = useState<{ name: string; file: File; tipo: "imagen" | "documento" }[]>([]);
   const [subiendoDocs, setSubiendoDocs] = useState(false);
   const docInputRef = useRef<HTMLInputElement>(null);
+  const modeloRef = useRef<HTMLInputElement>(null);
   const fotoRefs = useRef<(HTMLInputElement | null)[]>([]);
   const multiUploadRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   // Solo perfiles de administracion (master/administracion) pueden eliminar autos.
   const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
+  // Los vendedores pueden ver el precio piso pero NO modificarlo. El resto si.
+  const esVendedor = usuarioActual?.rol === "vendedor";
   const [saving, setSaving] = useState(false);
   const [batchUploading, setBatchUploading] = useState(false);
   const [zipDownloading, setZipDownloading] = useState(false);
@@ -246,6 +249,31 @@ export default function Vehiculos() {
   const [visibleCount, setVisibleCount] = useState(PAGE);
   // Al cambiar filtro/busqueda, volver a mostrar solo el primer tramo.
   useEffect(() => { setVisibleCount(PAGE); }, [filtroEstado, search]);
+
+  // Auto-fit del campo Modelo: si el nombre es muy largo, achica la letra hasta
+  // que entre completo en la casilla (medido, funciona en cualquier ancho/pantalla).
+  // Se corre despues del layout (doble rAF) y al redimensionar la ventana.
+  useEffect(() => {
+    const el = modeloRef.current;
+    if (!el) return;
+    const fit = () => {
+      if (!el.clientWidth) return; // aun no visible/medible
+      let size = 14;
+      el.style.fontSize = "14px";
+      let guard = 0;
+      while (el.scrollWidth > el.clientWidth && size > 8 && guard < 30) {
+        size -= 0.5;
+        el.style.fontSize = size + "px";
+        guard++;
+      }
+    };
+    // ResizeObserver: dispara fit cuando la casilla toma su ancho real (el modal
+    // anima su ancho, asi que al abrir el input pasa de 0 a su ancho final).
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    window.addEventListener("resize", fit);
+    return () => { ro.disconnect(); window.removeEventListener("resize", fit); };
+  }, [form.modelo, tab, showModal]);
   const visibles = filtered.slice(0, visibleCount);
 
   const openCreate = () => {
@@ -1028,13 +1056,19 @@ export default function Vehiculos() {
                         {ESTADOS_VEHICULO.map(o => <option key={o} value={o}>{o.charAt(0) + o.slice(1).toLowerCase()}</option>)}
                       </select></div>
                   </div>
-                  <div className="grid grid-cols-4 gap-3 mb-4">
+                  {/* Marca + Modelo en fila de 2 columnas: a Modelo se le da el doble
+                      de ancho para que los nombres largos quepan completos. Si aun
+                      asi no entra, la letra se achica (auto-fit medido, ver useEffect). */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">Marca *</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.marca || ""} onChange={e => setForm({ ...form, marca: e.target.value })} /></div>
                     <div><label className="block text-xs font-medium mb-1">Modelo *</label>
-                      <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
+                      <input ref={modeloRef} className="w-full border rounded px-3 py-2 text-sm bg-background" title={form.modelo || ""}
+                        style={{ borderColor: "hsl(var(--border))" }}
                         value={form.modelo || ""} onChange={e => setForm({ ...form, modelo: e.target.value })} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div><label className="block text-xs font-medium mb-1">N° Motor</label>
                       <input className="w-full border rounded px-3 py-2 text-sm bg-background" style={{ borderColor: "hsl(var(--border))" }}
                         value={form.nMotor || ""} onChange={e => setForm({ ...form, nMotor: e.target.value })} /></div>
@@ -1074,7 +1108,18 @@ export default function Vehiculos() {
                         </span>
                       </label>
                       {showPisoModal ? (
-                        <NumberInput value={form.precioPiso ?? 0} onChange={(n) => setForm({ ...form, precioPiso: n })} currency placeholder="Ej: 9.000.000" />
+                        esVendedor ? (
+                          // Vendedor: ve el precio piso pero NO lo puede modificar.
+                          <div
+                            className="w-full border rounded px-3 py-2 text-sm bg-muted/40 select-none"
+                            style={{ borderColor: "hsl(var(--border))" }}
+                            title="Solo lectura: los vendedores no pueden modificar el precio piso"
+                          >
+                            {form.precioPiso ? `$${(form.precioPiso).toLocaleString("es-CL")}` : "—"}
+                          </div>
+                        ) : (
+                          <NumberInput value={form.precioPiso ?? 0} onChange={(n) => setForm({ ...form, precioPiso: n })} currency placeholder="Ej: 9.000.000" />
+                        )
                       ) : (
                         <div
                           className="w-full border rounded px-3 py-2 text-sm bg-background select-none"
