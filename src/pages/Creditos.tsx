@@ -1,58 +1,15 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, ChevronDown, X, Trash2 } from "lucide-react";
-import { useApp } from "@/context/AppContext";
+import { useApp, Credito, EstadoSolicitudCredito } from "@/context/AppContext";
 import { NumberInput } from "@/components/NumberInput";
 
-type EstadoSolicitud = "EN EVALUACIÓN" | "APROBADA" | "NEGOCIO CERRADO" | "SIN RESPUESTA" | "RECHAZADA";
-
-interface Credito {
-  id: string;
-  financiera: string;
-  cotizacion: string;
-  descripcion: string;
-  estado: EstadoSolicitud;
-  tiempoRespuesta: string;
-  comentario: string;
-  // Oferta solicitud
-  montoFinanciar: number;
-  cuotas: string;
-  valorCuota: number;
-  tasaInteres: string;
-  comision: number;
-  // Cliente
-  clienteId: string;
-  clienteNombre: string;
-  clienteDesc: string;
-  rut: string;
-  estadoCivil: string;
-  fechaNacimiento: string;
-  nombres: string;
-  apellidos: string;
-  direccion: string;
-  ciudad: string;
-  casaHabita: string;
-  estudios: string;
-  // Financiera
-  precioVehiculo: number;
-  montoPie: number;
-  situacionLaboral: string;
-  patrimonio: string;
-  banco: string;
-  antiguedad: string;
-  tipoCredito: string;
-  marcaVehiculo: string;
-  modeloVehiculo: string;
-  patenteVehiculo: string;
-  anioVehiculo: string;
-}
+type EstadoSolicitud = EstadoSolicitudCredito;
 
 const FINANCIERAS = ["Falabella","Global","Autofin","Unidad"];
 const ESTADOS: EstadoSolicitud[] = ["EN EVALUACIÓN","APROBADA","NEGOCIO CERRADO","SIN RESPUESTA","RECHAZADA"];
 const CUOTAS = ["12","24","36","48","60","72","84"];
 const ESTADOS_CIVILES = ["Soltero/a","Casado/a","Divorciado/a","Viudo/a","Conviviente civil"];
 const SITUACIONES = ["Dependiente","Independiente","Jubilado/a","Sin actividad"];
-
-const initialCreditos: Credito[] = [];
 
 const emptyCredito = (): Partial<Credito> => ({
   financiera:"", cotizacion:"", descripcion:"", estado:"EN EVALUACIÓN", tiempoRespuesta:"", comentario:"",
@@ -72,10 +29,10 @@ const estadoBadge = (estado: EstadoSolicitud) => {
 };
 
 export default function Creditos() {
-  const { usuarioActual } = useApp();
+  const { usuarioActual, creditos, addCredito, updateCredito, deleteCredito } = useApp();
   // Solo master/administracion pueden borrar.
   const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
-  const [creditos, setCreditos] = useState<Credito[]>(initialCreditos);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("Todos");
   const [showModal, setShowModal] = useState(false);
@@ -98,14 +55,20 @@ export default function Creditos() {
   const openCreate = () => { setForm(emptyCredito()); setEditId(null); setSection("oferta"); setShowModal(true); };
   const openEdit = (c: Credito) => { setForm({ ...c }); setEditId(c.id); setSection("oferta"); setShowModal(true); };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.cotizacion?.trim()) return alert("La cotización es requerida.");
-    if (editId) {
-      setCreditos(creditos.map(c => c.id === editId ? { ...c, ...form } as Credito : c));
-    } else {
-      setCreditos([...creditos, { id: String(Date.now()), ...form } as Credito]);
+    setSaving(true);
+    try {
+      let ok: boolean;
+      if (editId) {
+        ok = await updateCredito({ ...(form as Credito), id: editId });
+      } else {
+        ok = (await addCredito(form as Omit<Credito, "id">)) !== null;
+      }
+      if (ok) setShowModal(false);
+    } finally {
+      setSaving(false);
     }
-    setShowModal(false);
   };
 
   const f = form as Credito;
@@ -194,7 +157,7 @@ export default function Creditos() {
                 {isAdmin && (
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     <button
-                      onClick={() => { if (window.confirm(`¿Eliminar este crédito?\n\n${c.financiera} · ${c.cotizacion || ""}\n\nEsta acción no se puede deshacer.`)) setCreditos(prev => prev.filter(x => x.id !== c.id)); }}
+                      onClick={() => { if (window.confirm(`¿Eliminar este crédito?\n\n${c.financiera} · ${c.cotizacion || ""}\n\nEsta acción no se puede deshacer.`)) deleteCredito(c.id); }}
                       className="p-1.5 rounded hover:bg-red-50 text-red-600" title="Eliminar crédito">
                       <Trash2 size={15} />
                     </button>
@@ -222,7 +185,7 @@ export default function Creditos() {
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-2xl mx-4 animate-fade-in">
             <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "hsl(var(--border))" }}>
               <div className="flex items-center gap-3">
-                <button onClick={handleSave} className="px-4 py-1.5 rounded text-sm font-medium text-white" style={{ background: "hsl(var(--primary))" }}>Guardar</button>
+                <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 rounded text-sm font-medium text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>{saving ? "Guardando..." : "Guardar"}</button>
                 <button onClick={() => setShowModal(false)} className="px-4 py-1.5 rounded text-sm border bg-card hover:bg-muted" style={{ borderColor: "hsl(var(--border))" }}>Cancelar</button>
               </div>
               <button onClick={() => setShowModal(false)}><X size={18} /></button>

@@ -80,6 +80,46 @@ export interface Consignatario {
   fechaIngreso: string;
 }
 
+export type EstadoSolicitudCredito = "EN EVALUACIÓN" | "APROBADA" | "NEGOCIO CERRADO" | "SIN RESPUESTA" | "RECHAZADA";
+
+export interface Credito {
+  id: string;
+  financiera: string;
+  cotizacion: string;
+  descripcion: string;
+  estado: EstadoSolicitudCredito;
+  tiempoRespuesta: string;
+  comentario: string;
+  montoFinanciar: number;
+  cuotas: string;
+  valorCuota: number;
+  tasaInteres: string;
+  comision: number;
+  clienteId: string;
+  clienteNombre: string;
+  clienteDesc: string;
+  rut: string;
+  estadoCivil: string;
+  fechaNacimiento: string;
+  nombres: string;
+  apellidos: string;
+  direccion: string;
+  ciudad: string;
+  casaHabita: string;
+  estudios: string;
+  precioVehiculo: number;
+  montoPie: number;
+  situacionLaboral: string;
+  patrimonio: string;
+  banco: string;
+  antiguedad: string;
+  tipoCredito: string;
+  marcaVehiculo: string;
+  modeloVehiculo: string;
+  patenteVehiculo: string;
+  anioVehiculo: string;
+}
+
 export type VentaEstado = "BORRADOR" | "PENDIENTE_VALIDACION" | "VALIDADA" | "ANULADA";
 export type TipoVenta = "CREDITO" | "CREDITO_PIE" | "CREDITO_APP" | "CREDITO_PIE_APP" | "APP_PIE" | "EFECTIVO" | "APP";
 
@@ -475,6 +515,88 @@ function ventaToDb(v: Omit<Venta, "id">) {
   };
 }
 
+// ─── Mapeo Credito ───────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function creditoFromDb(row: any): Credito {
+  return {
+    id: String(row.id ?? ""),
+    financiera: String(row.financiera ?? ""),
+    cotizacion: String(row.cotizacion ?? ""),
+    descripcion: String(row.descripcion ?? ""),
+    estado: (row.estado ?? "EN EVALUACIÓN") as EstadoSolicitudCredito,
+    tiempoRespuesta: String(row.tiempo_respuesta ?? ""),
+    comentario: String(row.comentario ?? ""),
+    montoFinanciar: Number(row.monto_financiar ?? 0),
+    cuotas: String(row.cuotas ?? ""),
+    valorCuota: Number(row.valor_cuota ?? 0),
+    tasaInteres: String(row.tasa_interes ?? ""),
+    comision: Number(row.comision ?? 0),
+    clienteId: String(row.cliente_id ?? ""),
+    clienteNombre: String(row.cliente_nombre ?? ""),
+    clienteDesc: String(row.cliente_desc ?? ""),
+    rut: String(row.rut ?? ""),
+    estadoCivil: String(row.estado_civil ?? ""),
+    fechaNacimiento: String(row.fecha_nacimiento ?? ""),
+    nombres: String(row.nombres ?? ""),
+    apellidos: String(row.apellidos ?? ""),
+    direccion: String(row.direccion ?? ""),
+    ciudad: String(row.ciudad ?? ""),
+    casaHabita: String(row.casa_habita ?? ""),
+    estudios: String(row.estudios ?? ""),
+    precioVehiculo: Number(row.precio_vehiculo ?? 0),
+    montoPie: Number(row.monto_pie ?? 0),
+    situacionLaboral: String(row.situacion_laboral ?? ""),
+    patrimonio: String(row.patrimonio ?? ""),
+    banco: String(row.banco ?? ""),
+    antiguedad: String(row.antiguedad ?? ""),
+    tipoCredito: String(row.tipo_credito ?? ""),
+    marcaVehiculo: String(row.marca_vehiculo ?? ""),
+    modeloVehiculo: String(row.modelo_vehiculo ?? ""),
+    patenteVehiculo: String(row.patente_vehiculo ?? ""),
+    anioVehiculo: String(row.anio_vehiculo ?? ""),
+  };
+}
+
+function creditoToDb(c: Omit<Credito, "id">) {
+  return {
+    financiera: c.financiera,
+    cotizacion: c.cotizacion,
+    descripcion: c.descripcion,
+    estado: c.estado,
+    tiempo_respuesta: c.tiempoRespuesta,
+    comentario: c.comentario,
+    monto_financiar: c.montoFinanciar,
+    cuotas: c.cuotas,
+    valor_cuota: c.valorCuota,
+    tasa_interes: c.tasaInteres,
+    comision: c.comision,
+    cliente_id: c.clienteId,
+    cliente_nombre: c.clienteNombre,
+    cliente_desc: c.clienteDesc,
+    rut: c.rut,
+    estado_civil: c.estadoCivil,
+    fecha_nacimiento: c.fechaNacimiento,
+    nombres: c.nombres,
+    apellidos: c.apellidos,
+    direccion: c.direccion,
+    ciudad: c.ciudad,
+    casa_habita: c.casaHabita,
+    estudios: c.estudios,
+    precio_vehiculo: c.precioVehiculo,
+    monto_pie: c.montoPie,
+    situacion_laboral: c.situacionLaboral,
+    patrimonio: c.patrimonio,
+    banco: c.banco,
+    antiguedad: c.antiguedad,
+    tipo_credito: c.tipoCredito,
+    marca_vehiculo: c.marcaVehiculo,
+    modelo_vehiculo: c.modeloVehiculo,
+    patente_vehiculo: c.patenteVehiculo,
+    anio_vehiculo: c.anioVehiculo,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 // ─── Mapeos CuentaPagar / CuentaCobrar / Adquisicion ─────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -604,6 +726,10 @@ interface AppState {
   consignatarios: Consignatario[];
   setConsignatarios: (c: Consignatario[]) => void;
   deleteConsignatario: (id: string) => Promise<boolean>;
+  creditos: Credito[];
+  addCredito: (c: Omit<Credito, "id">) => Promise<Credito | null>;
+  updateCredito: (c: Credito) => Promise<boolean>;
+  deleteCredito: (id: string) => Promise<boolean>;
   ventas: Venta[];
   setVentas: (v: Venta[]) => void;
   /** Crea la venta en la DB; devuelve la venta con su id real o null si fallo. */
@@ -639,6 +765,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [vehiculosLoading, setVehiculosLoading] = useState(true);
   const [consignatarios, setConsignatarios] = useState<Consignatario[]>([]);
+  const [creditos, setCreditos] = useState<Credito[]>([]);
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [cuentasPagar, setCuentasPagar] = useState<CuentaPagar[]>([]);
   const [cuentasCobrar, setCuentasCobrar] = useState<CuentaCobrar[]>([]);
@@ -779,6 +906,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     loadConsignatarios();
   }, []);
+
+  // ── Load creditos from DB on mount ─────────────────────────────────────────
+  useEffect(() => {
+    const loadCreditos = async () => {
+      const data = await fetchAllRows((from, to) =>
+        supabase.from("creditos").select("*").order("created_at", { ascending: false }).range(from, to),
+      );
+      if (data) setCreditos(data.map(creditoFromDb));
+    };
+    loadCreditos();
+  }, []);
+
+  const addCredito = async (c: Omit<Credito, "id">): Promise<Credito | null> => {
+    const { data, error } = await supabase.from("creditos").insert(creditoToDb(c)).select().single();
+    if (error || !data) { alert(`No se pudo guardar el crédito: ${error?.message}`); return null; }
+    const nuevo = creditoFromDb(data);
+    setCreditos(prev => [nuevo, ...prev]);
+    return nuevo;
+  };
+
+  const updateCredito = async (c: Credito): Promise<boolean> => {
+    const { id, ...rest } = c;
+    const { error } = await supabase.from("creditos").update(creditoToDb(rest)).eq("id", id);
+    if (error) { alert(`No se pudo actualizar el crédito: ${error.message}`); return false; }
+    setCreditos(prev => prev.map(x => x.id === id ? c : x));
+    return true;
+  };
+
+  const deleteCredito = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from("creditos").delete().eq("id", id);
+    if (error) { alert(`No se pudo eliminar el crédito: ${error.message}`); return false; }
+    setCreditos(prev => prev.filter(x => x.id !== id));
+    return true;
+  };
 
   // ── Load ventas from DB on mount ───────────────────────────────────────────
   // ⚠️ SIN las columnas de documentos en base64 (informe_tecnico,
@@ -1039,6 +1200,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       getVehiculoFotos,
       vehiculosLoading,
       consignatarios, setConsignatarios, deleteConsignatario,
+      creditos, addCredito, updateCredito, deleteCredito,
       ventas, setVentas,
       addVenta, updateVenta, deleteVenta, getVentaDocs,
       cuentasPagar, setCuentasPagar,
