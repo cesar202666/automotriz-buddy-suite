@@ -28,18 +28,18 @@ const PROCEDENCIAS = ["Propio", "Consignado"];
 const MASTER_PASS = "ankker2026$$";
 
 const DEFAULT_BG_PROMPT = `CRITICAL RULES — DO NOT VIOLATE:
-1. PRESERVE the vehicle EXACTLY as it appears: same model, exact color, exact body shape, exact wheels/rims, exact license plate, exact angle and proportions. DO NOT change, recolor, restyle, rotate, or "improve" the car in any way.
-2. KEEP the same camera angle, perspective and framing of the original photo. Do NOT try to change the car to a different angle.
-3. KEEP the lighting direction on the vehicle consistent with the original.
+1. KEEP THE CAR'S PAINT COLOR EXACTLY THE SAME AS THE INPUT. This is the most important rule. If the car is grey, it MUST stay the exact same grey. If it is silver, black, red, blue, etc., keep that exact same color and tone/shade. NEVER lighten, whiten, brighten or shift the vehicle's body color to match the white background. The white background must NOT bleed onto or recolor the car. A grey/silver car must NOT become white.
+2. PRESERVE the vehicle EXACTLY: same model, exact body shape, exact wheels/rims, exact trim, exact license plate, exact angle and proportions. DO NOT recolor, restyle, rotate or "improve" the car in any way. Only the BACKGROUND changes — the car stays pixel-faithful.
+3. KEEP the same camera angle, perspective, framing and lighting direction of the original photo.
 
-TASK — clean WHITE studio catalog photo (like a professional dealership listing):
-- Background: pure seamless WHITE studio backdrop (infinity cove / cyclorama), bright, no patterns, no objects, no horizon line.
-- Floor: smooth very light, almost white surface with a soft, subtle, realistic shadow and gentle reflection directly under the car.
-- Lighting: bright, soft, even, diffused studio lighting (key + fill), no harsh shadows on the vehicle, no color casts.
-- Photorealistic, high-resolution, professional catalog quality.
-- Car centered, occupying ~70% of the frame, with clean white space around it.
+TASK — replace ONLY the background with a clean studio catalog look:
+- Background: seamless white-to-light-grey studio backdrop (infinity cove / cyclorama), no patterns, no objects, no horizon line.
+- Floor: smooth light surface with a soft, subtle, realistic shadow and gentle reflection directly under the car.
+- Lighting: soft, even, diffused studio lighting, no harsh shadows on the vehicle, no color casts on the paint.
+- Photorealistic, high-resolution, professional dealership catalog quality.
+- Car centered, occupying ~70% of the frame.
 
-OUTPUT FORMAT: high-quality photo of the SAME vehicle on a clean pure-white studio background. No text overlays, no logos, no watermarks, no people, no other cars.`;
+OUTPUT FORMAT: high-quality photo of the SAME vehicle, SAME exact paint color, on a clean studio background. No text overlays, no logos, no watermarks, no people, no other cars.`;
 
 /** Defaults Egaña: La Vara / Av Ferrocarriles km 4, Puerto Montt */
 const DEFAULT_SUCURSAL = "La Vara";
