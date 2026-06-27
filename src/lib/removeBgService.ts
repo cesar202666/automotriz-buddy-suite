@@ -84,7 +84,9 @@ export async function removeBgOnWhite(src: string): Promise<RemoveBgResult> {
   } else {
     return { ok: false, error: "Formato de imagen no reconocido." };
   }
-  form.append("size", "auto");
+  // "preview" usa SIEMPRE los 50 llamados gratis/mes (no consume créditos pagados).
+  // Es resolución web (~0,25 MP), suficiente para el catálogo.
+  form.append("size", "preview");
   form.append("type", "car"); // optimizado para vehículos
   form.append("format", "png"); // transparente, para componer fondo blanco nosotros
 
