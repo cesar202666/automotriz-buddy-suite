@@ -3,7 +3,7 @@ import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, 
 import JSZip from "jszip";
 import { useApp, Vehiculo, VehiculoDoc } from "@/context/AppContext";
 import * as XLSX from "xlsx";
-import { cutoutOnWhite } from "@/lib/cutoutWhite";
+import { removeBgOnWhite, getRemoveBgKey, setRemoveBgKey, hasRemoveBgKey } from "@/lib/removeBgService";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
 import { subirFotosAStorage, subirDocAStorage } from "@/lib/fotoUpload";
@@ -170,6 +170,9 @@ export default function Vehiculos() {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [processingAI, setProcessingAI] = useState<number | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  // API key de remove.bg (recorte de fondo). Se guarda en localStorage.
+  const [removeBgKey, setRemoveBgKeyInput] = useState(() => getRemoveBgKey());
+  const [removeBgKeySaved, setRemoveBgKeySaved] = useState(() => hasRemoveBgKey());
 
   const exportExcel = () => {
     const data = vehiculos.map(v => ({
@@ -345,15 +348,20 @@ export default function Vehiculos() {
     setShowModal(false);
   };
 
-  // ── Fondo blanco por RECORTE real (no IA generativa) ─────────────
-  // Recorta el auto exacto de la foto (mismos píxeles: color, ángulo y tamaño)
-  // y lo pega sobre fondo blanco puro con una sombra suave. Garantiza que el
-  // vehículo NO cambie de color ni de tamaño. Corre en el navegador, sin API.
+  // ── Fondo blanco con remove.bg (recorte profesional) ─────────────
+  // Recorta el auto exacto (mismos píxeles: color, ángulo y tamaño) en el
+  // servidor de remove.bg y lo pega sobre fondo blanco puro con sombra suave.
+  // Garantiza que el vehículo NO cambie de color ni de tamaño.
   const runAI = useCallback(async (dataUrl: string, slotIndex: number) => {
+    if (!hasRemoveBgKey()) {
+      setAiError("❌ Falta la API key de remove.bg. Abrí el panel 'Fondo blanco automático' (acá abajo) y pegá tu clave.");
+      setShowAIEditor(true);
+      return;
+    }
     setAiError(null);
     setProcessingAI(slotIndex);
     try {
-      const result = await cutoutOnWhite(dataUrl);
+      const result = await removeBgOnWhite(dataUrl);
       if (result.ok && result.dataUrl) {
         setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s));
         setAiError(null);
@@ -1495,7 +1503,9 @@ export default function Vehiculos() {
                     >
                       <Sparkles size={15} style={{ color: "hsl(var(--primary))" }} />
                       <span className="text-sm font-bold" style={{ color: "hsl(var(--primary))" }}>Fondo blanco automático</span>
-                      <span className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>(recorte)</span>
+                      <span className="text-[10px]" style={{ color: removeBgKeySaved ? "rgb(22 163 74)" : "hsl(var(--muted-foreground))" }}>
+                        {removeBgKeySaved ? "✓ remove.bg conectado" : "(falta API key)"}
+                      </span>
                       <ChevronDown size={15} className="ml-auto" style={{ color: "hsl(var(--primary))", transform: showAIEditor ? "rotate(180deg)" : "" }} />
                     </button>
 
@@ -1505,9 +1515,43 @@ export default function Vehiculos() {
                       <p className="text-xs mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
                         Pasa el cursor sobre una foto y haz clic en <strong>✨ IA</strong>. Se <strong>recorta el auto exacto</strong> (mismo color, mismo ángulo y mismo tamaño) y se pega sobre un <strong>fondo blanco</strong> con una sombra suave.
                       </p>
-                      <p className="text-xs mb-1" style={{ color: "hsl(var(--muted-foreground))" }}>
-                        La primera vez puede tardar unos segundos mientras descarga el motor de recorte; después es más rápido. No cambia el color del auto.
-                      </p>
+
+                      {/* API key de remove.bg */}
+                      <div className="mb-3 rounded-lg border p-3" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted)/0.4)" }}>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: "hsl(var(--foreground))" }}>
+                          API key de remove.bg
+                        </label>
+                        <p className="text-[11px] mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
+                          Crea una cuenta gratis en{" "}
+                          <a href="https://www.remove.bg/users/sign_up" target="_blank" rel="noopener noreferrer"
+                            className="font-semibold underline" style={{ color: "hsl(var(--primary))" }}>remove.bg</a>{" "}
+                          → entra a <strong>API Keys</strong> → copia tu clave y pégala acá. (Gratis las primeras 50 fotos al mes.)
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={removeBgKey}
+                            onChange={e => { setRemoveBgKeyInput(e.target.value); setRemoveBgKeySaved(false); }}
+                            placeholder="Pega aquí tu API key de remove.bg"
+                            className="flex-1 border rounded px-3 py-2 text-sm bg-background font-mono"
+                            style={{ borderColor: "hsl(var(--border))" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setRemoveBgKey(removeBgKey); setRemoveBgKeySaved(hasRemoveBgKey()); setAiError(null); }}
+                            disabled={!removeBgKey.trim()}
+                            className="px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0 disabled:opacity-50"
+                            style={{ background: "hsl(var(--primary))" }}
+                          >
+                            Guardar
+                          </button>
+                        </div>
+                        {removeBgKeySaved && (
+                          <p className="text-[11px] mt-1.5 font-semibold flex items-center gap-1" style={{ color: "rgb(22 163 74)" }}>
+                            <CheckSquare size={12} /> Clave guardada. Ya puedes usar el botón ✨ en las fotos.
+                          </p>
+                        )}
+                      </div>
 
                       {/* Error message */}
                       {aiError && (
