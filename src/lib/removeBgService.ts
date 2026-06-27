@@ -30,34 +30,90 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Pega un PNG transparente (blob) sobre fondo blanco puro con sombra suave. */
+// Lienzo de salida estándar (4:3) — TODAS las fotos quedan del mismo tamaño.
+const OUT_W = 1000;
+const OUT_H = 750;
+// Qué porción del lienzo ocupa el auto (mismo "zoom" para todos los autos).
+const CAR_MAX_W = 0.9; // 90% del ancho
+const CAR_MAX_H = 0.8; // 80% del alto
+const CAR_BOTTOM = 0.9; // base del auto al 90% de la altura (deja sitio a la sombra)
+
+/** Bounding box de los píxeles NO transparentes (el auto) dentro del PNG. */
+function findCarBounds(img: HTMLImageElement): { x: number; y: number; w: number; h: number } | null {
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const cx = c.getContext("2d");
+  if (!cx) return null;
+  cx.drawImage(img, 0, 0);
+  let data: Uint8ClampedArray;
+  try {
+    data = cx.getImageData(0, 0, c.width, c.height).data;
+  } catch {
+    return null;
+  }
+  const ALPHA = 16; // umbral: ignora bordes casi transparentes
+  let minX = c.width, minY = c.height, maxX = -1, maxY = -1;
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (data[(y * c.width + x) * 4 + 3] > ALPHA) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+/**
+ * Recorta el auto a su bounding box, lo escala a un tamaño ESTÁNDAR y lo centra
+ * sobre un lienzo blanco 4:3 con sombra de catálogo. Así todos los autos quedan
+ * del mismo tamaño y bien encuadrados, sin importar cómo venía la foto original.
+ */
 async function compositeOnWhite(transparentBlob: Blob): Promise<string> {
   const url = URL.createObjectURL(transparentBlob);
   try {
     const img = await loadImage(url);
-    const w = img.naturalWidth;
-    const h = img.naturalHeight;
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = OUT_W;
+    canvas.height = OUT_H;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("No se pudo crear el lienzo.");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
+    // Fondo blanco puro.
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, OUT_W, OUT_H);
 
-    // Sombra de contacto suave para que el auto no quede "flotando".
+    // Recuadro del auto (si falla la detección, usamos la imagen completa).
+    const b = findCarBounds(img) ?? { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+
+    // Escala para que el auto ocupe el mismo espacio en todos los casos.
+    const scale = Math.min((OUT_W * CAR_MAX_W) / b.w, (OUT_H * CAR_MAX_H) / b.h);
+    const drawW = b.w * scale;
+    const drawH = b.h * scale;
+    const dx = (OUT_W - drawW) / 2;            // centrado horizontal
+    const dy = OUT_H * CAR_BOTTOM - drawH;     // base del auto a una altura fija
+
+    // Sombra de catálogo: elipse difusa bajo el auto.
+    const shadowCx = OUT_W / 2;
+    const shadowCy = dy + drawH - drawH * 0.02;
     ctx.save();
-    ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
-    ctx.shadowBlur = Math.round(h * 0.045);
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = Math.round(h * 0.02);
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.filter = "blur(12px)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(shadowCx, shadowCy, drawW * 0.42, drawH * 0.05, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
-    // Redibujo nítido encima (la pasada anterior solo aporta la sombra).
-    ctx.drawImage(img, 0, 0, w, h);
 
-    return canvas.toDataURL("image/jpeg", 0.92);
+    // El auto, recortado a su bounding box y escalado/centrado.
+    ctx.drawImage(img, b.x, b.y, b.w, b.h, dx, dy, drawW, drawH);
+
+    return canvas.toDataURL("image/jpeg", 0.95);
   } finally {
     URL.revokeObjectURL(url);
   }
