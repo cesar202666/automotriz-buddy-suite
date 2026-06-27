@@ -27,19 +27,21 @@ const PROCEDENCIAS = ["Propio", "Consignado"];
 
 const MASTER_PASS = "ankker2026$$";
 
-const DEFAULT_BG_PROMPT = `CRITICAL RULES — DO NOT VIOLATE:
+const DEFAULT_BG_PROMPT = `You are ONLY replacing the background of this car photo. You must NOT regenerate, redraw, move, rotate, rescale or reframe the car. Think of it as cutting the car out and placing it on a white studio — same pixels, same position, same size.
+
+CRITICAL RULES — DO NOT VIOLATE:
 1. KEEP THE CAR'S PAINT COLOR EXACTLY THE SAME AS THE INPUT. This is the most important rule. If the car is grey, it MUST stay the exact same grey. If it is silver, black, red, blue, etc., keep that exact same color and tone/shade. NEVER lighten, whiten, brighten or shift the vehicle's body color to match the white background. The white background must NOT bleed onto or recolor the car. A grey/silver car must NOT become white.
-2. PRESERVE the vehicle EXACTLY: same model, exact body shape, exact wheels/rims, exact trim, exact license plate, exact angle and proportions. DO NOT recolor, restyle, rotate or "improve" the car in any way. Only the BACKGROUND changes — the car stays pixel-faithful.
-3. KEEP the same camera angle, perspective, framing and lighting direction of the original photo.
+2. KEEP THE EXACT SAME FRAMING, ZOOM AND POSITION as the input photo. Do NOT zoom in or out. Do NOT recenter or resize the car. The car must occupy the SAME area and sit in the SAME position within the frame as in the original. Same crop, same composition.
+3. KEEP the EXACT same camera angle, perspective and proportions of the original. Do NOT rotate the car, do NOT change to a 3/4 / front / side view, do NOT change which side faces the camera. Whatever angle the input shows, the output shows the identical angle.
+4. PRESERVE the vehicle pixel-faithful: same model, exact body shape, exact wheels/rims, exact trim, exact license plate. DO NOT restyle or "improve" the car. Only the BACKGROUND changes.
 
-TASK — replace ONLY the background with a clean studio catalog look:
-- Background: seamless white-to-light-grey studio backdrop (infinity cove / cyclorama), no patterns, no objects, no horizon line.
-- Floor: smooth light surface with a soft, subtle, realistic shadow and gentle reflection directly under the car.
-- Lighting: soft, even, diffused studio lighting, no harsh shadows on the vehicle, no color casts on the paint.
+TASK — replace ONLY the background with a clean PURE WHITE studio:
+- Background: seamless PURE BRIGHT WHITE studio backdrop (#FFFFFF infinity cove / cyclorama). Pure white, NOT grey, NOT cream. No patterns, no objects, no horizon line, no walls visible.
+- Floor: smooth bright white surface with only a soft, subtle, realistic contact shadow directly under the car. Keep the floor white too (no grey gradient).
+- Lighting: bright, soft, even, diffused studio lighting, no harsh shadows on the vehicle, no color casts on the paint.
 - Photorealistic, high-resolution, professional dealership catalog quality.
-- Car centered, occupying ~70% of the frame.
 
-OUTPUT FORMAT: high-quality photo of the SAME vehicle, SAME exact paint color, on a clean studio background. No text overlays, no logos, no watermarks, no people, no other cars.`;
+OUTPUT FORMAT: the SAME vehicle, SAME exact paint color, SAME angle, SAME framing and size, on a clean pure-white (#FFFFFF) studio background. No text overlays, no logos, no watermarks, no people, no other cars.`;
 
 /** Defaults Egaña: La Vara / Av Ferrocarriles km 4, Puerto Montt */
 const DEFAULT_SUCURSAL = "La Vara";
@@ -1365,6 +1367,29 @@ export default function Vehiculos() {
 
               {tab === "galeria" && (
                 <div>
+                  {/* Publicar en la web (Auto Path) — visible también acá para publicar
+                      apenas terminás de trabajar las fotos. */}
+                  <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border p-3"
+                    style={{ borderColor: form.publicadoWeb ? "rgb(34 197 94)" : "hsl(var(--border))", background: form.publicadoWeb ? "rgb(34 197 94 / 0.07)" : "transparent" }}>
+                    <div className="flex items-center gap-2.5">
+                      <Globe size={20} style={{ color: form.publicadoWeb ? "rgb(22 163 74)" : "hsl(var(--muted-foreground))" }} />
+                      <div>
+                        <div className="text-sm font-semibold">Publicar en la página web</div>
+                        <div className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                          {form.publicadoWeb ? "Visible en la web pública de Egaña (acordate de Guardar)" : "No aparece en la web. Apretá Publicar y luego Guardar."}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { if (isReadOnly) setIsReadOnly(false); setForm({ ...form, publicadoWeb: !form.publicadoWeb }); }}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
+                      style={{ background: form.publicadoWeb ? "rgb(34 197 94)" : "hsl(var(--primary))" }}
+                    >
+                      {form.publicadoWeb ? <><CheckSquare size={15} /> Publicado</> : <><Globe size={15} /> Publicar</>}
+                    </button>
+                  </div>
+
                   {/* Header + acciones */}
                   <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
                     <div className="min-w-[200px]">
