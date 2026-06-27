@@ -3,7 +3,7 @@ import { Plus, Search, X, Upload, CheckSquare, Square, Download, Table, Trash2, 
 import JSZip from "jszip";
 import { useApp, Vehiculo, VehiculoDoc } from "@/context/AppContext";
 import * as XLSX from "xlsx";
-import { applyVehicleBackground, hasAiConfig } from "@/lib/aiImageService";
+import { cutoutOnWhite } from "@/lib/cutoutWhite";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
 import { subirFotosAStorage, subirDocAStorage } from "@/lib/fotoUpload";
@@ -26,22 +26,6 @@ const ESTADOS_VEHICULO: VehiculoEstado[] = ["DISPONIBLE", "RESERVADO", "VENDIDO"
 const PROCEDENCIAS = ["Propio", "Consignado"];
 
 const MASTER_PASS = "ankker2026$$";
-
-const DEFAULT_BG_PROMPT = `You are ONLY replacing the background of this car photo. You must NOT regenerate, redraw, move, rotate, rescale or reframe the car. Think of it as cutting the car out and placing it on a white studio — same pixels, same position, same size.
-
-CRITICAL RULES — DO NOT VIOLATE:
-1. KEEP THE CAR'S PAINT COLOR EXACTLY THE SAME AS THE INPUT. This is the most important rule. If the car is grey, it MUST stay the exact same grey. If it is silver, black, red, blue, etc., keep that exact same color and tone/shade. NEVER lighten, whiten, brighten or shift the vehicle's body color to match the white background. The white background must NOT bleed onto or recolor the car. A grey/silver car must NOT become white.
-2. KEEP THE EXACT SAME FRAMING, ZOOM AND POSITION as the input photo. Do NOT zoom in or out. Do NOT recenter or resize the car. The car must occupy the SAME area and sit in the SAME position within the frame as in the original. Same crop, same composition.
-3. KEEP the EXACT same camera angle, perspective and proportions of the original. Do NOT rotate the car, do NOT change to a 3/4 / front / side view, do NOT change which side faces the camera. Whatever angle the input shows, the output shows the identical angle.
-4. PRESERVE the vehicle pixel-faithful: same model, exact body shape, exact wheels/rims, exact trim, exact license plate. DO NOT restyle or "improve" the car. Only the BACKGROUND changes.
-
-TASK — replace ONLY the background with a clean PURE WHITE studio:
-- Background: seamless PURE BRIGHT WHITE studio backdrop (#FFFFFF infinity cove / cyclorama). Pure white, NOT grey, NOT cream. No patterns, no objects, no horizon line, no walls visible.
-- Floor: smooth bright white surface with only a soft, subtle, realistic contact shadow directly under the car. Keep the floor white too (no grey gradient).
-- Lighting: bright, soft, even, diffused studio lighting, no harsh shadows on the vehicle, no color casts on the paint.
-- Photorealistic, high-resolution, professional dealership catalog quality.
-
-OUTPUT FORMAT: the SAME vehicle, SAME exact paint color, SAME angle, SAME framing and size, on a clean pure-white (#FFFFFF) studio background. No text overlays, no logos, no watermarks, no people, no other cars.`;
 
 /** Defaults Egaña: La Vara / Av Ferrocarriles km 4, Puerto Montt */
 const DEFAULT_SUCURSAL = "La Vara";
@@ -180,9 +164,7 @@ export default function Vehiculos() {
   const [yapoPublishing, setYapoPublishing] = useState(false);
   const [yapoResult, setYapoResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  // AI bg state
-  const [bgPrompt, setBgPrompt] = useState(DEFAULT_BG_PROMPT);
-  // El editor de fondo IA queda oculto por defecto (para no molestar a vendedores).
+  // El editor de fondo queda oculto por defecto (para no molestar a vendedores).
   const [showAIEditor, setShowAIEditor] = useState(false);
   // Visor de imagen grande (lightbox) para exhibir el auto en pantalla.
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
@@ -363,24 +345,20 @@ export default function Vehiculos() {
     setShowModal(false);
   };
 
-  // ── AI background replacement ────────────────────────────────────
-  const runAI = useCallback(async (dataUrl: string, slotIndex: number, prompt: string) => {
-    console.log("[Vehiculos] runAI llamado, slot:", slotIndex, "hasConfig:", hasAiConfig());
-    if (!hasAiConfig()) {
-      setAiError("❌ No hay API Key guardada. Ve a Configuración → pega tu clave de Gemini en 'Google Gemini' → presiona el botón 'Guardar APIs'.");
-      setProcessingAI(null);
-      return;
-    }
+  // ── Fondo blanco por RECORTE real (no IA generativa) ─────────────
+  // Recorta el auto exacto de la foto (mismos píxeles: color, ángulo y tamaño)
+  // y lo pega sobre fondo blanco puro con una sombra suave. Garantiza que el
+  // vehículo NO cambie de color ni de tamaño. Corre en el navegador, sin API.
+  const runAI = useCallback(async (dataUrl: string, slotIndex: number) => {
     setAiError(null);
     setProcessingAI(slotIndex);
     try {
-      const result = await applyVehicleBackground(dataUrl, prompt);
-      console.log("[Vehiculos] resultado IA ok:", result.ok, "| dataUrl length:", result.dataUrl?.length ?? 0, "| error:", result.error);
+      const result = await cutoutOnWhite(dataUrl);
       if (result.ok && result.dataUrl) {
         setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s));
         setAiError(null);
       } else {
-        setAiError(`⚠️ ${result.error ?? "La IA no pudo procesar la imagen."}`);
+        setAiError(`⚠️ ${result.error ?? "No se pudo recortar el fondo."}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -392,7 +370,7 @@ export default function Vehiculos() {
 
   const applyAIBackground = (slotIndex: number) => {
     const slot = fotoSlots[slotIndex];
-    if (slot?.preview) runAI(slot.preview, slotIndex, bgPrompt);
+    if (slot?.preview) runAI(slot.preview, slotIndex);
   };
 
   const handleFotoChange = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -402,10 +380,8 @@ export default function Vehiculos() {
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
       setFotoSlots(prev => prev.map((s, idx) => idx === i ? { ...s, file, preview: dataUrl } : s));
-      // Auto-apply IA only on first slot
-      if (i === 0 && dataUrl) {
-        runAI(dataUrl, 0, bgPrompt);
-      }
+      // No auto-aplicamos el recorte: el usuario elige la foto del ángulo bueno
+      // y aprieta ✨ cuando quiere ponerle fondo blanco.
     };
     reader.readAsDataURL(file);
   };
@@ -508,9 +484,6 @@ export default function Vehiculos() {
       );
       const results = await Promise.all(readers);
 
-      // Capturar si el slot 0 estaba vacio antes — si si, auto-IA a la primera
-      const slot0EraVacio = !fotoSlots[0]?.preview;
-
       // Distribuir resultados en los slots vacios
       setFotoSlots((prev) =>
         prev.map((s, i) => {
@@ -519,11 +492,6 @@ export default function Vehiculos() {
           return { ...s, file: results[matchPos].file, preview: results[matchPos].dataUrl };
         }),
       );
-
-      // Auto-IA a la primera foto si el slot 0 estaba vacio
-      if (slot0EraVacio && emptyIndices[0] === 0 && results[0]) {
-        runAI(results[0].dataUrl, 0, bgPrompt);
-      }
 
       if (ignored > 0) {
         setTimeout(
@@ -1526,31 +1494,19 @@ export default function Vehiculos() {
                       style={{ background: "hsl(var(--primary)/0.06)" }}
                     >
                       <Sparkles size={15} style={{ color: "hsl(var(--primary))" }} />
-                      <span className="text-sm font-bold" style={{ color: "hsl(var(--primary))" }}>Editor de Fondo con IA</span>
-                      <span className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>(opcional)</span>
+                      <span className="text-sm font-bold" style={{ color: "hsl(var(--primary))" }}>Fondo blanco automático</span>
+                      <span className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>(recorte)</span>
                       <ChevronDown size={15} className="ml-auto" style={{ color: "hsl(var(--primary))", transform: showAIEditor ? "rotate(180deg)" : "" }} />
                     </button>
 
                     {/* Body — solo si esta expandido */}
                     {showAIEditor && (
                     <div className="px-4 pb-4 pt-3">
-                      <p className="text-xs mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>
-                        Sube una foto, pasa el cursor sobre ella y haz clic en <strong>✨ IA</strong> para reemplazar el fondo automáticamente por un estudio profesional.
+                      <p className="text-xs mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        Pasa el cursor sobre una foto y haz clic en <strong>✨ IA</strong>. Se <strong>recorta el auto exacto</strong> (mismo color, mismo ángulo y mismo tamaño) y se pega sobre un <strong>fondo blanco</strong> con una sombra suave.
                       </p>
-
-                      <label className="block text-xs font-semibold mb-1.5" style={{ color: "hsl(var(--foreground))" }}>
-                        Prompt Fondo de Vehículo
-                      </label>
-                      <textarea
-                        rows={3}
-                        className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-1"
-                        style={{ borderColor: "hsl(var(--border))", lineHeight: 1.5 }}
-                        value={bgPrompt}
-                        onChange={e => { setBgPrompt(e.target.value); setAiError(null); }}
-                        placeholder="Describe el fondo que deseas para el vehículo..."
-                      />
-                      <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
-                        Edita este prompt para personalizar el piso, paredes, iluminación, etc.
+                      <p className="text-xs mb-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        La primera vez puede tardar unos segundos mientras descarga el motor de recorte; después es más rápido. No cambia el color del auto.
                       </p>
 
                       {/* Error message */}
