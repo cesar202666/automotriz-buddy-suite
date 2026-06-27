@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.autored-proxy]
 verify_jwt = false
+
+[functions.web-lead]
+verify_jwt = false
