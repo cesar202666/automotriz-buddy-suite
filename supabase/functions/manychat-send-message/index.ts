@@ -25,10 +25,12 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { conversation_id, contact_id, message, channel, image_url } = await req.json()
+    const { conversation_id, contact_id, message, channel, image_url, image_urls } = await req.json()
+    // Acepta varias fotos (image_urls) o una sola (image_url, compatibilidad).
+    const imgs: string[] = Array.isArray(image_urls) ? image_urls.filter(Boolean) : (image_url ? [image_url] : [])
 
-    // Se puede enviar solo texto, solo imagen, o ambos.
-    if (!conversation_id || !contact_id || (!message && !image_url)) {
+    // Se puede enviar solo texto, solo foto(s), o ambos.
+    if (!conversation_id || !contact_id || (!message && imgs.length === 0)) {
       return new Response(
         JSON.stringify({ success: false, error: 'Faltan parámetros requeridos' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -86,7 +88,7 @@ Deno.serve(async (req) => {
 
     // Arma los mensajes: primero la imagen (si hay), luego el texto (si hay).
     const mcMessages: Array<Record<string, unknown>> = []
-    if (image_url) mcMessages.push({ type: 'image', url: image_url })
+    for (const u of imgs) mcMessages.push({ type: 'image', url: u })
     if (message) mcMessages.push({ type: 'text', text: message })
     const contentPayload: Record<string, unknown> = { messages: mcMessages }
     if (contentType) contentPayload.type = contentType
@@ -154,21 +156,19 @@ Deno.serve(async (req) => {
     const mcMessageId =
       mcResult?.data?.message_id ?? mcResult?.message_id ?? null
 
+    // Una fila por cada foto + una fila para el texto (si hay).
+    const rows: Array<Record<string, unknown>> = imgs.map((u) => ({
+      conversation_id, contact_id, direction: 'outbound', content: '', image_url: u,
+      channel: ch, sent_at: now, send_status: 'sent', manychat_message_id: null,
+    }))
+    if (message) rows.push({
+      conversation_id, contact_id, direction: 'outbound', content: message, image_url: null,
+      channel: ch, sent_at: now, send_status: 'sent', manychat_message_id: mcMessageId ? String(mcMessageId) : null,
+    })
     const { data: msgInserted, error: insertErr } = await supabase
       .from('messages')
-      .insert({
-        conversation_id,
-        contact_id,
-        direction: 'outbound',
-        content: message || '',
-        image_url: image_url || null,
-        channel: ch,
-        sent_at: now,
-        send_status: 'sent',
-        manychat_message_id: mcMessageId ? String(mcMessageId) : null,
-      })
+      .insert(rows)
       .select('id')
-      .single()
 
     if (insertErr || !msgInserted) {
       // Caso raro: ManyChat envio OK pero no pudimos guardar.
@@ -185,15 +185,16 @@ Deno.serve(async (req) => {
     }
 
     // Update conversation last_message
+    const resumen = message || (imgs.length > 1 ? `📷 ${imgs.length} fotos` : '📷 Foto')
     await supabase
       .from('conversations')
-      .update({ last_message: message || '📷 Foto', last_message_at: now })
+      .update({ last_message: resumen, last_message_at: now })
       .eq('id', conversation_id)
 
     return new Response(
       JSON.stringify({
         success: true,
-        message_id: msgInserted.id,
+        message_id: Array.isArray(msgInserted) ? msgInserted[0]?.id : msgInserted?.id,
         send_status: 'sent',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

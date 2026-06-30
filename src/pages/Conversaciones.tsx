@@ -324,8 +324,8 @@ function TabMensajes() {
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<{ message: string; isWindowClosed: boolean } | null>(null);
-  // Foto adjunta a la respuesta (se sube a Storage y se manda al cliente).
-  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  // Fotos adjuntas a la respuesta (se suben a Storage y se mandan al cliente).
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const replyFileRef = useRef<HTMLInputElement>(null);
   const [vendedoresList, setVendedoresList] = useState<Vendedor[]>([]);
@@ -400,21 +400,26 @@ function TabMensajes() {
   };
 
 
-  // Sube una foto a Storage y la deja lista para enviar al cliente.
+  // Sube una o varias fotos a Storage y las deja listas para enviar.
   const handlePickReplyImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { setSendError({ message: "Solo se pueden adjuntar imágenes.", isWindowClosed: false }); return; }
+    if (files.length === 0) return;
+    const imgs = files.filter((f) => f.type.startsWith("image/"));
+    if (imgs.length === 0) { setSendError({ message: "Solo se pueden adjuntar imágenes.", isWindowClosed: false }); return; }
     setUploadingImage(true);
     setSendError(null);
     try {
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `chat/${selectedConvId || "x"}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("vehiculos-fotos").upload(path, file, { upsert: true, contentType: file.type });
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from("vehiculos-fotos").getPublicUrl(path);
-      setPendingImage(pub.publicUrl);
+      const urls: string[] = [];
+      for (let i = 0; i < imgs.length; i++) {
+        const file = imgs[i];
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `chat/${selectedConvId || "x"}/${Date.now()}_${i}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("vehiculos-fotos").upload(path, file, { upsert: true, contentType: file.type });
+        if (upErr) throw upErr;
+        urls.push(supabase.storage.from("vehiculos-fotos").getPublicUrl(path).data.publicUrl);
+      }
+      setPendingImages((prev) => [...prev, ...urls]);
     } catch (err: any) {
       setSendError({ message: `No se pudo subir la foto: ${err?.message || err}`, isWindowClosed: false });
     } finally {
@@ -423,46 +428,47 @@ function TabMensajes() {
   };
 
   const handleSendReply = async () => {
-    if ((!replyText.trim() && !pendingImage) || sending || !selectedConvId) return;
+    if ((!replyText.trim() && pendingImages.length === 0) || sending || !selectedConvId) return;
     const conv = conversations.find((c) => c.id === selectedConvId);
     if (!conv) return;
     const msgText = replyText.trim();
-    const img = pendingImage;
+    const imgs = pendingImages;
     setReplyText("");
-    setPendingImage(null);
+    setPendingImages([]);
     setSendError(null);
 
-    // Optimistic: agregar mensaje en pending mientras ManyChat decide
-    const tempId = `temp-${Date.now()}`;
-    const optimisticMsg: Message = {
-      id: tempId,
-      conversation_id: conv.id,
-      contact_id: conv.contact_id,
-      direction: "outbound",
-      content: msgText,
-      image_url: img,
-      channel: conv.channel,
-      sent_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      send_status: "pending",
-    };
-    setMessages((prev) => [...prev, optimisticMsg]);
+    // Optimistic: una burbuja por cada foto + una por el texto.
+    const baseId = Date.now();
+    const optimistic: Message[] = imgs.map((u, i) => ({
+      id: `temp-${baseId}-${i}`, conversation_id: conv.id, contact_id: conv.contact_id,
+      direction: "outbound", content: "", image_url: u, channel: conv.channel,
+      sent_at: new Date().toISOString(), created_at: new Date().toISOString(), send_status: "pending",
+    }));
+    if (msgText) optimistic.push({
+      id: `temp-${baseId}-txt`, conversation_id: conv.id, contact_id: conv.contact_id,
+      direction: "outbound", content: msgText, image_url: null, channel: conv.channel,
+      sent_at: new Date().toISOString(), created_at: new Date().toISOString(), send_status: "pending",
+    });
+    setMessages((prev) => [...prev, ...optimistic]);
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("manychat-send-message", {
-        body: { conversation_id: conv.id, contact_id: conv.contact_id, message: msgText, channel: conv.channel, image_url: img },
+        body: { conversation_id: conv.id, contact_id: conv.contact_id, message: msgText, channel: conv.channel, image_urls: imgs },
       });
       const success = !error && data?.success;
       if (!success) {
-        // Falló → remover el optimistic message Y mostrar banner persistente
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        // Falló → remover los optimistic Y mostrar banner persistente
+        setMessages((prev) => prev.filter((m) => !m.id.startsWith(`temp-${baseId}`)));
         const errMsg = data?.error || error?.message || "No se pudo enviar el mensaje.";
         const isWindowClosed = data?.send_status === "failed_window_closed";
         setSendError({ message: errMsg, isWindowClosed });
-        // Devolver el texto y la foto al input para reintentar
+        // Devolver el texto y las fotos al input para reintentar
         setReplyText(msgText);
-        setPendingImage(img);
+        setPendingImages(imgs);
       } else {
+        // OK: limpiar optimistic y recargar para traer las filas reales.
+        setMessages((prev) => prev.filter((m) => !m.id.startsWith(`temp-${baseId}`)));
+        loadMessages(conv.id, conv.contact_id, conv.channel);
         // OK: actualizar list y dejar que realtime reemplace el temp con el real
         setConversations((prev) => prev.map((c) => c.id === conv.id ? { ...c, last_message: msgText, last_message_at: new Date().toISOString() } : c));
       }
@@ -904,29 +910,30 @@ function TabMensajes() {
                   </button>
                 </div>
               )}
-              {/* Preview de la foto adjunta lista para enviar */}
-              {(pendingImage || uploadingImage) && (
-                <div className="px-4 pt-3 flex items-center gap-2">
-                  {uploadingImage ? (
-                    <div className="flex items-center gap-2 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-                      <Loader2 size={14} className="animate-spin" /> Subiendo foto…
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <img src={pendingImage!} alt="Adjunto" className="h-16 w-16 rounded-lg object-cover border" style={{ borderColor: "hsl(var(--border))" }} />
+              {/* Preview de las fotos adjuntas listas para enviar */}
+              {(pendingImages.length > 0 || uploadingImage) && (
+                <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
+                  {pendingImages.map((url, i) => (
+                    <div key={i} className="relative">
+                      <img src={url} alt={`Adjunto ${i + 1}`} className="h-16 w-16 rounded-lg object-cover border" style={{ borderColor: "hsl(var(--border))" }} />
                       <button
-                        onClick={() => setPendingImage(null)}
+                        onClick={() => setPendingImages((prev) => prev.filter((_, j) => j !== i))}
                         className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow"
                         title="Quitar foto"
                       >
                         <X size={12} />
                       </button>
                     </div>
+                  ))}
+                  {uploadingImage && (
+                    <div className="flex items-center gap-2 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      <Loader2 size={14} className="animate-spin" /> Subiendo…
+                    </div>
                   )}
                 </div>
               )}
               <div className="px-4 py-3 border-t flex items-center gap-2" style={{ borderColor: "hsl(var(--border))" }}>
-                <input ref={replyFileRef} type="file" accept="image/*" className="hidden" onChange={handlePickReplyImage} />
+                <input ref={replyFileRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePickReplyImage} />
                 <button
                   onClick={() => replyFileRef.current?.click()}
                   disabled={sending || uploadingImage}
@@ -939,7 +946,7 @@ function TabMensajes() {
                 <input
                   value={replyText}
                   onChange={(e) => { setReplyText(e.target.value); if (sendError) setSendError(null); }}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && (replyText.trim() || pendingImage) && !sending) { e.preventDefault(); handleSendReply(); } }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && (replyText.trim() || pendingImages.length) && !sending) { e.preventDefault(); handleSendReply(); } }}
                   placeholder="Escribe una respuesta al cliente..."
                   disabled={sending}
                   className="flex-1 px-3 py-2 rounded-lg text-sm outline-none border disabled:opacity-50"
@@ -947,13 +954,13 @@ function TabMensajes() {
                 />
                 <button
                   onClick={handleSendReply}
-                  disabled={(!replyText.trim() && !pendingImage) || sending}
+                  disabled={(!replyText.trim() && pendingImages.length === 0) || sending}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all"
                   style={{
-                    background: ((!replyText.trim() && !pendingImage) || sending) ? "hsl(var(--muted))" : "hsl(var(--primary))",
-                    color: ((!replyText.trim() && !pendingImage) || sending) ? "hsl(var(--muted-foreground))" : "white",
-                    cursor: ((!replyText.trim() && !pendingImage) || sending) ? "not-allowed" : "pointer",
-                    opacity: ((!replyText.trim() && !pendingImage) || sending) ? 0.6 : 1,
+                    background: ((!replyText.trim() && pendingImages.length === 0) || sending) ? "hsl(var(--muted))" : "hsl(var(--primary))",
+                    color: ((!replyText.trim() && pendingImages.length === 0) || sending) ? "hsl(var(--muted-foreground))" : "white",
+                    cursor: ((!replyText.trim() && pendingImages.length === 0) || sending) ? "not-allowed" : "pointer",
+                    opacity: ((!replyText.trim() && pendingImages.length === 0) || sending) ? 0.6 : 1,
                   }}
                 >
                   {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
