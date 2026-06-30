@@ -324,21 +324,16 @@ async function describeCar(base64: string, mimeType: string, apiKey: string): Pr
 }
 
 function buildStudioPrompt(carDesc: string): string {
-  const detected = carDesc
-    ? `DETECTED FROM THE PHOTO (treat as absolute rules for identity and color):\n${carDesc}\n\n`
-    : "";
+  const color = carDesc ? ` (${carDesc})` : "";
+  // Estilo de edición directo, que es como mejor responden nano banana y similares.
   return (
-`Create a professional dealership catalog photo of THIS EXACT car on a white studio background.
+`Edit this photo into a professional car-dealership studio shot.
 
-${detected}RULE 1 — COLOR (most important): keep the car's paint color EXACTLY as detected above, same exact shade and finish (metallic stays metallic). NEVER lighten, whiten, brighten or desaturate the car to match the white background. A grey/silver car must NOT become white. Keep the same model, body shape, wheels/rims, trim, badges and license plate.
+Keep the SAME car${color}: same model, body, wheels, rims, badges and license plate. Most important: keep the car's EXACT original paint color and finish — do NOT change, lighten or wash out the color. If it is grey/silver it must stay that same grey/silver.
 
-RULE 2 — STANDARD ANGLE (always the same): show the car in a STANDARD three-quarter FRONT view turned slightly to the LEFT — the front grille and headlights face the camera and the car's LEFT side recedes toward the right of the frame (a classic dealership hero shot). If the input photo is at a different angle, REPOSITION the camera to this exact standard 3/4 front-left view. Every output must use this SAME angle so all cars look uniform.
+Show the car from a front three-quarter view turned slightly to the LEFT (front grille and headlights toward the camera, the left side visible), centered and occupying about 80% of the frame. If the original is at another angle, rotate the viewpoint to this same front 3/4 left view.
 
-RULE 3 — STANDARD FRAMING (always the same size): the car is centered, fully visible, sitting on the floor, and occupies about 80% of the frame width with even margins around it. Same zoom and size every time, horizontal (landscape) composition.
-
-STUDIO: pure seamless white background (#FFFFFF), bright soft even lighting, a soft realistic contact shadow and a subtle reflection on the floor under the car. Photorealistic, high quality.
-
-OUTPUT: the SAME car with the SAME exact color, shown in the standard 3/4 front-left angle and standard framing, on a pure white studio background. No text, no logos, no watermarks, no people, no other cars.`
+Replace the background with a clean, seamless PURE WHITE studio (#FFFFFF), bright soft even lighting, a soft contact shadow under the car and a subtle floor reflection. Photorealistic, high quality. No text, no people, no other cars.`
   );
 }
 
@@ -355,9 +350,10 @@ export async function applyVehicleStudioAI(dataUrl: string): Promise<AiImageResu
     // Paso 1: detectar color y ángulo para potenciar el prompt.
     const carDesc = await describeCar(base64, mimeType, config.apiKey);
     console.log("[aiImageService] Detección de color/ángulo:", carDesc || "(sin detección)");
-    // Paso 2: generar con el modelo de imagen más fuerte (cae a otros si no existe).
+    // Paso 2: generar con nano banana (gemini-2.5-flash-image), el más probado
+    // para edición fiel; cae a los otros modelos si no estuviera disponible.
     const prompt = buildStudioPrompt(carDesc);
-    return await processWithGemini(realDataUrl, prompt, config.apiKey, "gemini-3-pro-image");
+    return await processWithGemini(realDataUrl, prompt, config.apiKey, "gemini-2.5-flash-image");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: `Error inesperado: ${msg}` };
