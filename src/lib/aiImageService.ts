@@ -325,19 +325,20 @@ async function describeCar(base64: string, mimeType: string, apiKey: string): Pr
 
 function buildStudioPrompt(carDesc: string): string {
   const detected = carDesc
-    ? `DETECTED FROM THE PHOTO (treat these as absolute rules):\n${carDesc}\n\n`
+    ? `DETECTED FROM THE PHOTO (treat as absolute rules for identity and color):\n${carDesc}\n\n`
     : "";
   return (
-`You are ONLY replacing the background of this car photo with a white studio. You are NOT redrawing the car.
+`Create a professional dealership catalog photo of THIS EXACT car on a white studio background.
 
-${detected}CRITICAL RULES — DO NOT VIOLATE:
-1. KEEP THE CAR'S PAINT COLOR EXACTLY AS DETECTED ABOVE — same exact shade and finish (metallic stays metallic). NEVER lighten, whiten, brighten or desaturate the car to match the white background. A grey/silver car must NOT become white.
-2. KEEP THE EXACT SAME camera angle as detected, same framing, same zoom, same position and proportions. Do NOT rotate, reframe or rescale the car.
-3. Keep the wheels, rims, trim, badges and license plate identical.
+${detected}RULE 1 — COLOR (most important): keep the car's paint color EXACTLY as detected above, same exact shade and finish (metallic stays metallic). NEVER lighten, whiten, brighten or desaturate the car to match the white background. A grey/silver car must NOT become white. Keep the same model, body shape, wheels/rims, trim, badges and license plate.
 
-TASK — replace ONLY the background with a clean PURE WHITE studio (#FFFFFF seamless infinity cove), bright, no objects, with a soft realistic contact shadow and a subtle floor reflection under the car. Photorealistic, professional dealership catalog quality.
+RULE 2 — STANDARD ANGLE (always the same): show the car in a STANDARD three-quarter FRONT view turned slightly to the LEFT — the front grille and headlights face the camera and the car's LEFT side recedes toward the right of the frame (a classic dealership hero shot). If the input photo is at a different angle, REPOSITION the camera to this exact standard 3/4 front-left view. Every output must use this SAME angle so all cars look uniform.
 
-OUTPUT: the SAME car, SAME exact color, SAME angle and framing, on a pure white studio background. No text, no logos, no people, no other cars.`
+RULE 3 — STANDARD FRAMING (always the same size): the car is centered, fully visible, sitting on the floor, and occupies about 80% of the frame width with even margins around it. Same zoom and size every time, horizontal (landscape) composition.
+
+STUDIO: pure seamless white background (#FFFFFF), bright soft even lighting, a soft realistic contact shadow and a subtle reflection on the floor under the car. Photorealistic, high quality.
+
+OUTPUT: the SAME car with the SAME exact color, shown in the standard 3/4 front-left angle and standard framing, on a pure white studio background. No text, no logos, no watermarks, no people, no other cars.`
   );
 }
 
