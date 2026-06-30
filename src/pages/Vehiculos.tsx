@@ -1726,7 +1726,7 @@ export default function Vehiculos() {
 
                         {/* Botones de acción — SIEMPRE visibles (también en celular) */}
                         {slot.preview && processingAI !== i && (
-                          <div className="absolute top-2 right-2 flex gap-1 opacity-95 transition-opacity z-10">
+                          <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1 justify-end opacity-95 transition-opacity z-10">
                             {/* Recorte (remove.bg): solo cambia el FONDO a blanco, MISMO ángulo. */}
                             <button
                               onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); applyAIBackground(i); }}
