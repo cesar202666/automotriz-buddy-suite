@@ -285,6 +285,84 @@ async function ensureDataUrl(src: string): Promise<string> {
   return src;
 }
 
+// ─── Estudio IA potenciado (2 pasos: detectar color → generar) ────
+// Paso 1: un modelo de visión describe el color EXACTO (nombre + HEX) y el
+// ángulo. Paso 2: ese dato se inyecta como regla en el prompt y se genera con
+// el modelo de imagen más fuerte (gemini-3-pro-image). Reduce mucho el cambio
+// de color frente al método anterior, aunque sigue siendo generativo.
+const VISION_MODEL = "gemini-2.5-flash";
+
+async function describeCar(base64: string, mimeType: string, apiKey: string): Promise<string> {
+  const endpoint =
+    `https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const prompt =
+    "Mira la foto de este auto y responde SOLO con una línea, sin explicaciones, en este formato EXACTO:\n" +
+    "COLOR: <nombre preciso del color de la pintura, indica si es metalizado o perlado> (<código HEX aproximado>) | ANGULO: <vista, ej: frontal 3/4 izquierda, lateral, trasera 3/4>\n" +
+    "Sé muy preciso con el tono (ej: 'gris plata metalizado', no solo 'gris').";
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }],
+    generationConfig: { temperature: 0 },
+  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return "";
+    const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    return parts.map(p => p.text || "").join(" ").trim();
+  } catch {
+    clearTimeout(timeoutId);
+    return "";
+  }
+}
+
+function buildStudioPrompt(carDesc: string): string {
+  const detected = carDesc
+    ? `DETECTED FROM THE PHOTO (treat these as absolute rules):\n${carDesc}\n\n`
+    : "";
+  return (
+`You are ONLY replacing the background of this car photo with a white studio. You are NOT redrawing the car.
+
+${detected}CRITICAL RULES — DO NOT VIOLATE:
+1. KEEP THE CAR'S PAINT COLOR EXACTLY AS DETECTED ABOVE — same exact shade and finish (metallic stays metallic). NEVER lighten, whiten, brighten or desaturate the car to match the white background. A grey/silver car must NOT become white.
+2. KEEP THE EXACT SAME camera angle as detected, same framing, same zoom, same position and proportions. Do NOT rotate, reframe or rescale the car.
+3. Keep the wheels, rims, trim, badges and license plate identical.
+
+TASK — replace ONLY the background with a clean PURE WHITE studio (#FFFFFF seamless infinity cove), bright, no objects, with a soft realistic contact shadow and a subtle floor reflection under the car. Photorealistic, professional dealership catalog quality.
+
+OUTPUT: the SAME car, SAME exact color, SAME angle and framing, on a pure white studio background. No text, no logos, no people, no other cars.`
+  );
+}
+
+/** Estudio IA potenciado: detecta el color y genera con gemini-3-pro-image. */
+export async function applyVehicleStudioAI(dataUrl: string): Promise<AiImageResult> {
+  const config = loadActiveConfig();
+  if (!config || config.provider !== "gemini") {
+    return { ok: false, error: "Necesitas tu API Key de Gemini en Configuración para usar el Estudio IA." };
+  }
+  if (!dataUrl) return { ok: false, error: "No se proporcionó imagen." };
+  try {
+    const realDataUrl = await ensureDataUrl(dataUrl);
+    const { base64, mimeType } = parseDataUrl(realDataUrl);
+    // Paso 1: detectar color y ángulo para potenciar el prompt.
+    const carDesc = await describeCar(base64, mimeType, config.apiKey);
+    console.log("[aiImageService] Detección de color/ángulo:", carDesc || "(sin detección)");
+    // Paso 2: generar con el modelo de imagen más fuerte (cae a otros si no existe).
+    const prompt = buildStudioPrompt(carDesc);
+    return await processWithGemini(realDataUrl, prompt, config.apiKey, "gemini-3-pro-image");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Error inesperado: ${msg}` };
+  }
+}
+
 export async function applyVehicleBackground(
   dataUrl: string,
   prompt: string,

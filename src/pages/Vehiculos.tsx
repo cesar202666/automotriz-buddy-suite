@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import { useApp, Vehiculo, VehiculoDoc } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { removeBgOnWhite, getRemoveBgKey, setRemoveBgKey, hasRemoveBgKey } from "@/lib/removeBgService";
+import { applyVehicleStudioAI, hasAiConfig } from "@/lib/aiImageService";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
 import { subirFotosAStorage, subirDocAStorage } from "@/lib/fotoUpload";
@@ -380,6 +381,33 @@ export default function Vehiculos() {
     const slot = fotoSlots[slotIndex];
     if (slot?.preview) runAI(slot.preview, slotIndex);
   };
+
+  // Estudio IA (Gemini): detecta el color y genera fondo de estudio con reflejo.
+  // Más "lindo" pero generativo (puede variar algo el color). Opción para comparar.
+  const runStudioAI = useCallback(async (slotIndex: number) => {
+    const slot = fotoSlots[slotIndex];
+    if (!slot?.preview) return;
+    if (!hasAiConfig()) {
+      setAiError("❌ Falta tu API Key de Gemini. Ve a Configuración → pega tu clave de Google Gemini → Guardar APIs.");
+      return;
+    }
+    setAiError(null);
+    setProcessingAI(slotIndex);
+    try {
+      const result = await applyVehicleStudioAI(slot.preview);
+      if (result.ok && result.dataUrl) {
+        setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s));
+        setAiError(null);
+      } else {
+        setAiError(`⚠️ ${result.error ?? "El Estudio IA no pudo procesar la imagen."}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAiError(`⚠️ Error inesperado: ${msg}`);
+    } finally {
+      setProcessingAI(null);
+    }
+  }, [fotoSlots]);
 
   const handleFotoChange = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1648,13 +1676,21 @@ export default function Vehiculos() {
                         {/* Botones de acción — SIEMPRE visibles (también en celular) */}
                         {slot.preview && processingAI !== i && (
                           <div className="absolute top-2 right-2 flex gap-1 opacity-95 transition-opacity z-10">
-                            {/* IA — transformar fondo. En solo lectura entra a edición. */}
+                            {/* Recorte (remove.bg): fondo blanco fiel al color del auto. */}
                             <button
                               onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); applyAIBackground(i); }}
                               className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
                               style={{ background: "hsl(var(--primary))" }}
-                              title="Transformar fondo con IA (estudio blanco)">
+                              title="Recorte: fondo blanco conservando el color exacto (recomendado)">
                               <Sparkles size={11} /> IA
+                            </button>
+                            {/* Estudio IA (Gemini): fondo de estudio con reflejo (generativo). */}
+                            <button
+                              onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); runStudioAI(i); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
+                              style={{ background: "#7c3aed" }}
+                              title="Estudio IA (Gemini): fondo de estudio con reflejo. Detecta el color, pero es generativo y puede variar un poco.">
+                              <Star size={11} /> Estudio
                             </button>
                             {/* Download — SIEMPRE activo (es solo lectura) */}
                             {/* Agrandar — ver la foto grande (exhibir en pantalla) */}
