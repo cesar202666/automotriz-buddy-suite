@@ -1631,6 +1631,18 @@ export default function Vehiculos() {
                     )}
                   </div>
 
+                  {/* Aviso/Error de IA — visible siempre (no escondido en el panel). */}
+                  {aiError && (
+                    <div className="mb-3 flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold"
+                      style={{ background: "#fef2f2", color: "#b91c1c", border: "1.5px solid #fca5a5" }}>
+                      <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                      <span>{aiError}</span>
+                      <button onClick={() => setAiError(null)} className="ml-auto shrink-0" style={{ color: "#b91c1c" }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
                   {/* ── Photo grid ──────────────────────────────────────── */}
                   <p className="text-[11px] mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
                     💡 Las fotos se suben por orden alfabético del nombre del archivo. Usa las flechas ◀ ▶ en cada foto, o arrástralas, para reordenarlas.
@@ -1758,9 +1770,11 @@ export default function Vehiculos() {
                           </div>
                         )}
 
-                        {/* Insignia PORTADA en la primera foto (siempre visible) */}
+                        {/* Insignia PORTADA en la primera foto. Va abajo-izquierda y
+                            con pointer-events-none para NO tapar ni bloquear los
+                            botones de acción (IA/Estudio) de arriba. */}
                         {slot.preview && i === 0 && (
-                          <span className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow"
+                          <span className="absolute bottom-9 left-2 z-10 pointer-events-none flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow"
                             style={{ background: "rgb(34 197 94)" }}>
                             <Star size={10} className="fill-white" /> PORTADA
                           </span>
