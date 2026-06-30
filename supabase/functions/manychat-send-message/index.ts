@@ -25,9 +25,10 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { conversation_id, contact_id, message, channel } = await req.json()
+    const { conversation_id, contact_id, message, channel, image_url } = await req.json()
 
-    if (!conversation_id || !contact_id || !message) {
+    // Se puede enviar solo texto, solo imagen, o ambos.
+    if (!conversation_id || !contact_id || (!message && !image_url)) {
       return new Response(
         JSON.stringify({ success: false, error: 'Faltan parámetros requeridos' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -83,9 +84,11 @@ Deno.serve(async (req) => {
             ? 'facebook'
             : undefined
 
-    const contentPayload: Record<string, unknown> = {
-      messages: [{ type: 'text', text: message }],
-    }
+    // Arma los mensajes: primero la imagen (si hay), luego el texto (si hay).
+    const mcMessages: Array<Record<string, unknown>> = []
+    if (image_url) mcMessages.push({ type: 'image', url: image_url })
+    if (message) mcMessages.push({ type: 'text', text: message })
+    const contentPayload: Record<string, unknown> = { messages: mcMessages }
     if (contentType) contentPayload.type = contentType
 
     let mcResponse: Response
@@ -157,7 +160,8 @@ Deno.serve(async (req) => {
         conversation_id,
         contact_id,
         direction: 'outbound',
-        content: message,
+        content: message || '',
+        image_url: image_url || null,
         channel: ch,
         sent_at: now,
         send_status: 'sent',
@@ -183,7 +187,7 @@ Deno.serve(async (req) => {
     // Update conversation last_message
     await supabase
       .from('conversations')
-      .update({ last_message: message, last_message_at: now })
+      .update({ last_message: message || '📷 Foto', last_message_at: now })
       .eq('id', conversation_id)
 
     return new Response(
