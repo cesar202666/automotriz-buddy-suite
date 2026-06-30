@@ -1429,14 +1429,20 @@ export default function Vehiculos() {
                           <ChevronDown size={12} />
                         </button>
                         {showDownloadMenu && !zipDownloading && (
-                          <>
-                            <div className="fixed inset-0 z-40" onClick={() => setShowDownloadMenu(false)} />
+                          <div
+                            className="fixed inset-0 z-[70] bg-black/40 flex items-end sm:items-center justify-center sm:p-4"
+                            onClick={() => setShowDownloadMenu(false)}
+                          >
                             <div
-                              className="absolute right-0 top-full mt-1 w-80 rounded-lg shadow-xl border bg-popover z-50 overflow-hidden"
+                              className="w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl border max-h-[85vh] overflow-y-auto"
                               style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))" }}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <div className="px-3 py-2 text-[10px] uppercase tracking-wider border-b" style={{ color: "hsl(var(--muted-foreground))", borderColor: "hsl(var(--border))" }}>
-                                Otras opciones
+                              <div className="flex items-center justify-between px-4 py-3 text-[11px] font-semibold uppercase tracking-wider border-b sticky top-0" style={{ color: "hsl(var(--muted-foreground))", borderColor: "hsl(var(--border))", background: "hsl(var(--background))" }}>
+                                Opciones de descarga
+                                <button onClick={() => setShowDownloadMenu(false)} aria-label="Cerrar" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                  <X size={18} />
+                                </button>
                               </div>
                               {/* Compartir con app (WhatsApp, Fotos, Marketplace…): util en celular */}
                               {SUPPORTS_SHARE_FILES && (
@@ -1486,7 +1492,7 @@ export default function Vehiculos() {
                                 </div>
                               </button>
                             </div>
-                          </>
+                          </div>
                         )}
                       </div>
                     </div>
