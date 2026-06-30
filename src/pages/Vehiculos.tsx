@@ -1720,20 +1720,20 @@ export default function Vehiculos() {
                         {/* Botones de acción — SIEMPRE visibles (también en celular) */}
                         {slot.preview && processingAI !== i && (
                           <div className="absolute top-2 right-2 flex gap-1 opacity-95 transition-opacity z-10">
-                            {/* Recorte (remove.bg): fondo blanco fiel al color del auto. */}
+                            {/* Recorte (remove.bg): solo cambia el FONDO a blanco, MISMO ángulo. */}
                             <button
                               onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); applyAIBackground(i); }}
                               className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
                               style={{ background: "hsl(var(--primary))" }}
-                              title="Recorte: fondo blanco conservando el color exacto (recomendado)">
-                              <Sparkles size={11} /> IA
+                              title="FONDO: deja el fondo blanco conservando el color exacto. NO cambia el ángulo del auto.">
+                              <Sparkles size={11} /> Fondo
                             </button>
-                            {/* Estudio IA (Gemini): fondo de estudio con reflejo (generativo). */}
+                            {/* Estudio IA (Gemini): reorienta al ángulo estándar + fondo estudio. */}
                             <button
                               onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); runStudioAI(i); }}
                               className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
                               style={{ background: "#7c3aed" }}
-                              title="Estudio IA (Gemini): fondo de estudio con reflejo. Detecta el color, pero es generativo y puede variar un poco.">
+                              title="ESTUDIO IA: reorienta el auto al ángulo estándar (3/4 frontal) y le pone fondo de estudio. Es generativo.">
                               <Star size={11} /> Estudio
                             </button>
                             {/* Download — SIEMPRE activo (es solo lectura) */}
