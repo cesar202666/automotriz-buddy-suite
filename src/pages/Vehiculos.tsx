@@ -387,6 +387,13 @@ export default function Vehiculos() {
   const runStudioAI = useCallback(async (slotIndex: number) => {
     const slot = fotoSlots[slotIndex];
     if (!slot?.preview) return;
+    // Advertencia: el Estudio IA es generativo y PUEDE cambiar el color del auto.
+    if (!window.confirm(
+      "⚠️ ESTUDIO IA (experimental)\n\n" +
+      "Reorienta el auto y le pone fondo de estudio, PERO al ser IA generativa puede CAMBIAR EL COLOR del auto.\n\n" +
+      "Para fondo blanco seguro (sin cambiar color) usá el botón azul \"Fondo\".\n\n" +
+      "¿Querés continuar igual con el Estudio IA?"
+    )) return;
     if (!hasAiConfig()) {
       setAiError("❌ Falta tu API Key de Gemini. Ve a Configuración → pega tu clave de Google Gemini → Guardar APIs.");
       return;
@@ -1733,8 +1740,8 @@ export default function Vehiculos() {
                               onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); runStudioAI(i); }}
                               className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
                               style={{ background: "#7c3aed" }}
-                              title="ESTUDIO IA: reorienta el auto al ángulo estándar (3/4 frontal) y le pone fondo de estudio. Es generativo.">
-                              <Star size={11} /> Estudio
+                              title="ESTUDIO IA (EXPERIMENTAL): reorienta + fondo de estudio, pero puede CAMBIAR EL COLOR. Para color fiel usá 'Fondo'.">
+                              <Star size={11} /> Estudio <span className="opacity-80 font-normal">beta</span>
                             </button>
                             {/* Download — SIEMPRE activo (es solo lectura) */}
                             {/* Agrandar — ver la foto grande (exhibir en pantalla) */}
