@@ -27,3 +27,6 @@ verify_jwt = false
 
 [functions.web-lead]
 verify_jwt = false
+
+[functions.web-chat]
+verify_jwt = false
