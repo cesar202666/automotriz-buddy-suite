@@ -1105,14 +1105,30 @@ export default function Vehiculos() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setForm({ ...form, publicadoWeb: !form.publicadoWeb })}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
-                      style={{ background: form.publicadoWeb ? "rgb(34 197 94)" : "hsl(var(--primary))" }}
-                    >
-                      {form.publicadoWeb ? <><CheckSquare size={15} /> Publicado</> : <><Globe size={15} /> Publicar</>}
-                    </button>
+                    {form.publicadoWeb ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "rgb(34 197 94)" }}>
+                          <CheckSquare size={15} /> Publicado
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, publicadoWeb: false })}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold border"
+                          style={{ borderColor: "rgb(220 38 38)", color: "rgb(220 38 38)" }}
+                        >
+                          <EyeOff size={15} /> Quitar publicación
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, publicadoWeb: true })}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
+                        style={{ background: "hsl(var(--primary))" }}
+                      >
+                        <Globe size={15} /> Publicar
+                      </button>
+                    )}
                   </div>
 
                   <div className="section-divider mb-4">DATOS PRINCIPALES</div>
@@ -1384,14 +1400,30 @@ export default function Vehiculos() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => { if (isReadOnly) setIsReadOnly(false); setForm({ ...form, publicadoWeb: !form.publicadoWeb }); }}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
-                      style={{ background: form.publicadoWeb ? "rgb(34 197 94)" : "hsl(var(--primary))" }}
-                    >
-                      {form.publicadoWeb ? <><CheckSquare size={15} /> Publicado</> : <><Globe size={15} /> Publicar</>}
-                    </button>
+                    {form.publicadoWeb ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "rgb(34 197 94)" }}>
+                          <CheckSquare size={15} /> Publicado
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { if (isReadOnly) setIsReadOnly(false); setForm({ ...form, publicadoWeb: false }); }}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold border"
+                          style={{ borderColor: "rgb(220 38 38)", color: "rgb(220 38 38)" }}
+                        >
+                          <EyeOff size={15} /> Quitar publicación
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { if (isReadOnly) setIsReadOnly(false); setForm({ ...form, publicadoWeb: true }); }}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
+                        style={{ background: "hsl(var(--primary))" }}
+                      >
+                        <Globe size={15} /> Publicar
+                      </button>
+                    )}
                   </div>
 
                   {/* Header + acciones */}
