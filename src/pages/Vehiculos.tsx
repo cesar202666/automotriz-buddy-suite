@@ -4,7 +4,6 @@ import JSZip from "jszip";
 import { useApp, Vehiculo, VehiculoDoc } from "@/context/AppContext";
 import * as XLSX from "xlsx";
 import { removeBgOnWhite, getRemoveBgKey, setRemoveBgKey, hasRemoveBgKey } from "@/lib/removeBgService";
-import { applyVehicleStudioAI, hasAiConfig } from "@/lib/aiImageService";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { NumberInput } from "@/components/NumberInput";
 import { subirFotosAStorage, subirDocAStorage } from "@/lib/fotoUpload";
@@ -382,39 +381,6 @@ export default function Vehiculos() {
     if (slot?.preview) runAI(slot.preview, slotIndex);
   };
 
-  // Estudio IA (Gemini): detecta el color y genera fondo de estudio con reflejo.
-  // Más "lindo" pero generativo (puede variar algo el color). Opción para comparar.
-  const runStudioAI = useCallback(async (slotIndex: number) => {
-    const slot = fotoSlots[slotIndex];
-    if (!slot?.preview) return;
-    // Advertencia: el Estudio IA es generativo y PUEDE cambiar el color del auto.
-    if (!window.confirm(
-      "⚠️ ESTUDIO IA (experimental)\n\n" +
-      "Reorienta el auto y le pone fondo de estudio, PERO al ser IA generativa puede CAMBIAR EL COLOR del auto.\n\n" +
-      "Para fondo blanco seguro (sin cambiar color) usá el botón azul \"Fondo\".\n\n" +
-      "¿Querés continuar igual con el Estudio IA?"
-    )) return;
-    if (!hasAiConfig()) {
-      setAiError("❌ Falta tu API Key de Gemini. Ve a Configuración → pega tu clave de Google Gemini → Guardar APIs.");
-      return;
-    }
-    setAiError(null);
-    setProcessingAI(slotIndex);
-    try {
-      const result = await applyVehicleStudioAI(slot.preview);
-      if (result.ok && result.dataUrl) {
-        setFotoSlots(prev => prev.map((s, idx) => idx === slotIndex ? { ...s, preview: result.dataUrl! } : s));
-        setAiError(null);
-      } else {
-        setAiError(`⚠️ ${result.error ?? "El Estudio IA no pudo procesar la imagen."}`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setAiError(`⚠️ Error inesperado: ${msg}`);
-    } finally {
-      setProcessingAI(null);
-    }
-  }, [fotoSlots]);
 
   const handleFotoChange = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1734,14 +1700,6 @@ export default function Vehiculos() {
                               style={{ background: "hsl(var(--primary))" }}
                               title="FONDO: deja el fondo blanco conservando el color exacto. NO cambia el ángulo del auto.">
                               <Sparkles size={11} /> Fondo
-                            </button>
-                            {/* Estudio IA (Gemini): reorienta al ángulo estándar + fondo estudio. */}
-                            <button
-                              onClick={e => { e.stopPropagation(); if (isReadOnly) setIsReadOnly(false); runStudioAI(i); }}
-                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-white text-xs font-bold shadow-lg"
-                              style={{ background: "#7c3aed" }}
-                              title="ESTUDIO IA (EXPERIMENTAL): reorienta + fondo de estudio, pero puede CAMBIAR EL COLOR. Para color fiel usá 'Fondo'.">
-                              <Star size={11} /> Estudio <span className="opacity-80 font-normal">beta</span>
                             </button>
                             {/* Download — SIEMPRE activo (es solo lectura) */}
                             {/* Agrandar — ver la foto grande (exhibir en pantalla) */}
