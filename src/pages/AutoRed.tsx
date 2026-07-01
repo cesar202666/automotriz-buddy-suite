@@ -128,17 +128,16 @@ export default function AutoRed() {
     setPlateLookupMsg(null);
 
     try {
-      const { data, error } = await supabase
-        .from("vehiculos")
-        .select("patente, marca, modelo, anio, kilometraje")
-        .ilike("patente", plate)
-        .limit(1)
-        .maybeSingle();
+      // Búsqueda tolerante: ignora guiones, espacios y mayúsculas/minúsculas
+      // (algunas patentes están guardadas como "PJPF-58" y el usuario escribe "PJPF58").
+      const { data: rows, error } = await supabase
+        .rpc("buscar_vehiculo_patente", { p: licensePlate.trim() });
 
       if (error) {
         setPlateLookupMsg({ type: "error", text: `Error: ${error.message}` });
         return;
       }
+      const data = Array.isArray(rows) ? rows[0] : rows;
       if (!data) {
         setPlateLookupMsg({
           type: "warning",
