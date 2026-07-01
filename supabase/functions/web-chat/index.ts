@@ -126,12 +126,13 @@ CÓMO VENDES (como un buen vendedor):
 
 REGLA DE ORO — INVENTARIO: recomienda SOLO autos de la lista de abajo. NUNCA inventes autos, modelos, años, precios, cuotas ni condiciones. Si no hay algo que calce, dilo con honestidad y ofrece avisarle cuando ingrese, o pídele sus datos para buscarle opciones.
 
-CIERRE Y DERIVACIÓN A VENDEDOR HUMANO:
-- Cuando la persona quiera VISITAR la sucursal, AGENDAR, ver el auto en persona, ENVIAR o pedir DOCUMENTACIÓN, RESERVAR o COMPRAR: dile que la conectas con un ejecutivo que la seguirá atendiendo, y pídele su NOMBRE y TELÉFONO para coordinar (si aún no lo tienes).
-- También pide nombre y teléfono cuando note interés real en un auto, para que un ejecutivo le mande fotos y cierre los detalles.
+CUÁNDO PEDIR LOS DATOS (clave — NO los pidas antes de tiempo):
+- Tu prioridad es ASESORAR: muestra autos, da detalles, resuelve dudas. NO pidas nombre ni teléfono solo porque miró un auto o preguntó el precio. Muchos solo están mirando.
+- Pide el NOMBRE y TELÉFONO SOLO cuando la persona muestre intención REAL de avanzar: pregunta por FORMAS DE PAGO o FINANCIAMIENTO, quiere VISITAR la sucursal / ir a verlo / agendar, quiere RESERVAR o COMPRAR, pide o quiere enviar DOCUMENTACIÓN, o pide hablar con un ejecutivo/que lo llamen.
+- Cuando llegue ese momento, dile que lo conectas con un ejecutivo que lo seguirá atendiendo y pídele nombre y teléfono para coordinar.
 ${tieneTelefono
-  ? 'IMPORTANTE: YA TIENES su teléfono. Agradece (con su nombre si lo sabes), confirma que un ejecutivo de Egaña lo contactará muy pronto a ese número para coordinar la visita / documentación / compra, y cierra cálido. No sigas pidiendo datos.'
-  : 'Aún NO tienes su teléfono: sigue asesorando y, apenas haya interés o quiera visitar/comprar, pídele nombre y teléfono de forma natural.'}
+  ? 'IMPORTANTE: la persona ya mostró intención real y tienes su teléfono. Agradece (con su nombre si lo sabes), confirma que un ejecutivo de Egaña lo contactará muy pronto a ese número para coordinar el pago/visita/documentación, y cierra cálido. No sigas pidiendo datos.'
+  : 'Todavía es una consulta general: sigue asesorando y mostrando autos, SIN pedir datos. Solo pide nombre y teléfono cuando aparezca una señal real (pago, financiamiento, visita, reserva, compra o documentación).'}
 
 NO HAGAS: no prometas cosas absolutas ("te lo garantizo"), no des cuotas/tasas exactas (eso lo cierra el ejecutivo), no pidas RUT, tarjetas ni claves.
 
@@ -201,6 +202,17 @@ Deno.serve(async (req) => {
     // ¿El cliente dejó su teléfono? (en este mensaje o ya guardado)
     const phone = contact.phone || findPhone(message) || findPhone(convText)
 
+    // Señal de intención REAL de compra (no simples curiosos): pregunta por pago/
+    // financiamiento, quiere visitar, reservar, comprar, o pide documentación.
+    const intencionCompra = /(forma[s]? de pago|medio[s]? de pago|financ|cr[eé]dito|cuota|\bpie\b|abono|transferencia|visit|agendar|agenda|ir a ver|verlo|ver el auto|probarlo|test drive|reserv|comprar|comprarlo|lo quiero|me lo llevo|documenta|papeles|antecedentes|cotiz|hablar con (un |una )?(vendedor|ejecutivo|asesor|persona)|me llam|ll[aá]mame|ll[aá]menme|whatsapp)/i.test(convText + ' ' + message)
+    // Solo se deriva al vendedor si HAY teléfono Y HAY intención real de compra.
+    const escalar = !!phone && intencionCompra
+
+    // Guardamos el teléfono en el contacto aunque todavía no escalemos.
+    if (phone && phone !== contact.phone) {
+      await supabase.from('contacts').update({ phone }).eq('id', contactId)
+    }
+
     // ── 6. Generar respuesta con la IA (mismo proveedor que el agente) ──────
     const apiKey = Deno.env.get('AI_API_KEY')
     let reply = 'Gracias por escribir a Egaña Automotriz 🙌 Un ejecutivo te contactará a la brevedad.'
@@ -211,7 +223,7 @@ Deno.serve(async (req) => {
       // si el principal da 429 probamos otro antes de rendirnos.
       const modelos = [...new Set([chatModel, 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'])]
       const messages = [
-        { role: 'system', content: buildSystemPrompt(inventario, !!phone) },
+        { role: 'system', content: buildSystemPrompt(inventario, escalar) },
         ...(hist || []).slice(-10).map((h: { direction: string; content: string }) => ({ role: h.direction === 'outbound' ? 'assistant' : 'user', content: h.content })),
       ]
       let respondido = false
@@ -247,9 +259,9 @@ Deno.serve(async (req) => {
     // ── 7. Guardar respuesta del bot ────────────────────────────────────────
     await supabase.from('messages').insert({ conversation_id: conversationId, contact_id: contactId, direction: 'outbound', content: reply, channel: CHANNEL, sent_at: new Date().toISOString() })
 
-    // ── 8. ¿Escalar a vendedor humano? Cuando ya tenemos su teléfono. ───────
+    // ── 8. ¿Escalar? Solo con teléfono + intención real de compra ───────────
     let escalated = false
-    if (phone) {
+    if (escalar) {
       // Asignar vendedor con la lógica del sistema.
       const { data: cfgRows } = await supabase.from('configuracion_sistema').select('clave, valor').in('clave', ['ASIGNACION_MODO', 'VENDEDOR_DEFAULT', 'ASIGNACION_POR_CANAL'])
       const cfg: Record<string, string> = {}
