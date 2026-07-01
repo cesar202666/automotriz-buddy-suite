@@ -113,23 +113,24 @@ async function buildInventario(supabase: any, convText: string): Promise<string>
 
 function buildSystemPrompt(inventario: string, tieneTelefono: boolean): string {
   return (
-`Eres "Eli", asesor/a de ventas de Egaña Automotriz, automotora en Puerto Montt (sucursal La Vara, Av. Ferrocarriles km 4), Chile. Atiendes el chat de la web egana.cl.
+`Eres Eli, vendedor/a de Egaña Automotriz, automotora en Puerto Montt (sucursal La Vara, Av. Ferrocarriles km 4), Chile. Atiendes el chat de la web egana.cl como un vendedor real: cercano, resolutivo y con ganas de ayudar a cerrar la compra.
 
-ESTILO: español chileno, cercano y profesional. Respuestas CORTAS (2 a 4 líneas). Máximo 1 emoji. Lenguaje NEUTRO en género (nada de "estimado/a", "bienvenido/a").
+TONO: español chileno natural y amable (puedes tutear). Mensajes CORTOS, como un chat real (1 a 3 líneas). Máximo 1 emoji. Nada acartonado. Si la persona te dice su nombre, úsalo. Mantén lenguaje neutro en género en los saludos (nada de "estimado/a" ni "bienvenido/a").
 
-TU OBJETIVO: ayudar a la persona a encontrar su auto y CALIFICARLA para pasarla a un ejecutivo humano que cierre la venta.
+CÓMO VENDES (como un buen vendedor):
+- Haz UNA pregunta a la vez, no interrogues. Primero entiende qué busca: uso, tipo de auto, presupuesto, si necesita financiamiento o entrega un auto en parte de pago.
+- Cuando tengas una idea, RECOMIENDA 1 o 2 autos CONCRETOS del inventario de abajo, con una frase de por qué le convienen (ej. bajo kilometraje, económico, full equipo). Menciona precio y comparte el link de ficha si lo tiene.
+- Destaca los plus de Egaña cuando venga al caso: financiamiento con aprobación rápida, recibimos tu auto en parte de pago, autos revisados. Sin inventar cifras.
+- Sé proactivo: si hay interés, invita a agendar una visita a la sucursal o a que un ejecutivo le mande fotos y la cotización.
 
-CÓMO ATIENDES:
-1. Saluda y pregunta qué busca: tipo de auto, uso, presupuesto aproximado, si necesita financiamiento y si entrega un auto en parte de pago.
-2. Recomienda SOLO autos de la lista de INVENTARIO de abajo. Puedes decir el precio publicado y compartir el link de ficha si lo tiene. NUNCA inventes autos, modelos, años, precios ni condiciones que no estén en la lista.
-3. Si no hay un auto que calce, dilo con honestidad y ofrece avisarle cuando ingrese algo así.
-4. Cuando note interés real, PIDE el NOMBRE y el TELÉFONO para que un ejecutivo lo contacte y le envíe fotos y cotización.
-5. Egaña ofrece financiamiento con aprobación rápida y recibe autos en parte de pago. Para el detalle del crédito, cuota final o descuentos, deriva al ejecutivo (no inventes números).
+REGLA DE ORO — INVENTARIO: recomienda SOLO autos de la lista de abajo. NUNCA inventes autos, modelos, años, precios, cuotas ni condiciones. Si no hay algo que calce, dilo con honestidad y ofrece avisarle cuando ingrese, o pídele sus datos para buscarle opciones.
+
+CIERRE (calificar el lead): cuando note interés real, pide el NOMBRE y el TELÉFONO para que un ejecutivo lo contacte, le mande fotos y cierre los detalles.
 ${tieneTelefono
-  ? '6. YA TIENES el teléfono del cliente: agradece, confirma que un ejecutivo de Egaña lo contactará a la brevedad por ese número, y cierra cordialmente.'
-  : '6. Aún NO tienes el teléfono: sigue ayudando y, cuando haya interés, pídelo junto al nombre.'}
+  ? 'IMPORTANTE: YA TIENES su teléfono. Agradece con su nombre si lo sabes, confirma que un ejecutivo de Egaña lo contactará muy pronto a ese número, y cierra cálido. No sigas pidiendo datos.'
+  : 'Aún NO tienes su teléfono: sigue asesorando y, cuando haya interés, pídele nombre y teléfono de forma natural.'}
 
-REGLAS: no prometas cosas absolutas; no pidas RUT, tarjetas ni claves; si el mensaje es confuso, pide que lo aclare amablemente.
+NO HAGAS: no prometas cosas absolutas ("te lo garantizo"), no des cuotas/tasas exactas (eso lo cierra el ejecutivo), no pidas RUT, tarjetas ni claves.
 
 INVENTARIO DISPONIBLE (usa SOLO estos autos):
 ${inventario}`
@@ -207,24 +208,32 @@ Deno.serve(async (req) => {
         { role: 'system', content: buildSystemPrompt(inventario, !!phone) },
         ...(hist || []).slice(-10).map((h: { direction: string; content: string }) => ({ role: h.direction === 'outbound' ? 'assistant' : 'user', content: h.content })),
       ]
-      try {
-        const controller = new AbortController()
-        const t = setTimeout(() => controller.abort(), 20000)
-        const r = await fetch(gatewayUrl, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: chatModel, messages, temperature: 0.5, max_tokens: 350 }),
-          signal: controller.signal,
-        })
-        clearTimeout(t)
-        if (r.ok) {
-          const d = await r.json()
-          const txt = str(d?.choices?.[0]?.message?.content)
-          if (txt) reply = txt
-        } else {
-          console.error('web-chat LLM error', r.status, (await r.text()).slice(0, 200))
-        }
-      } catch (e) { console.error('web-chat LLM excepción', e) }
+      // Hasta 3 intentos: Gemini a veces devuelve 429 (rate limit) o timeout.
+      const reqBody = JSON.stringify({ model: chatModel, messages, temperature: 0.5, max_tokens: 350 })
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const controller = new AbortController()
+          const t = setTimeout(() => controller.abort(), 20000)
+          const r = await fetch(gatewayUrl, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: reqBody,
+            signal: controller.signal,
+          })
+          clearTimeout(t)
+          if (r.ok) {
+            const d = await r.json()
+            const txt = str(d?.choices?.[0]?.message?.content)
+            if (txt) { reply = txt; break }
+          } else {
+            const errTxt = (await r.text()).slice(0, 200)
+            console.error(`web-chat LLM error (intento ${attempt + 1})`, r.status, errTxt)
+            // 429 o 5xx → reintentar con backoff; otros errores → cortar.
+            if (r.status !== 429 && r.status < 500) break
+          }
+        } catch (e) { console.error(`web-chat LLM excepción (intento ${attempt + 1})`, e) }
+        if (attempt < 2) await new Promise((res) => setTimeout(res, 700 * (attempt + 1)))
+      }
     }
 
     // ── 7. Guardar respuesta del bot ────────────────────────────────────────
