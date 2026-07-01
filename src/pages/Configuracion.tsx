@@ -110,6 +110,7 @@ interface Vendedor {
   id: string;
   nombre: string;
   sucursal?: string;
+  rol?: string;
 }
 
 interface DiaHorario {
@@ -125,6 +126,7 @@ interface RotacionVendedor {
   sucursal: string;
   activo: boolean;
   consecutivos: number;
+  rol?: string;
 }
 
 // ── Helper: upsert a single key in configuracion_sistema ─────────────────────
@@ -652,29 +654,36 @@ export default function Configuracion() {
         try { savedRotacion = JSON.parse(map.ROTACION_VENDEDORES) as RotacionVendedor[]; } catch {}
       }
 
-      // 2) Load active vendedores and merge into rotation
+      // 2) Load active users (vendedores + admin/master) and merge into rotation.
+      //    admin/master aparecen en la lista pero ENTRAN APAGADOS: el usuario
+      //    los activa manualmente si quiere que también les lleguen leads.
       const { data: vendData } = await supabase
         .from("vendedores")
-        .select("id, nombre, sucursal")
+        .select("id, nombre, sucursal, rol")
         .eq("activo", true)
-        .eq("rol", "vendedor");
+        .in("rol", ["vendedor", "administracion", "master"]);
 
       if (vendData) {
         setVendedores(vendData as Vendedor[]);
+        const rolMap = new Map((vendData as Vendedor[]).map(v => [(v.nombre || "").trim().toLowerCase(), v.rol || "vendedor"]));
         const norm = (s: string) => (s || "").trim().toLowerCase();
         const activeNames = new Set((vendData as Vendedor[]).map(v => norm(v.nombre)));
-        // Keep saved entries for vendedores that still exist and are active
-        const filtered = savedRotacion.filter(p => activeNames.has(norm(p.nombre)));
+        // Keep saved entries for users that still exist and are active
+        const filtered = savedRotacion
+          .filter(p => activeNames.has(norm(p.nombre)))
+          .map(p => ({ ...p, rol: rolMap.get(norm(p.nombre)) || "vendedor" }));
         const existingNames = new Set(filtered.map(p => norm(p.nombre)));
-        // Append any active vendedores that aren't in the saved list
+        // Append any active users that aren't in the saved list
         const additions = (vendData as Vendedor[])
           .filter(v => !existingNames.has(norm(v.nombre)))
           .map(v => ({
             vendedor_id: v.id,
             nombre: v.nombre,
             sucursal: v.sucursal || "",
-            activo: true,
+            // Vendedores entran activos; admin/master entran apagados por defecto.
+            activo: (v.rol || "vendedor") === "vendedor",
             consecutivos: 1,
+            rol: v.rol || "vendedor",
           }));
         setRotacionVendedores([...filtered, ...additions]);
       } else {
@@ -1123,6 +1132,8 @@ export default function Configuracion() {
                       <td className="px-3 py-2 text-xs font-bold" style={{ color: "hsl(var(--primary))" }}>{i + 1}</td>
                       <td className="px-3 py-2">
                         <span className="text-xs font-medium">{v.nombre}</span>
+                        {v.rol === "master" && <span className="text-[10px] font-bold ml-1.5 px-1.5 py-0.5 rounded-full" style={{ background: "#fee2e2", color: "#dc2626" }}>Master</span>}
+                        {v.rol === "administracion" && <span className="text-[10px] font-bold ml-1.5 px-1.5 py-0.5 rounded-full" style={{ background: "#fef3c7", color: "#d97706" }}>Admin</span>}
                         {v.sucursal && <span className="text-xs ml-1" style={{ color: "hsl(var(--muted-foreground))" }}>— {v.sucursal}</span>}
                       </td>
                       <td className="px-3 py-2 text-center">

@@ -45,7 +45,8 @@ interface RotacionVendedor { vendedor_id: string; nombre: string; activo: boolea
 
 // deno-lint-ignore no-explicit-any
 async function getVendedorAsignado(supabase: any, modo: string, canal: string, porCanal: Record<string, string>, def: string): Promise<string> {
-  const { data: act } = await supabase.from('vendedores').select('nombre').eq('activo', true).eq('rol', 'vendedor')
+  // Elegibles: vendedores + admin/master (admin/master solo si están en rotación/canal).
+  const { data: act } = await supabase.from('vendedores').select('nombre').eq('activo', true).in('rol', ['vendedor', 'administracion', 'master'])
   const nombres = new Set((act || []).map((v: { nombre: string }) => (v.nombre || '').trim()))
   const ok = (n: string) => !!n && nombres.has(n.trim())
   if (modo === 'MANUAL') return ''

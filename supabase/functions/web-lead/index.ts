@@ -42,11 +42,12 @@ async function getVendedorAsignado(
   asignacionPorCanal: Record<string, string>,
   vendedorDefault: string,
 ): Promise<string> {
+  // Elegibles: vendedores + admin/master (admin/master solo si están en rotación/canal).
   const { data: vendedoresActivos } = await supabase
     .from('vendedores')
     .select('nombre')
     .eq('activo', true)
-    .eq('rol', 'vendedor')
+    .in('rol', ['vendedor', 'administracion', 'master'])
 
   const nombresActivos = new Set(
     (vendedoresActivos || []).map((v: { nombre: string }) => (v.nombre || '').trim()),

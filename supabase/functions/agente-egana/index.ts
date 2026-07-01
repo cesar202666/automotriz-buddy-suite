@@ -177,14 +177,14 @@ async function getVendedorAsignado(
   asignacionPorCanal: Record<string, string>,
   vendedorDefault: string,
 ): Promise<string> {
-  // ── Always load the canonical list of ACTIVE sellers (rol = 'vendedor') ──
-  // This is the single source of truth: nobody outside this list can ever
-  // be assigned, regardless of mode, rotation config or stale defaults.
+  // ── Conjunto elegible: vendedores + admin/master ────────────────────────
+  // admin/master solo reciben leads si el usuario los agrega a la rotación o a
+  // un canal; el reparto automático simple (fallback) sigue siendo solo vendedores.
   const { data: vendedoresActivos } = await supabase
     .from("vendedores")
     .select("nombre")
     .eq("activo", true)
-    .eq("rol", "vendedor");
+    .in("rol", ["vendedor", "administracion", "master"]);
 
   const nombresActivos = new Set(
     (vendedoresActivos || []).map((v: { nombre: string }) => (v.nombre || "").trim()),
