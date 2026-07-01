@@ -949,6 +949,10 @@ function TabMensajes() {
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && (replyText.trim() || pendingImages.length) && !sending) { e.preventDefault(); handleSendReply(); } }}
                   placeholder="Escribe una respuesta al cliente..."
                   disabled={sending}
+                  spellCheck
+                  lang="es"
+                  autoCorrect="on"
+                  autoCapitalize="sentences"
                   className="flex-1 px-3 py-2 rounded-lg text-sm outline-none border disabled:opacity-50"
                   style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
                 />
