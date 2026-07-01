@@ -120,15 +120,18 @@ TONO: español chileno natural y amable (puedes tutear). Mensajes CORTOS, como u
 CÓMO VENDES (como un buen vendedor):
 - Haz UNA pregunta a la vez, no interrogues. Primero entiende qué busca: uso, tipo de auto, presupuesto, si necesita financiamiento o entrega un auto en parte de pago.
 - Cuando tengas una idea, RECOMIENDA 1 o 2 autos CONCRETOS del inventario de abajo, con una frase de por qué le convienen (ej. bajo kilometraje, económico, full equipo). Menciona precio y comparte el link de ficha si lo tiene.
+- Si te preguntan directamente "¿qué tienes?", "¿qué opciones hay?" o por un tipo/marca (ej. "camionetas"), muestra 2 o 3 autos CONCRETOS del inventario al tiro (marca, modelo, año y precio), y recién después pregunta para afinar. No respondas solo con una pregunta cuando te piden ver opciones.
 - Destaca los plus de Egaña cuando venga al caso: financiamiento con aprobación rápida, recibimos tu auto en parte de pago, autos revisados. Sin inventar cifras.
 - Sé proactivo: si hay interés, invita a agendar una visita a la sucursal o a que un ejecutivo le mande fotos y la cotización.
 
 REGLA DE ORO — INVENTARIO: recomienda SOLO autos de la lista de abajo. NUNCA inventes autos, modelos, años, precios, cuotas ni condiciones. Si no hay algo que calce, dilo con honestidad y ofrece avisarle cuando ingrese, o pídele sus datos para buscarle opciones.
 
-CIERRE (calificar el lead): cuando note interés real, pide el NOMBRE y el TELÉFONO para que un ejecutivo lo contacte, le mande fotos y cierre los detalles.
+CIERRE Y DERIVACIÓN A VENDEDOR HUMANO:
+- Cuando la persona quiera VISITAR la sucursal, AGENDAR, ver el auto en persona, ENVIAR o pedir DOCUMENTACIÓN, RESERVAR o COMPRAR: dile que la conectas con un ejecutivo que la seguirá atendiendo, y pídele su NOMBRE y TELÉFONO para coordinar (si aún no lo tienes).
+- También pide nombre y teléfono cuando note interés real en un auto, para que un ejecutivo le mande fotos y cierre los detalles.
 ${tieneTelefono
-  ? 'IMPORTANTE: YA TIENES su teléfono. Agradece con su nombre si lo sabes, confirma que un ejecutivo de Egaña lo contactará muy pronto a ese número, y cierra cálido. No sigas pidiendo datos.'
-  : 'Aún NO tienes su teléfono: sigue asesorando y, cuando haya interés, pídele nombre y teléfono de forma natural.'}
+  ? 'IMPORTANTE: YA TIENES su teléfono. Agradece (con su nombre si lo sabes), confirma que un ejecutivo de Egaña lo contactará muy pronto a ese número para coordinar la visita / documentación / compra, y cierra cálido. No sigas pidiendo datos.'
+  : 'Aún NO tienes su teléfono: sigue asesorando y, apenas haya interés o quiera visitar/comprar, pídele nombre y teléfono de forma natural.'}
 
 NO HAGAS: no prometas cosas absolutas ("te lo garantizo"), no des cuotas/tasas exactas (eso lo cierra el ejecutivo), no pidas RUT, tarjetas ni claves.
 
@@ -204,35 +207,40 @@ Deno.serve(async (req) => {
     if (apiKey) {
       const gatewayUrl = Deno.env.get('AI_GATEWAY_URL') ?? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
       const chatModel = Deno.env.get('AI_CHAT_MODEL') ?? 'gemini-2.0-flash'
+      // Modelos de respaldo: cada modelo de Gemini tiene su propia cuota, así que
+      // si el principal da 429 probamos otro antes de rendirnos.
+      const modelos = [...new Set([chatModel, 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'])]
       const messages = [
         { role: 'system', content: buildSystemPrompt(inventario, !!phone) },
         ...(hist || []).slice(-10).map((h: { direction: string; content: string }) => ({ role: h.direction === 'outbound' ? 'assistant' : 'user', content: h.content })),
       ]
-      // Hasta 3 intentos: Gemini a veces devuelve 429 (rate limit) o timeout.
-      const reqBody = JSON.stringify({ model: chatModel, messages, temperature: 0.5, max_tokens: 350 })
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const controller = new AbortController()
-          const t = setTimeout(() => controller.abort(), 20000)
-          const r = await fetch(gatewayUrl, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: reqBody,
-            signal: controller.signal,
-          })
-          clearTimeout(t)
-          if (r.ok) {
-            const d = await r.json()
-            const txt = str(d?.choices?.[0]?.message?.content)
-            if (txt) { reply = txt; break }
-          } else {
-            const errTxt = (await r.text()).slice(0, 200)
-            console.error(`web-chat LLM error (intento ${attempt + 1})`, r.status, errTxt)
-            // 429 o 5xx → reintentar con backoff; otros errores → cortar.
-            if (r.status !== 429 && r.status < 500) break
-          }
-        } catch (e) { console.error(`web-chat LLM excepción (intento ${attempt + 1})`, e) }
-        if (attempt < 2) await new Promise((res) => setTimeout(res, 700 * (attempt + 1)))
+      let respondido = false
+      for (const modelo of modelos) {
+        for (let attempt = 0; attempt < 2 && !respondido; attempt++) {
+          try {
+            const controller = new AbortController()
+            const t = setTimeout(() => controller.abort(), 20000)
+            const r = await fetch(gatewayUrl, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: modelo, messages, temperature: 0.5, max_tokens: 350 }),
+              signal: controller.signal,
+            })
+            clearTimeout(t)
+            if (r.ok) {
+              const d = await r.json()
+              const txt = str(d?.choices?.[0]?.message?.content)
+              if (txt) { reply = txt; respondido = true; break }
+            } else {
+              const errTxt = (await r.text()).slice(0, 200)
+              console.error(`web-chat LLM error (${modelo}, intento ${attempt + 1})`, r.status, errTxt)
+              // 4xx que no sea 429 → error del modelo, pasar al siguiente modelo.
+              if (r.status !== 429 && r.status < 500) break
+            }
+          } catch (e) { console.error(`web-chat LLM excepción (${modelo})`, e) }
+          if (!respondido) await new Promise((res) => setTimeout(res, 500 * (attempt + 1)))
+        }
+        if (respondido) break
       }
     }
 
