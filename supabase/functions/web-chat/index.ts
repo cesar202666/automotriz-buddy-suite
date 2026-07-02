@@ -111,6 +111,30 @@ async function buildInventario(supabase: any, convText: string): Promise<string>
   }).join('\n')
 }
 
+/** Detecta si el cliente pide fotos/imágenes de un auto. */
+function pideFotos(text: string): boolean {
+  return /\b(foto|fotos|fotito|imagen|imagenes|imágenes|im[aá]genes|ve[rl]a|verlas|mu[eé]strame|muestrame|ense[ñn]a|c[oó]mo se ve)\b/i.test(text)
+}
+
+/** Busca el auto que mejor calza con la conversación y devuelve hasta 4 fotos (URLs). */
+// deno-lint-ignore no-explicit-any
+async function buscarFotosVehiculo(supabase: any, convText: string): Promise<{ titulo: string; fotos: string[] } | null> {
+  const low = convText.toLowerCase()
+  const kws = [...MARCAS, ...TIPOS].filter((k) => low.includes(k))
+  let q = supabase.from('vehiculos').select('marca, modelo, anio, fotos').eq('estado', 'DISPONIBLE').not('fotos', 'is', null)
+  if (kws.length > 0) {
+    q = q.or(kws.map((k) => `marca.ilike.%${k}%,modelo.ilike.%${k}%,tipo.ilike.%${k}%`).join(','))
+  }
+  q = q.order('updated_at', { ascending: false }).limit(6)
+  const { data } = await q
+  // deno-lint-ignore no-explicit-any
+  const row = (data || []).find((r: any) => Array.isArray(r.fotos) && r.fotos.some((f: string) => /^https?:\/\//i.test(f)))
+  if (!row) return null
+  const fotos = (row.fotos as string[]).filter((f) => /^https?:\/\//i.test(f)).slice(0, 4)
+  if (fotos.length === 0) return null
+  return { titulo: `${row.marca} ${row.modelo} ${row.anio || ''}`.trim(), fotos }
+}
+
 function buildSystemPrompt(inventario: string, tieneTelefono: boolean): string {
   return (
 `Eres Eli, vendedor/a de Egaña Automotriz, automotora en Puerto Montt (sucursal La Vara, Av. Ferrocarriles km 4), Chile. Atiendes el chat de la web egana.cl como un vendedor real: cercano, resolutivo y con ganas de ayudar a cerrar la compra.
@@ -125,6 +149,10 @@ CÓMO VENDES (como un buen vendedor):
 - Sé proactivo: si hay interés, invita a agendar una visita a la sucursal o a que un ejecutivo le mande fotos y la cotización.
 
 REGLA DE ORO — INVENTARIO: recomienda SOLO autos de la lista de abajo. NUNCA inventes autos, modelos, años, precios, cuotas ni condiciones. Si no hay algo que calce, dilo con honestidad y ofrece avisarle cuando ingrese, o pídele sus datos para buscarle opciones.
+
+REGLA ABSOLUTA sobre derivar al vendedor: NUNCA digas que lo vas a conectar, derivar o pasar con un ejecutivo/vendedor, ni que "un ejecutivo lo contactará", ANTES de tener su NOMBRE COMPLETO y su TELÉFONO. Primero pídeselos y obtenlos; recién cuando ya los tienes puedes mencionar al ejecutivo. Si aún no te los ha dado, sigue ayudando y pídeselos, sin prometer contacto todavía.
+
+FOTOS: si la persona PIDE fotos/imágenes de un auto, dile que se las muestras (el sistema se las adjunta). No inventes que no puedes; sí puedes mostrar fotos de los autos del inventario.
 
 CUÁNDO PEDIR LOS DATOS (clave — NO los pidas antes de tiempo):
 - Tu prioridad es ASESORAR: muestra autos, da detalles, resuelve dudas. NO pidas nombre ni teléfono solo porque miró un auto o preguntó el precio. Muchos solo están mirando.
@@ -284,7 +312,19 @@ Deno.serve(async (req) => {
       escalated = true
     }
 
-    return new Response(JSON.stringify({ ok: true, reply, escalated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    // ── 9. Fotos: si el cliente las pidió, adjuntar fotos del auto en contexto ─
+    let images: string[] = []
+    let imagesTitulo = ''
+    if (pideFotos(message)) {
+      const f = await buscarFotosVehiculo(supabase, convText + ' ' + message)
+      if (f) {
+        images = f.fotos
+        imagesTitulo = f.titulo
+        await supabase.from('messages').insert({ conversation_id: conversationId, contact_id: contactId, direction: 'outbound', content: `📷 Fotos de ${f.titulo}`, channel: CHANNEL, sent_at: new Date().toISOString() })
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, reply, escalated, images, imagesTitulo }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (error: unknown) {
     console.error('Error en web-chat:', error)
     const msg = error instanceof Error ? error.message : 'Error interno'
