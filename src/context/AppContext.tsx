@@ -167,6 +167,8 @@ export interface Venta {
   prepagoDocName: string | null;
   documentacionVenta: string | null;
   documentacionVentaName: string | null;
+  declaracionConformidad: string | null;
+  declaracionConformidadName: string | null;
   tipoVenta: TipoVenta;
   estado: VentaEstado;
   verificacion: boolean;
@@ -396,6 +398,7 @@ export type VentaDocs = {
   creditoFirmadoDoc?: string | null;
   prepagoDoc?: string | null;
   documentacionVenta?: string | null;
+  declaracionConformidad?: string | null;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -441,6 +444,8 @@ function ventaFromDb(row: any): Venta {
     prepagoDocName: row.prepago_doc_name ?? null,
     documentacionVenta: row.documentacion_venta ?? null,
     documentacionVentaName: row.documentacion_venta_name ?? null,
+    declaracionConformidad: row.declaracion_conformidad ?? null,
+    declaracionConformidadName: row.declaracion_conformidad_name ?? null,
     tipoVenta: (row.tipo_venta ?? "EFECTIVO") as Venta["tipoVenta"],
     estado: (row.estado ?? "BORRADOR") as Venta["estado"],
     verificacion: Boolean(row.verificacion ?? false),
@@ -512,6 +517,8 @@ function ventaToDb(v: Omit<Venta, "id">) {
     prepago_doc_name: v.prepagoDocName,
     documentacion_venta: v.documentacionVenta,
     documentacion_venta_name: v.documentacionVentaName,
+    declaracion_conformidad: v.declaracionConformidad,
+    declaracion_conformidad_name: v.declaracionConformidadName,
     tipo_venta: v.tipoVenta,
     estado: v.estado,
     verificacion: v.verificacion,
@@ -953,7 +960,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Los documentos se cargan al abrir cada venta (getVentaDocs). Si se agrega
   // se mantienen los *_name (livianos) para mostrar el estado del adjunto.
   const VENTA_LIST_COLS =
-    "id, ejecutiva, fecha_venta, sucursal, cliente_id, cliente_nombre, informe_tecnico_name, patente, marca, modelo, anio_vehiculo, color_vehiculo, kilometraje_vehiculo, precio_retoma, precio_publicado, precio_venta, margen_bruto, n_credito, financiera, saldo_precio, comision_credito, valor_piso, vpp_modelo, vpp_patente, monto_efectivo, monto_transferencia_pago, cliente_pago_transferencia, monto_pagado_cliente, gastos_admin, precio_vta_final, credito_firmado, credito_firmado_doc_name, monto_pie_caja, prepago, prepago_doc_name, documentacion_venta_name, tipo_venta, estado, verificacion";
+    "id, ejecutiva, fecha_venta, sucursal, cliente_id, cliente_nombre, informe_tecnico_name, patente, marca, modelo, anio_vehiculo, color_vehiculo, kilometraje_vehiculo, precio_retoma, precio_publicado, precio_venta, margen_bruto, n_credito, financiera, saldo_precio, comision_credito, valor_piso, vpp_modelo, vpp_patente, monto_efectivo, monto_transferencia_pago, cliente_pago_transferencia, monto_pagado_cliente, gastos_admin, precio_vta_final, credito_firmado, credito_firmado_doc_name, monto_pie_caja, prepago, prepago_doc_name, documentacion_venta_name, declaracion_conformidad_name, tipo_venta, estado, verificacion";
 
   useEffect(() => {
     const loadVentas = async () => {
@@ -975,7 +982,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const getVentaDocs = async (id: string): Promise<VentaDocs> => {
     const { data, error } = await supabase
       .from("ventas")
-      .select("informe_tecnico, credito_firmado_doc, prepago_doc, documentacion_venta")
+      .select("informe_tecnico, credito_firmado_doc, prepago_doc, documentacion_venta, declaracion_conformidad")
       .eq("id", id)
       .single();
     if (error || !data) return {};
@@ -984,6 +991,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       creditoFirmadoDoc: data.credito_firmado_doc ?? null,
       prepagoDoc: data.prepago_doc ?? null,
       documentacionVenta: data.documentacion_venta ?? null,
+      declaracionConformidad: data.declaracion_conformidad ?? null,
     };
   };
 

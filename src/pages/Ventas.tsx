@@ -50,7 +50,7 @@ const emptyVenta = (ejecutiva: string): Omit<Venta, "id"> => ({
   valorPiso: 0, vppModelo: "", vppPatente: "", montoEfectivo: 0, montoTransferenciaPago: 0, clientePagoTransferencia: 0, montoPagadoCliente: 0,
   gastosAdmin: 0, precioVtaFinal: 0, creditoFirmado: "NO", creditoFirmadoDoc: null, creditoFirmadoDocName: null,
   montoPieCaja: 0, prepago: "NO", prepagoDoc: null, prepagoDocName: null,
-  documentacionVenta: null, documentacionVentaName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false,
+  documentacionVenta: null, documentacionVentaName: null, declaracionConformidad: null, declaracionConformidadName: null, tipoVenta: "CREDITO", estado: "BORRADOR", verificacion: false,
 });
 
 // Mini form to create a client inline
@@ -122,6 +122,8 @@ export default function Ventas() {
   const [prepagoDoc, setPrepagoDoc] = useState<DocField>({ dataUrl: null, name: null });
   const [creditoFirmDoc, setCreditoFirmDoc] = useState<DocField>({ dataUrl: null, name: null });
   const [docVentaDoc, setDocVentaDoc] = useState<DocField>({ dataUrl: null, name: null });
+  const [declConfDoc, setDeclConfDoc] = useState<DocField>({ dataUrl: null, name: null });
+  const declConfRef = useRef<HTMLInputElement>(null);
   const [showValidarModal, setShowValidarModal] = useState(false);
   const [validarId, setValidarId] = useState<string | null>(null);
   const [claveValidar, setClaveValidar] = useState("");
@@ -188,6 +190,7 @@ export default function Ventas() {
     setPrepagoDoc({ dataUrl: null, name: null });
     setCreditoFirmDoc({ dataUrl: null, name: null });
     setDocVentaDoc({ dataUrl: null, name: null });
+    setDeclConfDoc({ dataUrl: null, name: null });
     setEditId(null);
     setSelectedVehiculoId("");
     setWizardStep("identificacion");
@@ -206,6 +209,7 @@ export default function Ventas() {
     setPrepagoDoc({ dataUrl: v.prepagoDoc, name: v.prepagoDocName });
     setCreditoFirmDoc({ dataUrl: v.creditoFirmadoDoc, name: v.creditoFirmadoDocName });
     setDocVentaDoc({ dataUrl: v.documentacionVenta, name: v.documentacionVentaName });
+    setDeclConfDoc({ dataUrl: v.declaracionConformidad, name: v.declaracionConformidadName });
     setEditId(v.id);
     // Derivar el id del vehiculo desde la patente guardada (primera coincidencia)
     setSelectedVehiculoId(vehiculos.find(x => x.patente === v.patente)?.id ?? "");
@@ -218,6 +222,7 @@ export default function Ventas() {
       if (docs.prepagoDoc) setPrepagoDoc(d => ({ ...d, dataUrl: docs.prepagoDoc! }));
       if (docs.creditoFirmadoDoc) setCreditoFirmDoc(d => ({ ...d, dataUrl: docs.creditoFirmadoDoc! }));
       if (docs.documentacionVenta) setDocVentaDoc(d => ({ ...d, dataUrl: docs.documentacionVenta! }));
+      if (docs.declaracionConformidad) setDeclConfDoc(d => ({ ...d, dataUrl: docs.declaracionConformidad! }));
       setForm(f => ({
         ...f,
         informeTecnico: docs.informeTecnico ?? f.informeTecnico,
@@ -268,6 +273,7 @@ export default function Ventas() {
       prepagoDoc: prepagoDoc.dataUrl, prepagoDocName: prepagoDoc.name,
       creditoFirmadoDoc: creditoFirmDoc.dataUrl, creditoFirmadoDocName: creditoFirmDoc.name,
       documentacionVenta: docVentaDoc.dataUrl, documentacionVentaName: docVentaDoc.name,
+      declaracionConformidad: declConfDoc.dataUrl, declaracionConformidadName: declConfDoc.name,
       estado: solicitar ? "PENDIENTE_VALIDACION" : (editId ? form.estado : "BORRADOR"),
     };
     setSavingVenta(true);
@@ -367,7 +373,7 @@ export default function Ventas() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
-              {["Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","Color","Km","P. Publicado","P. Venta","Margen","N° Crédito","Financiera","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación", ...(isAdmin ? ["Acciones"] : [])].map(h => (
+              {["Tipo Vta","Prepago","Fecha Vta","Ejecutiva","Sucursal","Cliente","Inf. Tec.","Patente","Marca","Modelo","Color","Km","P. Publicado","P. Venta","Margen","N° Crédito","Financiera","G. Admin","Com. Crédito","P. Vta Final","Cred. Firmado","Monto Pie","Verificación","Declaración conformidad", ...(isAdmin ? ["Acciones"] : [])].map(h => (
                 <th key={h} className="px-3 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -422,6 +428,11 @@ export default function Ventas() {
                     </button>
                   )}
                 </td>
+                <td className="px-3 py-2 text-center">
+                  {(v.declaracionConformidad || v.declaracionConformidadName)
+                    ? <span className="text-green-600 font-bold text-base" title="Declaración subida">✓</span>
+                    : <span className="text-red-600 font-bold text-base" title="Falta subir la declaración de conformidad">✗</span>}
+                </td>
                 {isAdmin && (
                   <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                     <button onClick={(e) => handleDeleteVenta(e, v)} className="p-1.5 rounded hover:bg-red-50 text-red-600" title="Eliminar venta">
@@ -432,7 +443,7 @@ export default function Ventas() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={isAdmin ? 24 : 23} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay ventas registradas</td></tr>
+              <tr><td colSpan={isAdmin ? 25 : 24} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay ventas registradas</td></tr>
             )}
           </tbody>
         </table>
@@ -643,6 +654,29 @@ export default function Ventas() {
                       </button>
                     )}
                     <input ref={docVentaRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setDocVentaDoc)} />
+                  </div>
+
+                  {/* Declaración de Conformidad firmada */}
+                  <div className="mt-4">
+                    <div className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: "hsl(var(--muted-foreground))" }}>DECLARACIÓN DE CONFORMIDAD</div>
+                    <div onClick={() => declConfRef.current?.click()}
+                      className="border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-6 cursor-pointer hover:bg-muted/30 transition-colors"
+                      style={{ borderColor: declConfDoc.dataUrl ? "hsl(var(--primary))" : "hsl(var(--border))" }}>
+                      {declConfDoc.dataUrl ? (
+                        <><FileText size={20} style={{ color: "hsl(var(--primary))" }} />
+                          <span className="text-xs mt-1 text-center truncate w-full px-2" style={{ color: "hsl(var(--primary))" }}>{declConfDoc.name}</span></>
+                      ) : (
+                        <><Upload size={20} style={{ color: "hsl(var(--muted-foreground))" }} />
+                          <span className="text-xs mt-1 font-medium" style={{ color: "hsl(var(--primary))" }}>Subir Declaración firmada</span>
+                          <span className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>PDF del comprador</span></>
+                      )}
+                    </div>
+                    {declConfDoc.dataUrl && (
+                      <button onClick={() => download(declConfDoc.dataUrl!, declConfDoc.name!)} className="mt-2 w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded border text-xs hover:bg-muted" style={bd}>
+                        <Download size={12} /> Descargar
+                      </button>
+                    )}
+                    <input ref={declConfRef} type="file" accept=".pdf,.jpg,.png" className="hidden" onChange={e => handleFileRead(e, setDeclConfDoc)} />
                   </div>
                 </div>
               )}
