@@ -170,6 +170,7 @@ export default function Vehiculos() {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [processingAI, setProcessingAI] = useState<number | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [urlCopied, setUrlCopied] = useState(false);
   // API key de remove.bg (recorte de fondo). Se guarda en localStorage.
   const [removeBgKey, setRemoveBgKeyInput] = useState(() => getRemoveBgKey());
   const [removeBgKeySaved, setRemoveBgKeySaved] = useState(() => hasRemoveBgKey());
@@ -1103,6 +1104,26 @@ export default function Vehiculos() {
                       </button>
                     )}
                   </div>
+
+                  {/* URL de la publicación en la web (para copiar y compartir) */}
+                  {form.publicadoWeb && editId && (() => {
+                    const url = `https://egana.cl/vehiculo/${editId}`;
+                    return (
+                      <div className="mb-4 -mt-2 flex items-center gap-2 rounded-lg border px-3 py-2"
+                        style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--muted)/0.4)" }}>
+                        <Globe size={14} style={{ color: "hsl(var(--muted-foreground))" }} className="shrink-0" />
+                        <a href={url} target="_blank" rel="noreferrer" className="flex-1 text-xs truncate hover:underline" style={{ color: "hsl(var(--primary))" }}>{url}</a>
+                        <button
+                          type="button"
+                          onClick={() => { navigator.clipboard?.writeText(url); setUrlCopied(true); setTimeout(() => setUrlCopied(false), 1800); }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold shrink-0"
+                          style={{ background: urlCopied ? "rgb(34 197 94)" : "hsl(var(--primary))", color: "white" }}
+                          title="Copiar URL de la publicación">
+                          {urlCopied ? <><CheckSquare size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   <div className="section-divider mb-4">DATOS PRINCIPALES</div>
                   <div className="grid grid-cols-4 gap-3 mb-4">

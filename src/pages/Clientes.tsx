@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2, Phone, Mail, Download, Upload, X, Table, FileText, Loader2 } from "lucide-react";
 import { useApp, Cliente } from "@/context/AppContext";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -166,7 +167,7 @@ const nowStr = () => {
 };
 
 export default function Clientes() {
-  const { clientes, addCliente, updateCliente, deleteCliente, usuarioActual } = useApp();
+  const { clientes, addCliente, updateCliente, deleteCliente, usuarioActual, vehiculos } = useApp();
   // Solo master/administracion pueden borrar.
   const isAdmin = usuarioActual?.rol === "master" || usuarioActual?.rol === "administracion";
   const [saving, setSaving] = useState(false);
@@ -187,14 +188,15 @@ export default function Clientes() {
   const [declMsg, setDeclMsg] = useState<string>("");
   const [declGen, setDeclGen] = useState(false);
 
-  const buscarVehDecl = async () => {
-    if (!declPatente.trim()) { setDeclMsg("Ingresa una patente."); return; }
+  const buscarVehDecl = async (patenteArg?: string) => {
+    const p = (patenteArg ?? declPatente).trim();
+    if (!p) { setDeclMsg("Elige una patente."); return; }
     setDeclLoading(true); setDeclMsg(""); setDeclVeh(null);
-    const { data, error } = await supabase.rpc("buscar_vehiculo_patente_full", { p: declPatente.trim() });
+    const { data, error } = await supabase.rpc("buscar_vehiculo_patente_full", { p });
     setDeclLoading(false);
     if (error) { setDeclMsg("Error al buscar: " + error.message); return; }
     const v = Array.isArray(data) ? data[0] : data;
-    if (!v) { setDeclMsg(`Patente "${declPatente.trim()}" no encontrada en el inventario.`); return; }
+    if (!v) { setDeclMsg(`Patente "${p}" no encontrada en el inventario.`); return; }
     setDeclVeh(v as VehDecl);
   };
 
@@ -452,14 +454,23 @@ export default function Clientes() {
               <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
                 Ingresa la patente del vehículo. Se cargan sus datos y se genera el PDF. Los datos del comprador quedan en blanco para llenar y firmar a mano.
               </p>
-              <div className="flex gap-2">
-                <input value={declPatente} onChange={e => { setDeclPatente(e.target.value.toUpperCase()); setDeclMsg(""); }}
-                  onKeyDown={e => e.key === "Enter" && buscarVehDecl()}
-                  placeholder="Ej: ABCD12" className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={bd} autoFocus />
-                <button onClick={buscarVehDecl} disabled={declLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>
-                  {declLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Buscar
-                </button>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <SearchableSelect
+                    value={declPatente}
+                    onChange={(v) => { setDeclPatente(v); setDeclMsg(""); if (v) buscarVehDecl(v); }}
+                    options={vehiculos.filter(x => x.patente).map(x => ({
+                      value: x.patente,
+                      label: `${x.patente} — ${x.marca} ${x.modelo}`.trim(),
+                      hint: x.anio ? String(x.anio) : "",
+                      search: `${x.patente} ${x.marca} ${x.modelo} ${x.anio ?? ""}`,
+                    }))}
+                    placeholder="Escribe la patente y elige de la lista…"
+                    emptyMessage="Sin patentes que coincidan"
+                    style={bd}
+                  />
+                </div>
+                {declLoading && <Loader2 size={16} className="animate-spin shrink-0" style={{ color: "hsl(var(--primary))" }} />}
               </div>
               {declMsg && <p className="text-xs font-medium" style={{ color: "hsl(var(--destructive))" }}>{declMsg}</p>}
               {declVeh && (
