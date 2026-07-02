@@ -1,7 +1,110 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, Edit2, Trash2, Phone, Mail, Download, Upload, X, Table } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Phone, Mail, Download, Upload, X, Table, FileText, Loader2 } from "lucide-react";
 import { useApp, Cliente } from "@/context/AppContext";
+import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import logoEa from "@/assets/logo-ea.jpg";
+
+// Datos del vehículo que trae la función buscar_vehiculo_patente_full.
+interface VehDecl { patente: string; marca: string; modelo: string; anio: string; n_motor: string; vin: string; color: string; kilometraje: number; }
+
+function loadImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+
+/**
+ * Genera el PDF "Certificado y Declaración de Conformidad del Estado del Vehículo".
+ * Los datos del VEHÍCULO se autocompletan; los del COMPRADOR quedan en blanco
+ * para llenar/firmar a mano.
+ */
+async function generateDeclaracionPDF(v: VehDecl) {
+  const doc = new jsPDF({ format: "a4", unit: "mm" });
+  const pageW = 210, margin = 18, maxW = pageW - margin * 2;
+  let y = 14;
+
+  // Logo
+  try {
+    const img = await loadImg(logoEa);
+    const w = 34, h = w * (img.height / img.width);
+    doc.addImage(img, "JPEG", margin, y, w, h);
+  } catch { /* sin logo si falla */ }
+
+  const anioActual = new Date().getFullYear();
+  doc.setFontSize(9); doc.setFont("helvetica", "normal");
+  doc.text(`En Puerto Montt, a ____ de ____________ de ${anioActual}.`, pageW - margin, y + 6, { align: "right" });
+  y += 22;
+
+  doc.setFontSize(12); doc.setFont("helvetica", "bold");
+  doc.text("CERTIFICADO Y DECLARACIÓN DE CONFORMIDAD DEL ESTADO DEL VEHÍCULO", pageW / 2, y, { align: "center", maxWidth: maxW });
+  y += 12;
+
+  doc.setFontSize(9.5); doc.setFont("helvetica", "normal");
+  const intro = "Yo, ______________________________________, cédula Nacional de identidad N° __________________, con domicilio en ______________________________________, en mi calidad de COMPRADOR, declaro haber adquirido en Automotora Egaña, RUT N° 77.728.698-6 COMERCIAL Rey Aguirre Spa, con domicilio en Egaña 931, Comuna y Ciudad de Puerto Montt, el vehículo que se individualiza a continuación:";
+  const introLines = doc.splitTextToSize(intro, maxW);
+  doc.text(introLines, margin, y); y += introLines.length * 5 + 3;
+
+  // Datos del vehículo (autocompletados)
+  doc.setFont("helvetica", "bold");
+  const row = (l1: string, v1: string, l2: string, v2: string) => {
+    doc.setFont("helvetica", "bold"); doc.text(l1, margin, y);
+    doc.setFont("helvetica", "normal"); doc.text(v1 || "—", margin + 32, y);
+    if (l2) { doc.setFont("helvetica", "bold"); doc.text(l2, margin + 105, y);
+      doc.setFont("helvetica", "normal"); doc.text(v2 || "—", margin + 135, y); }
+    y += 7;
+  };
+  row("Marca:", v.marca, "Modelo:", v.modelo);
+  row("Año:", String(v.anio || ""), "Patente:", v.patente);
+  row("N° de motor:", v.n_motor, "N° de chasis:", v.vin);
+  row("Color:", v.color, "Kilometraje:", v.kilometraje ? `${Number(v.kilometraje).toLocaleString("es-CL")} km` : "");
+  y += 2;
+
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  const bloques: [string, string][] = [
+    ["", "Declaro que, al momento de la revisión y entrega del Vehículo individualizado anteriormente, he verificado y aceptado el estado estético y mecánico del vehículo, encontrándose este en las siguientes condiciones:"],
+    ["Condiciones mecánicas: ", "El comprador manifiesta su conocimiento del estado mecánico del motor, transmisión, suspensión, sistema de frenos, dirección y demás componentes, los cuales han sido revisados y explicados por el profesional a cargo de Automotora Egaña, aceptando expresamente su estado actual."],
+    ["Condiciones estéticas: ", "El comprador declara estar en conocimiento del estado general de la carrocería, pintura, tapicería, neumáticos y demás accesorios, conforme a lo observado al momento de la entrega y exhibición del vehículo."],
+    ["", "Asimismo, declaro haber recibido toda la documentación legal correspondiente al vehículo, incluyendo, según corresponda: (marcar con una X)"],
+  ];
+  for (const [b, t] of bloques) {
+    if (b) { doc.setFont("helvetica", "bold"); doc.text(b, margin, y); }
+    const off = b ? doc.getTextWidth(b) : 0;
+    doc.setFont("helvetica", "normal");
+    const lines = doc.splitTextToSize(t, maxW - off);
+    doc.text(lines[0], margin + off, y);
+    if (lines.length > 1) doc.text(lines.slice(1), margin, y + 5);
+    y += Math.max(1, lines.length) * 5 + 2;
+  }
+  y += 1;
+  for (const item of ["Informe Autofact", "Contrato de Compraventa del Vehículo", "Revisión técnica vigente", "Permiso de circulación vigente", "Seguro Obligatorio (SOAP)"]) {
+    doc.setFont("helvetica", "normal");
+    doc.text("_____", margin, y); doc.text(item, margin + 12, y); y += 6;
+  }
+  y += 1;
+  const clausulas = [
+    "Cláusula de exclusión de responsabilidad: El comprador libera expresamente a Automotora Egaña de toda responsabilidad por eventuales desperfectos, fallas mecánicas, eléctricas, electrónicas, estructurales o de cualquier otra índole que pudieran presentarse con posterioridad a la entrega del vehículo, ya que el mismo ha sido revisado y aceptado en el estado actual descrito en el presente certificado.",
+    "En caso de existir garantías adicionales, estas se regirán únicamente por las condiciones expresamente pactadas en el contrato de compraventa correspondiente.",
+    "En señal de plena conformidad, suscribo la presente declaración.",
+  ];
+  for (const c of clausulas) {
+    const lines = doc.splitTextToSize(c, maxW);
+    doc.text(lines, margin, y); y += lines.length * 5 + 2;
+  }
+  y += 14;
+  // Firmas
+  doc.text("_____________________________", margin, y);
+  doc.text("Automotora Egaña:", pageW - margin, y - 4, { align: "right" });
+  doc.text("P.p Bastián Rey-Aguirre", pageW - margin, y, { align: "right" });
+  y += 5;
+  doc.text("Firma Comprador:", margin, y);
+  doc.text("RUT: 77.728.698-6", pageW - margin, y, { align: "right" });
+  y += 6;
+  doc.text("Nombre: ____________________________", margin, y); y += 6;
+  doc.text("C.N.I: ______________________", margin, y);
+
+  const safe = (v.patente || "vehiculo").replace(/[^A-Za-z0-9]/g, "");
+  doc.save(`Declaracion_Conformidad_${safe}.pdf`);
+}
 
 const MASTER_PASS = "ankker2026$$";
 
@@ -75,6 +178,33 @@ export default function Clientes() {
   const excelImportRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [nuevoSeguimientoComentario, setNuevoSeguimientoComentario] = useState("");
+
+  // ── Declaración de Conformidad (PDF por patente) ──────────────────
+  const [showDecl, setShowDecl] = useState(false);
+  const [declPatente, setDeclPatente] = useState("");
+  const [declLoading, setDeclLoading] = useState(false);
+  const [declVeh, setDeclVeh] = useState<VehDecl | null>(null);
+  const [declMsg, setDeclMsg] = useState<string>("");
+  const [declGen, setDeclGen] = useState(false);
+
+  const buscarVehDecl = async () => {
+    if (!declPatente.trim()) { setDeclMsg("Ingresa una patente."); return; }
+    setDeclLoading(true); setDeclMsg(""); setDeclVeh(null);
+    const { data, error } = await supabase.rpc("buscar_vehiculo_patente_full", { p: declPatente.trim() });
+    setDeclLoading(false);
+    if (error) { setDeclMsg("Error al buscar: " + error.message); return; }
+    const v = Array.isArray(data) ? data[0] : data;
+    if (!v) { setDeclMsg(`Patente "${declPatente.trim()}" no encontrada en el inventario.`); return; }
+    setDeclVeh(v as VehDecl);
+  };
+
+  const generarDecl = async () => {
+    if (!declVeh) return;
+    setDeclGen(true);
+    try { await generateDeclaracionPDF(declVeh); } finally { setDeclGen(false); }
+  };
+
+  const abrirDecl = () => { setShowDecl(true); setDeclPatente(""); setDeclVeh(null); setDeclMsg(""); };
 
   const exportExcel = () => {
     const data = clientes.map(c => ({
@@ -251,6 +381,7 @@ export default function Clientes() {
               <th className="px-4 py-3 text-left font-semibold">Seguimiento</th>
               <th className="px-4 py-3 text-left font-semibold">Creado por</th>
               <th className="px-4 py-3 text-left font-semibold">Acciones</th>
+              <th className="px-4 py-3 text-left font-semibold">Declaración conformidad</th>
             </tr>
           </thead>
           <tbody>
@@ -286,11 +417,18 @@ export default function Clientes() {
                       )}
                     </div>
                   </td>
+                  <td className="px-4 py-3">
+                    <button onClick={abrirDecl}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+                      style={{ background: "hsl(var(--primary))" }} title="Generar Declaración de Conformidad (PDF)">
+                      <FileText size={13} /> Generar PDF
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay clientes registrados</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>No hay clientes registrados</td></tr>
             )}
           </tbody>
         </table>
@@ -302,6 +440,51 @@ export default function Clientes() {
           </div>
         )}
       </div>
+
+      {showDecl && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowDecl(false)}>
+          <div className="bg-card rounded-xl shadow-2xl w-full max-w-md animate-fade-in" style={{ border: "1px solid hsl(var(--border))" }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={bd}>
+              <h2 className="text-base font-bold" style={{ color: "hsl(var(--primary))" }}>Declaración de Conformidad</h2>
+              <button onClick={() => setShowDecl(false)} className="p-1 rounded hover:bg-muted"><X size={18} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                Ingresa la patente del vehículo. Se cargan sus datos y se genera el PDF. Los datos del comprador quedan en blanco para llenar y firmar a mano.
+              </p>
+              <div className="flex gap-2">
+                <input value={declPatente} onChange={e => { setDeclPatente(e.target.value.toUpperCase()); setDeclMsg(""); }}
+                  onKeyDown={e => e.key === "Enter" && buscarVehDecl()}
+                  placeholder="Ej: ABCD12" className="flex-1 border rounded px-3 py-2 text-sm bg-background" style={bd} autoFocus />
+                <button onClick={buscarVehDecl} disabled={declLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: "hsl(var(--primary))" }}>
+                  {declLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Buscar
+                </button>
+              </div>
+              {declMsg && <p className="text-xs font-medium" style={{ color: "hsl(var(--destructive))" }}>{declMsg}</p>}
+              {declVeh && (
+                <div className="rounded-lg border p-3 text-sm space-y-1" style={bd}>
+                  <p className="font-semibold">{declVeh.marca} {declVeh.modelo} {declVeh.anio}</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    <span>Patente: <b>{declVeh.patente}</b></span>
+                    <span>Color: {declVeh.color || "—"}</span>
+                    <span>N° motor: {declVeh.n_motor || "—"}</span>
+                    <span>N° chasis: {declVeh.vin || "—"}</span>
+                    <span>Km: {declVeh.kilometraje ? Number(declVeh.kilometraje).toLocaleString("es-CL") : "—"}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t" style={bd}>
+              <button onClick={() => setShowDecl(false)} className="px-4 py-2 rounded text-sm border bg-card hover:bg-muted" style={bd}>Cerrar</button>
+              <button onClick={generarDecl} disabled={!declVeh || declGen}
+                className="flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
+                {declGen ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />} Generar PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
